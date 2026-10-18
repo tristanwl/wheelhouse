@@ -150,12 +150,6 @@ function LibraryContent() {
 
       {error && <p className="text-sm text-red-400">Failed to load library.</p>}
       {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
-      {data?.instances.length === 0 && (
-        <p className="text-sm text-slate-500">
-          No Sonarr or Radarr instance is configured. Set SONARR_URL / SONARR_API_KEY or RADARR_URL
-          / RADARR_API_KEY.
-        </p>
-      )}
       {data?.instances
         .filter((i) => !i.up)
         .map((i) => (

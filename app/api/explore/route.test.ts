@@ -1,49 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createArrStack } from "@/lib/providers/media-manager/__fixtures__/env";
 import { fixtureMovies, fourKMovies } from "@/lib/providers/media-manager/__fixtures__/server";
-import { getMovieDetail, getPopular } from "@/lib/tmdb-client";
+import { GOOD_KEY, installFakeTmdb } from "@/lib/providers/metadata/__fixtures__/fake-tmdb";
 import { GET as getDetail, type ExploreDetail } from "./[id]/route";
 import { GET, type ExploreHit } from "./route";
 
-// TMDB is the one thing faked at the module boundary; the Radarr side is the
-// real route handler, env config source and runtime against fake servers.
-vi.mock("@/lib/tmdb-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/tmdb-client")>()),
-  getPopular: vi.fn(),
-  getNowPlaying: vi.fn(),
-  getRecentPhysicalReleases: vi.fn(),
-  getMovieDetail: vi.fn(),
-}));
+// The Radarr side and the TMDB provider are real: route handler, env config
+// source and runtime, against a fake TMDB (fetch-level) and fake Radarrs.
 
 const IN_DEFAULT = fixtureMovies()[0].tmdbId as number;
 const IN_4K = fourKMovies()[0].tmdbId as number;
 const IN_NEITHER = 5;
 
-const tmdbMovie = (id: number) => ({
-  id,
-  title: `TMDB ${id}`,
-  overview: "",
-  release_date: "2024-01-01",
-  poster_path: null,
-  vote_average: 7,
-});
-
 describe("Explore's 'already in library' badge", () => {
   let stack: ReturnType<typeof createArrStack>;
   beforeEach(() => {
     stack = createArrStack();
-    vi.mocked(getPopular).mockResolvedValue({
-      results: [IN_DEFAULT, IN_4K, IN_NEITHER].map(tmdbMovie),
-      hasMore: false,
-    });
-    vi.mocked(getMovieDetail).mockImplementation(async (id: number) => ({
-      ...tmdbMovie(id),
-      genres: [],
-      runtime: 100,
-      backdrop_path: null,
-    }));
+    vi.stubEnv("TMDB_API_KEY", GOOD_KEY);
+    installFakeTmdb({ movieIds: [IN_DEFAULT, IN_4K, IN_NEITHER] });
   });
-  afterEach(() => stack.stop());
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await stack.stop();
+  });
 
   async function popular() {
     const res = await GET(new Request("http://localhost/api/explore?category=popular"));
@@ -91,6 +70,13 @@ describe("Explore's 'already in library' badge", () => {
     expect(await detail(IN_DEFAULT)).toBe(true);
     expect(await detail(IN_4K)).toBe(true);
     expect(await detail(IN_NEITHER)).toBe(false);
+  });
+
+  it("explains itself when TMDB isn't configured, without calling it", async () => {
+    vi.stubEnv("TMDB_API_KEY", "");
+    const res = await GET(new Request("http://localhost/api/explore?category=popular"));
+    expect(res.status).toBe(502);
+    expect(((await res.json()) as { error: string }).error).toMatch(/TMDB is not configured/);
   });
 
   it("shows nothing as added when no Radarr is configured", async () => {

@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { collectFromManagers, getMediaManagers } from "@/lib/providers";
-import { backdropUrl, getMovieDetail, pickTrailerKey, posterUrl } from "@/lib/tmdb-client";
+import {
+  backdropUrl,
+  getMovieDetail,
+  getTmdbClient,
+  pickTrailerKey,
+  posterUrl,
+} from "@/lib/tmdb-client";
 
 export interface ExploreDetail {
   id: number;
@@ -24,8 +30,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
+    const tmdb = await getTmdbClient();
     const [detail, library] = await Promise.all([
-      getMovieDetail(id),
+      getMovieDetail(tmdb, id),
       getMediaManagers("movies").then((entries) =>
         collectFromManagers(entries, (client) => client.getMovies())
       ),

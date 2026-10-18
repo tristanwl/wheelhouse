@@ -1,4 +1,5 @@
-import { env } from "./env";
+import { getRuntime, ProviderError } from "@/lib/providers";
+import type { TmdbClient } from "@/lib/providers/metadata/tmdb";
 
 export interface TmdbMovie {
   id: number;
@@ -24,19 +25,20 @@ export interface TmdbMovieDetail extends TmdbMovie {
   videos?: { results: TmdbVideo[] };
 }
 
-async function tmdbFetch<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-  const apiKey = env.tmdbApiKey;
-  if (!apiKey) {
-    throw new Error("TMDB_API_KEY not configured");
+/**
+ * The configured TMDB client. Throws a ProviderError (safe to show) when there
+ * is none, or when its config is invalid.
+ */
+export async function getTmdbClient(): Promise<TmdbClient> {
+  const runtime = getRuntime();
+  const clients = await runtime.getClients<TmdbClient>("metadata");
+  if (clients.length === 0) {
+    const broken = (await runtime.listInstances()).find((i) => i.definition?.role === "metadata");
+    throw new ProviderError(
+      broken?.error ? `TMDB: ${broken.error}` : "TMDB is not configured. Set TMDB_API_KEY."
+    );
   }
-  const search = new URLSearchParams({ api_key: apiKey, ...params });
-  const res = await fetch(`https://api.themoviedb.org/3${path}?${search}`, {
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(`tmdb ${path} failed: ${res.status} ${res.statusText}`);
-  }
-  return (await res.json()) as T;
+  return clients[0].client;
 }
 
 // TMDB list endpoints page at 20 results/page. To serve more than one page's
@@ -52,6 +54,7 @@ export interface TmdbListResult {
 }
 
 async function tmdbList(
+  tmdb: TmdbClient,
   path: string,
   params: Record<string, string>,
   count: number,
@@ -65,7 +68,7 @@ async function tmdbList(
   if (tmdbPages.length === 0) return { results: [], hasMore: false };
   const pageResults = await Promise.all(
     tmdbPages.map((p) =>
-      tmdbFetch<{ results: TmdbMovie[]; total_pages: number }>(path, {
+      tmdb.get<{ results: TmdbMovie[]; total_pages: number }>(path, {
         ...params,
         page: String(p),
       })
@@ -79,21 +82,30 @@ async function tmdbList(
   };
 }
 
-export async function getNowPlaying(count = 20, page = 1): Promise<TmdbListResult> {
-  return tmdbList("/movie/now_playing", { region: "US" }, count, page);
+export async function getNowPlaying(
+  tmdb: TmdbClient,
+  count = 20,
+  page = 1
+): Promise<TmdbListResult> {
+  return tmdbList(tmdb, "/movie/now_playing", { region: "US" }, count, page);
 }
 
-export async function getPopular(count = 20, page = 1): Promise<TmdbListResult> {
-  return tmdbList("/movie/popular", { region: "US" }, count, page);
+export async function getPopular(tmdb: TmdbClient, count = 20, page = 1): Promise<TmdbListResult> {
+  return tmdbList(tmdb, "/movie/popular", { region: "US" }, count, page);
 }
 
 // TMDB has no "Blu-ray" concept specifically, but release_type=5 is the
 // physical-media release date in its per-region release_dates data — the
 // closest real equivalent. Sorted newest-first and capped at today so
 // announced-but-unreleased physical dates don't show up as "recent".
-export async function getRecentPhysicalReleases(count = 20, page = 1): Promise<TmdbListResult> {
+export async function getRecentPhysicalReleases(
+  tmdb: TmdbClient,
+  count = 20,
+  page = 1
+): Promise<TmdbListResult> {
   const today = new Date().toISOString().slice(0, 10);
   return tmdbList(
+    tmdb,
     "/discover/movie",
     {
       region: "US",
@@ -107,8 +119,8 @@ export async function getRecentPhysicalReleases(count = 20, page = 1): Promise<T
   );
 }
 
-export function getMovieDetail(id: number) {
-  return tmdbFetch<TmdbMovieDetail>(`/movie/${id}`, {
+export function getMovieDetail(tmdb: TmdbClient, id: number) {
+  return tmdb.get<TmdbMovieDetail>(`/movie/${id}`, {
     append_to_response: "videos",
   });
 }

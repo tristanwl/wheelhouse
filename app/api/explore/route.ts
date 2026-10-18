@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { collectFromManagers, getMediaManagers } from "@/lib/providers";
 import {
   getNowPlaying,
+  getTmdbClient,
   getPopular,
   getRecentPhysicalReleases,
   posterUrl,
@@ -55,10 +56,11 @@ export async function GET(req: Request) {
   const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
 
   try {
+    const tmdb = await getTmdbClient();
     // "In library" means in any movie instance. One that can't be reached just
     // doesn't contribute, rather than taking the whole page down.
     const [{ results: movies, hasMore }, library] = await Promise.all([
-      CATEGORY_FETCHERS[category](limit, page),
+      CATEGORY_FETCHERS[category](tmdb, limit, page),
       getMediaManagers("movies").then((entries) =>
         collectFromManagers(entries, (client) => client.getMovies())
       ),

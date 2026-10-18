@@ -9,6 +9,7 @@ import { radarrProvider } from "./media-manager/radarr";
 import { sonarrProvider } from "./media-manager/sonarr";
 import { jellyfinProvider } from "./media-server/jellyfin";
 import { plexProvider } from "./media-server/plex";
+import { tmdbProvider } from "./metadata/tmdb";
 
 export * from "./core/types";
 export { createHttpClient, joinUrl, ProviderError, redact } from "./core/http";
@@ -29,6 +30,7 @@ export {
 } from "./media-manager/instances";
 export type { ManagerEntry, ManagerProblem, ManagerSummary } from "./media-manager/instances";
 export * from "./media-server/types";
+export type { TmdbClient } from "./metadata/tmdb";
 
 // Adapters are added here as they are ported.
 export const registry = createRegistry([
@@ -38,6 +40,7 @@ export const registry = createRegistry([
   qbittorrentProvider,
   plexProvider,
   jellyfinProvider,
+  tmdbProvider,
 ]);
 
 // One runtime per server process; globalThis keeps it across Next.js dev reloads.

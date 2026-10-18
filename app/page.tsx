@@ -11,6 +11,7 @@ import {
   sortDownloads,
   type RowTone,
 } from "@/lib/download-rows";
+import { README_CONFIG_URL } from "@/lib/features/registry";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
 import type { DownloadsResponse } from "@/app/api/downloads/route";
@@ -67,7 +68,7 @@ export default function DashboardPage() {
           <p className="text-sm text-slate-500">
             No services are configured yet. See the{" "}
             <a
-              href="https://github.com/tristanwl/wheelhouse#configuration"
+              href={README_CONFIG_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="underline"

@@ -353,6 +353,13 @@ releases) are TMDB-specific, so an interface now would be invented. It still
 registers as a provider so it appears in config, `testConnection`, and
 feature gating. Revisit when TVDB is on the table.
 
+Implemented in `lib/providers/metadata/tmdb.ts`: config `{ apiKey }` (secret),
+instance id `tmdb` (from `TMDB_API_KEY`), and a client with `testConnection()`
+(`GET /configuration`) and a `get()` that adds the `api_key` query parameter.
+`lib/tmdb-client.ts` keeps the Explore-specific list and detail functions and
+takes that client. TMDB's key lives in the query string, so the HTTP helper
+never echoes request URLs and redacts the key from error text.
+
 ### Feature registry
 
 ```ts
@@ -363,7 +370,7 @@ interface FeatureDefinition {
   requires: Requirement[];   // e.g. { role: "mediaManager", kind: "movies" }
 }
 
-getAvailableFeatures(instances): { feature: FeatureDefinition; available: boolean; missing: Requirement[] }[]
+getAvailableFeatures(instances, env): { feature: FeatureDefinition; available: boolean; missing: Requirement[] }[]
 ```
 
 | Feature | Requires |
@@ -371,11 +378,24 @@ getAvailableFeatures(instances): { feature: FeatureDefinition; available: boolea
 | dashboard | nothing (shows whatever is configured) |
 | explore | `metadata` + a `mediaManager` of kind `movies` |
 | library | any `mediaManager` |
-| codecs | any `mediaManager` + ffmpeg present at startup |
+| codecs | any `mediaManager` + ffmpeg present |
 
 The layout nav is built from this. Unavailable features hide, or show a
 "needs X configured" stub, instead of the ad-hoc "TMDB not configured"
 handling. Phase 2 adds the admin toggle on top (`enabled` flag per feature).
+
+Implemented in `lib/features/registry.ts` (pure; also imported by the browser
+bundle). An instance satisfies a requirement only when it is ready (valid
+config), not merely configured. `env` carries `ffmpeg`, probed once with
+`ffmpeg -version` on the first request and cached for the process
+(`lib/features/ffmpeg.ts`), so installing ffmpeg needs a restart. `GET
+/api/features` returns each feature with `available` and `missing` as
+human-readable strings ("a Radarr instance", "a TMDB API key", "ffmpeg"),
+nothing about hosts. The nav is a client component reading it with SWR; the
+library, explore and codecs segments have a layout that renders a stub (what is
+missing, link to the README configuration section) instead of the page. The
+global add/search box follows the library feature (it needs a ready media
+manager).
 
 ### `/api/status` shape
 
@@ -558,7 +578,14 @@ Each PR keeps the app working.
    Token="..."` because 12.x rejects `X-Emby-Token`; the adapter treats 403 like
    401 ("key rejected"); the web link has no extra path (Jellyfin's UI is at
    the root).
-9. **Feature registry + nav gating**.
+9. ✅ **Feature registry + nav gating**: TMDB registered as the `metadata`
+   provider (`lib/env.ts` is gone), the registry, `/api/features`, the gated
+   nav and page stubs, and the Phase 1 acceptance sweep (below). Decisions where
+   the spec was silent: the nav shows only Dashboard until `/api/features`
+   loads (and stays that way if it fails), while a gated page lets its content
+   through if the feature list can't be loaded, since the page reports its own
+   errors; the add/search box uses the library feature's availability; Explore
+   without TMDB answers 502 with "TMDB is not configured. Set TMDB_API_KEY.".
 
 PRs 3–6 can't be skipped past: after PR 5, the first non-default instance
 (e.g. `radarr-4k`) has to work end to end, and that is the acceptance test
@@ -566,16 +593,49 @@ for the multi-instance design.
 
 ### Acceptance criteria for Phase 1
 
-- With only the old env vars set, the app behaves as it does today.
-- Setting `QBITTORRENT_*` shows qBittorrent downloads, including seeding,
-  alongside or instead of SABnzbd.
-- Setting `JELLYFIN_*` instead of `PLEX_*` shows a Jellyfin card.
-- Two Radarr instances both appear in status, storage, and library, and
-  Explore's "In library" badge reflects both.
-- With no Sonarr/Radarr configured at all, the app boots, Dashboard works,
-  and Explore/Library/Codecs are hidden or stubbed.
-- No hang longer than the timeout when a service is down.
-- No API key or token appears in any API response or log line.
+Verified in PR 9. "Auto" means an automated test through the real route
+handlers, env config source and provider runtime against fake servers
+(`tests/phase1-acceptance.test.ts` unless noted); "manual" means checked by
+hand.
+
+- [x] With only the old env vars set, the app behaves as it does today. Auto:
+  Sonarr, Radarr, SABnzbd, Plex and TMDB set gives the same instance ids
+  (`sonarr`, `radarr`, `sabnzbd`, `plex`), a library of both kinds, downloads,
+  storage, Explore and all four features. "As it does today" is checked
+  against the documented shapes, not a recorded run of the old code.
+- [ ] Setting `QBITTORRENT_*` shows qBittorrent downloads, including seeding,
+  alongside or instead of SABnzbd. Not part of PR 9: depends on PR 7, and
+  the sweep above doesn't configure qBittorrent.
+- [x] Setting `JELLYFIN_*` instead of `PLEX_*` shows a Jellyfin card. Auto:
+  `app/api/status/route.test.ts` (PR 8).
+- [x] Two Radarr instances both appear in status, storage, and library, and
+  Explore's "In library" badge reflects both. Auto: `app/api/status`,
+  `app/api/storage`, `app/api/library` and `app/api/explore` route tests
+  (PRs 5 and 6, Explore now against a fake TMDB).
+- [x] With no Sonarr/Radarr configured at all, the app boots, Dashboard works,
+  and Explore/Library/Codecs are hidden or stubbed. Auto: with no variables
+  every aggregate API (status, downloads, storage, library, features, codec
+  settings) answers 200 and `/api/features` reports only Dashboard; the nav
+  filter and the stub are covered by `components/FeatureGate.test.tsx`.
+  Manual: `next build` + `next start` with an empty environment, every page
+  and API above answered 200. The rendering of the nav and the stubs in a
+  browser was not looked at.
+- [x] No hang longer than the timeout when a service is down. Auto: five
+  services that accept the connection and never answer; status, downloads,
+  library and storage return within the default 8 s timeout plus a margin,
+  with each instance down ("timed out"). There is no timeout setting yet, so
+  this one test waits out the real 8 s.
+- [x] No API key or token appears in any API response or log line. Auto: a
+  canary test configures every provider with distinctive secrets and calls
+  every GET route in four situations (healthy, wrong credentials, unreachable,
+  invalid config including credentials embedded in a URL), scanning bodies,
+  headers and everything written through `console`. Residual: issue #26
+  (a malformed configured URL can still put its host or query string in an
+  error; keys and passwords are redacted).
+
+Not covered: the mutating routes (POST, PUT, DELETE) are outside the canary,
+and Phase 1 deliberately logs nothing of its own, so "log line" is verified
+for console output only (not for what Next.js prints).
 
 ## Phase 3 (sketch) — Tdarr as a conversion backend
 

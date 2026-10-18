@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
-import { AddSearch } from "@/components/AddSearch";
+import { AddSearchGate } from "@/components/AddSearchGate";
+import { FeatureNav } from "@/components/FeatureNav";
 
 export const metadata: Metadata = {
   title: "Wheelhouse",
@@ -17,24 +18,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="text-xl font-semibold hover:text-slate-300">
               Wheelhouse
             </Link>
-            <nav className="flex gap-4 text-sm text-slate-300">
-              <Link href="/" className="hover:text-white">
-                Dashboard
-              </Link>
-              <Link href="/library" className="hover:text-white">
-                Library
-              </Link>
-              <Link href="/explore" className="hover:text-white">
-                Explore
-              </Link>
-              <Link href="/codecs" className="hover:text-white">
-                Codecs
-              </Link>
-            </nav>
+            <FeatureNav />
           </header>
-          <div className="mb-6">
-            <AddSearch />
-          </div>
+          <AddSearchGate />
           {children}
         </div>
       </body>
