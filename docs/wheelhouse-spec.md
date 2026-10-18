@@ -24,6 +24,35 @@ Wheelhouse is a companion for the *arr stack, not a backend-agnostic media
 manager. The media-manager role is Sonarr/Radarr-family only. Everything else
 (download client, media server, metadata) is swappable.
 
+## Positioning
+
+Several tools overlap with parts of Wheelhouse. It is a deliberate mix of
+three things (a dashboard, library management, and codec-aware conversion),
+and each piece should be honest about where a specialist does it better:
+
+- **Dashboards and request tools** (Homarr, Overseerr/Jellyseerr and similar)
+  cover browsing, requesting and status. Wheelhouse's differentiator is
+  that status, library management and conversion sit in one place and share
+  the *arr apps' own data.
+- **Tdarr** is the better tool for *unattended bulk* transcoding: a server plus
+  worker nodes, plugin and node-graph "Flow" pipelines, persistent queues,
+  health checks. Wheelhouse does not try to compete there. What Wheelhouse
+  adds is the **decision step**: it works out from Radarr/Sonarr's own media
+  info which files are worth converting for your preferred codec per
+  resolution tier, shows them to you, and converts only what you approve,
+  with a backup and an *arr rescan afterwards.
+
+Consequences:
+
+- The built-in converter stays small on purpose: serial, one host, video
+  codec only. No distributed workers, flows or audio/subtitle pipelines.
+  Safety work (the hardlink check below, queue persistence) is in scope;
+  feature breadth is not.
+- Heavy lifting can be delegated: see "Phase 3" for Tdarr as an optional
+  conversion backend.
+- The README should say plainly that Tdarr is the right tool for automation
+  and that the two work well together.
+
 ## Phase 0 — prep
 
 - [x] New repo from the existing app only, fresh history.
@@ -371,6 +400,73 @@ for the multi-instance design.
 - No hang longer than the timeout when a service is down.
 - No API key or token appears in any API response or log line.
 
+## Phase 3 (sketch) — Tdarr as a conversion backend
+
+Experimental, and not started. This adds a fifth role, `converter`, with the
+built-in ffmpeg engine as the default and Tdarr as an optional alternative.
+Wheelhouse keeps the analysis and the approval step; Tdarr does the encoding.
+
+The `converter` interface is extracted from the built-in engine only once the
+second engine is being written (the rule of two, as with download clients).
+Nothing in Phase 1 should anticipate it.
+
+### What Tdarr's API offers
+
+Tdarr has an HTTP API under `/api/v2/`, but it is **not officially documented**
+(docs.tdarr.io has no API reference). What is known comes from the maintainer's
+replies in GitHub issues and from community clients, so it can change between
+Tdarr versions. Endpoints seen in practice:
+
+| Need | Endpoint |
+|---|---|
+| Queue specific files | `POST /api/v2/scan-files` with `{"data": {"scanConfig": {"dbID": "<library id>", "arrayOrPath": ["/path/file.mkv"], "mode": "scanFolderWatcher"}}}` (the maintainer's recommended way to queue individual files, Tdarr issue #577) |
+| Progress | nodes endpoint: each worker's current `file`, `percentage`, `ETA`, `status` |
+| File outcome | `POST /api/v2/search-db` / `cruddb` on the file database (`transcodeDecisionMaker`, `healthCheck`, ...) |
+| Control | cancel-worker-item, kill-worker, server log |
+| Auth | optional `x-api-key` header; request bodies are wrapped in a `data` object |
+
+### Limits that shape the design
+
+1. **No per-job parameters.** Tdarr decides *how* to convert from the
+   library's flow or plugin stack, so Wheelhouse cannot send "HEVC, quality
+   20". Target codecs are expressed by routing to a library whose flow does
+   the right thing (for example one library per tier). Codec preferences
+   become a mapping to Tdarr libraries, not ffmpeg arguments.
+2. **No job id comes back** from `scan-files`. Wheelhouse correlates its
+   request with workers and database rows by file path.
+3. **Libraries are folder-bound**: the file must sit inside a library's
+   folders, at the path Tdarr sees. This needs the path-mapping setting
+   already listed under open questions.
+4. **The `.bak` safety net does not carry over.** Tdarr replaces the original
+   unless the flow keeps it. The confirm dialog must say so, and Wheelhouse
+   cannot enforce it.
+5. **API instability.** Endpoints have changed or returned invalid JSON
+   between versions (Tdarr issues #1072, #1260). Mitigate with recorded
+   fixtures and contract tests pinned to specific Tdarr versions, and label
+   the integration experimental.
+6. **Bursts of single-file scans can lock up Tdarr's UI** (Tdarr issue #1192).
+   Batch paths into one `scan-files` call and throttle.
+7. The torrent hardlink issue (above) applies unchanged: in-place
+   replacement breaks hardlinks to seeding files.
+
+### Minimum scope
+
+- Config: URL, optional API key, a Tdarr library per resolution tier, and a
+  path mapping between Wheelhouse's paths and Tdarr's.
+- A "Send to Tdarr" action in place of "Convert" when that engine is
+  selected; progress by polling nodes and `search-db`; when a file finishes,
+  trigger the same Radarr/Sonarr rescan the built-in engine does.
+- Out of scope: creating or managing Tdarr libraries and flows. The user sets
+  those up in Tdarr.
+
+### First step: a spike
+
+Before committing, run Tdarr locally in Docker, create a library, and
+exercise `scan-files` (single file and a batch), `search-db` and the nodes
+endpoint. Record the real request and response shapes as fixtures. Confirm the
+free tier covers what we would rely on (sources disagree on which features
+need Pro). The result decides go or no-go.
+
 ## Open questions
 
 - **Plex token acquisition.** A pasted token works for Phase 1. A PIN-based
@@ -382,3 +478,23 @@ for the multi-instance design.
 - **Other torrent/usenet clients.** Transmission, Deluge, NZBGet should be
   straightforward once the qBittorrent and SABnzbd adapters set the pattern;
   community PRs.
+- **HDR and Dolby Vision in the built-in converter.** Checked in the code
+  (`ffmpegArgsFor` in `lib/hw-encode.ts`): audio and subtitles are copied
+  untouched (`-map 0 -c:a copy -c:s copy`), which is good. But every backend
+  forces **8-bit 4:2:0** output (`format=nv12` for VAAPI, `-pix_fmt yuv420p`
+  for NVENC and software), with no tone mapping and no HDR metadata handling.
+  Converting an HDR10 or Dolby Vision source therefore produces an 8-bit file
+  that still carries HDR colour tags (washed-out and banded), and Dolby Vision
+  data is dropped. With the default preferences (UHD stays HEVC) HDR files are
+  never candidates, so this only bites when a user sets the UHD preference to
+  H.264, or converts a 1080p HDR file. Radarr/Sonarr already report
+  `videoDynamicRange` and `videoDynamicRangeType` in `mediaInfo` (confirmed on
+  a real Radarr: 6 of 659 files are HDR, 3 of them Dolby Vision), but the app
+  does not read those fields yet. **Decision:** read them, and exclude HDR/DV
+  files from conversion candidates (show them as "HDR, skipped") until proper
+  tone-mapping or HDR-preserving encodes exist. Also note that 10-bit sources
+  are deliberately reduced to 8-bit for playback compatibility; say so in the
+  confirm dialog.
+- **Queue persistence.** Job state is in memory, so a restart discards
+  running and queued conversions. Decide whether to persist it (SQLite in
+  Phase 2 makes this cheap).
