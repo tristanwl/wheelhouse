@@ -13,6 +13,8 @@ export type InstanceState = "ok" | "degraded" | "needs-setup" | "down";
 
 /** What the browser needs to build an "open this service" link (the host it takes from its own address bar). */
 export interface ServiceLink {
+  /** The configured URL's scheme, so an https service is not linked as http. */
+  protocol: "http" | "https";
   port?: number;
   path: string;
 }
@@ -87,14 +89,17 @@ export function serviceLink(url: unknown, appendPath = ""): ServiceLink | undefi
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
   const prefix = parsed.pathname.replace(/\/+$/, "");
-  const link: ServiceLink = { path: `${prefix}${appendPath}` || "/" };
+  const link: ServiceLink = {
+    protocol: parsed.protocol === "https:" ? "https" : "http",
+    path: `${prefix}${appendPath}` || "/",
+  };
   if (parsed.port) link.port = Number(parsed.port);
   return link;
 }
 
 /** The address to open, on whatever host the browser used to reach Wheelhouse. */
 export function serviceHref(host: string, link: ServiceLink): string {
-  return `http://${host}${link.port === undefined ? "" : `:${link.port}`}${link.path}`;
+  return `${link.protocol}://${host}${link.port === undefined ? "" : `:${link.port}`}${link.path}`;
 }
 
 /** Whether a download client's recent warnings include an error. */

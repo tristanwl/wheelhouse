@@ -53,16 +53,19 @@ describe("warning visibility", () => {
 describe("serviceLink", () => {
   it("keeps only the port and path prefix", () => {
     expect(serviceLink("http://user:pass@sonarr.internal:8989/sonarr/?apikey=x#f")).toEqual({
+      protocol: "http",
       port: 8989,
       path: "/sonarr",
     });
   });
   it("omits the port when the URL uses the default one", () => {
-    expect(serviceLink("https://media.example.com")).toEqual({ path: "/" });
-    expect(serviceLink("http://media.example.com:80/")).toEqual({ path: "/" });
+    expect(serviceLink("https://media.example.com")).toEqual({ protocol: "https", path: "/" });
+    expect(serviceLink("http://media.example.com:80/")).toEqual({ protocol: "http", path: "/" });
+    expect(serviceLink("https://media.example.com:443/")).toEqual({ protocol: "https", path: "/" });
   });
   it("appends a web UI path", () => {
     expect(serviceLink("http://plex.example.com:32400/", "/web")).toEqual({
+      protocol: "http",
       port: 32400,
       path: "/web",
     });
@@ -76,10 +79,15 @@ describe("serviceLink", () => {
 
 describe("serviceHref", () => {
   it("builds the address from the browser's host", () => {
-    expect(serviceHref("192.0.2.5", { port: 7878, path: "/radarr" })).toBe(
+    expect(serviceHref("192.0.2.5", { protocol: "http", port: 7878, path: "/radarr" })).toBe(
       "http://192.0.2.5:7878/radarr"
     );
-    expect(serviceHref("example.com", { path: "/" })).toBe("http://example.com/");
+    expect(serviceHref("example.com", { protocol: "http", path: "/" })).toBe("http://example.com/");
+  });
+  it("keeps https for a service that is configured with it", () => {
+    expect(serviceHref("example.com", { protocol: "https", port: 8443, path: "/" })).toBe(
+      "https://example.com:8443/"
+    );
   });
 });
 

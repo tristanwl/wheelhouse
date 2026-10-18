@@ -151,7 +151,7 @@ describe("/api/status", () => {
     expect(sonarr.state).toBe("down");
     expect(sonarr.error).toContain("apiKey");
     // The link still points at the configured port.
-    expect(sonarr.link).toEqual({ port: 8989, path: "/" });
+    expect(sonarr.link).toEqual({ protocol: "http", port: 8989, path: "/" });
   });
 
   it("omits the link when the URL itself is the problem", async () => {
@@ -188,15 +188,23 @@ describe("/api/status", () => {
     const { byId, text } = await get();
     expect(JSON.stringify(byId("sonarr").link)).not.toContain("127.0.0.1");
     const port = (url: string) => Number(new URL(url).port);
-    expect(byId("sonarr").link).toEqual({ port: port(sonarr.url), path: "/" });
-    expect(byId("plex").link).toEqual({ port: port(server.url), path: "/web" });
-    expect(byId("sabnzbd").link).toEqual({ port: 8080, path: "/sab" });
+    expect(byId("sonarr").link).toEqual({
+      protocol: "http",
+      port: port(sonarr.url),
+      path: "/",
+    });
+    expect(byId("plex").link).toEqual({
+      protocol: "http",
+      port: port(server.url),
+      path: "/web",
+    });
+    expect(byId("sabnzbd").link).toEqual({ protocol: "http", port: 8080, path: "/sab" });
     // Credentials in the URL never come back, in the link or in the error.
     for (const secret of ["hunter2", "sab-secret-key-abc"]) expect(text).not.toContain(secret);
     for (const instance of (JSON.parse(text) as StatusResponse).instances as StatusInstance[]) {
-      expect(Object.keys(instance.link ?? {}).every((k) => k === "port" || k === "path")).toBe(
-        true
-      );
+      expect(
+        Object.keys(instance.link ?? {}).every((k) => ["protocol", "port", "path"].includes(k))
+      ).toBe(true);
     }
   });
 });
