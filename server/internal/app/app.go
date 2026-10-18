@@ -51,6 +51,8 @@ type deps struct {
 	now    func() time.Time
 	ctx    context.Context
 	conv   ConverterOptions
+	// log receives audit entries; never nil.
+	log *slog.Logger
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -96,12 +98,16 @@ func Routes(o Options) *Router {
 	if o.Context == nil {
 		o.Context = context.Background()
 	}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, ctx: o.Context, conv: o.Converter}
+	if o.Logger == nil {
+		o.Logger = slog.New(slog.DiscardHandler)
+	}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter}
 
 	r := NewRouter()
 	registerCore(r, d)
 	registerStack(r, d)
 	registerCodecs(r, d)
+	registerLibrary(r, d)
 	registerExplore(r, d)
 
 	// Anything else under /api is a JSON 404, never the UI.

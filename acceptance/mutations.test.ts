@@ -173,7 +173,7 @@ describe("mutating routes", () => {
 
     it("removes a movie from its own instance only", async () => {
       const radarr = stack.fakes.radarr!;
-      const res = await send("DELETE", "/api/library/radarr/1");
+      const res = await send("DELETE", "/api/library/radarr/1?confirm=true");
       expect(res.status, res.text).toBe(200);
       expect(res.json).toEqual({ ok: true });
       expect(radarr.count("DELETE", "/api/v3/movie/1")).toBe(1);
@@ -195,7 +195,7 @@ describe("mutating routes", () => {
     it("answers a failing upstream with a 502 and a reason", async () => {
       // Gone already (deleted above), so the fake's lookup fails or the delete is a no-op;
       // either is an answer, never a crash.
-      const res = await send("DELETE", "/api/library/sonarr/987654");
+      const res = await send("DELETE", "/api/library/sonarr/987654?confirm=true");
       expect([200, 502]).toContain(res.status);
       expect(res.json).toBeTypeOf("object");
     });
@@ -211,7 +211,7 @@ describe("mutating routes", () => {
 
     it("deletes that season's episode files and stops monitoring it", async () => {
       const sonarr = stack.fakes.sonarr!;
-      const res = await send("DELETE", "/api/library/sonarr/1/seasons/1");
+      const res = await send("DELETE", "/api/library/sonarr/1/seasons/1?confirm=true");
       expect(res.status, res.text).toBe(200);
       expect(res.json.ok).toBe(true);
       expect(res.json.filesDeleted).toBeGreaterThanOrEqual(0);
