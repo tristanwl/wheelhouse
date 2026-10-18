@@ -11,6 +11,12 @@ services:
       - "3050:3050"
     env_file:
       - .env
+    # The container runs as UID/GID 1000 by default. To match the owner of your
+    # media and ./config instead (needed for Convert to write files with the
+    # right ownership), set it here. Create ./config yourself first
+    # (`mkdir config`): if Docker creates it, it is owned by root and the
+    # container cannot save settings.
+    # user: "1000:1000"
     volumes:
       # Settings (codec preferences) live here so they survive rebuilds.
       - ./config:/config

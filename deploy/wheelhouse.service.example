@@ -9,6 +9,11 @@
 # /movies and /tv must be the same in-container paths Sonarr/Radarr use; they
 # are only needed for the Codecs "Convert" feature.
 #
+# The image runs as a non-root user. With rootless Podman, --userns=keep-id
+# --user=%U:%G maps the container user to YOUR host user, so it can read and
+# write your host-owned /config and media. Without it the container's user
+# maps to an unrelated sub-UID and cannot write to them.
+#
 # --device /dev/dri passes the GPU render node through for hardware encode.
 # Rootless Podman can't grant access the host user doesn't already have, so
 # your user must be in the host's `render`/`video` groups.
@@ -36,6 +41,8 @@ ExecStart=/usr/bin/podman run \
 	-d \
 	--name=wheelhouse \
 	--network=host \
+	--userns=keep-id \
+	--user=%U:%G \
 	--env-file=%h/wheelhouse/.env \
 	-v /path/to/movies:/movies \
 	-v /path/to/tv:/tv \

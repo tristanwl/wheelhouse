@@ -357,7 +357,9 @@ Hardware encode needs a few things outside the code:
    newer `intel-media-driver` (iHD) requires Broadwell or later.
    `mesa-va-gallium` is installed alongside as a fallback. Other GPUs may
    need a different driver package in a custom image.
-3. **Rootless Podman only: `--group-add keep-groups`.** Rootless Podman does
+3. **Rootless Podman only: `--group-add keep-groups`** (the image runs as a
+   non-root user, so the example unit also uses `--userns=keep-id
+   --user=%U:%G` to map it to your host user). Rootless Podman does
    not propagate the invoking host user's supplementary groups into the
    container by default. Even if that user is in the host's `render`/`video`
    groups, the device node shows up *inside* the container owned

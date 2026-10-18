@@ -23,9 +23,18 @@ ENV HOSTNAME=0.0.0.0
 # container falls back to software x264 if neither actually works on the
 # host, detected live by a real test encode rather than assumed.
 RUN apk add --no-cache ffmpeg libva-intel-driver mesa-va-gallium
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
-COPY --from=build /app/public ./public
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
+# /config holds settings.json (lib/settings.ts); .next/cache is where Next.js
+# writes at runtime. Both must be writable by the runtime user.
+RUN mkdir -p /config /app/.next/cache && chown node:node /config /app/.next/cache
+# Run unprivileged. The default is the image's `node` user (1000:1000). To match
+# the ownership of your media and config volumes, override it at run time
+# (`user: "UID:GID"` in Compose, `--user` in Docker/Podman) rather than
+# rebuilding. The user needs write access to /config and to the media if you
+# use Convert.
+USER node
 EXPOSE 3050
 ENV PORT=3050
 CMD ["node", "server.js"]

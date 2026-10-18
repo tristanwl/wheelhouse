@@ -19,6 +19,17 @@ export async function PUT(req: Request) {
       { status: 400 }
     );
   }
-  await setCodecPreferences({ hd: body.hd, uhd: body.uhd });
+  try {
+    await setCodecPreferences({ hd: body.hd, uhd: body.uhd });
+  } catch (err) {
+    // Almost always a /config volume the container user can't write to.
+    const detail = err instanceof Error ? err.message : "unknown error";
+    return NextResponse.json(
+      {
+        error: `Could not save settings (${detail}). Make sure the /config volume exists on the host and is writable by the container's user.`,
+      },
+      { status: 500 }
+    );
+  }
   return NextResponse.json(await getCodecPreferences());
 }
