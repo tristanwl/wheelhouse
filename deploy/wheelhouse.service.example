@@ -4,7 +4,14 @@
 #   systemctl --user enable --now container-wheelhouse.service
 # (and `loginctl enable-linger $USER` so it starts at boot without a login).
 #
-# Build the image first:  podman build -t wheelhouse:latest .
+# Pull the image first, so the first start doesn't have to download it:
+#   podman pull docker.io/tristanwl/wheelhouse:0.0.1
+# To upgrade, change the version tag on the last ExecStart line below, then
+# `systemctl --user daemon-reload && systemctl --user restart
+# container-wheelhouse.service`. (There is no `latest` tag while Wheelhouse is
+# alpha.) To build from source instead:
+#   podman build -t wheelhouse:dev .
+# and use localhost/wheelhouse:dev as the image.
 #
 # /movies and /tv must be the same in-container paths Sonarr/Radarr use; they
 # are only needed for the Codecs "Convert" feature.
@@ -12,7 +19,8 @@
 # The image runs as a non-root user. With rootless Podman, --userns=keep-id
 # --user=%U:%G maps the container user to YOUR host user, so it can read and
 # write your host-owned /config and media. Without it the container's user
-# maps to an unrelated sub-UID and cannot write to them.
+# maps to an unrelated sub-UID and cannot write to them. Tested together with
+# --group-add keep-groups below on Podman 4.9 / crun 1.14 (Intel VAAPI).
 #
 # --device /dev/dri passes the GPU render node through for hardware encode.
 # Rootless Podman can't grant access the host user doesn't already have, so
@@ -49,7 +57,7 @@ ExecStart=/usr/bin/podman run \
 	-v %h/wheelhouse/config:/config \
 	--device /dev/dri \
 	--group-add keep-groups \
-	--replace localhost/wheelhouse:latest
+	--replace docker.io/tristanwl/wheelhouse:0.0.1
 ExecStop=/usr/bin/podman stop \
 	--ignore -t 10 \
 	--cidfile=%t/%n.ctr-id
