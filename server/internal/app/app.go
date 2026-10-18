@@ -44,6 +44,8 @@ type deps struct {
 	rt     *core.Runtime
 	ffmpeg func() bool
 	now    func() time.Time
+	// log receives audit entries; never nil.
+	log *slog.Logger
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -86,11 +88,15 @@ func Routes(o Options) *Router {
 		}
 		o.Runtime = rt
 	}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now}
+	if o.Logger == nil {
+		o.Logger = slog.New(slog.DiscardHandler)
+	}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger}
 
 	r := NewRouter()
 	registerCore(r, d)
 	registerStack(r, d)
+	registerLibrary(r, d)
 	registerExplore(r, d)
 
 	// Anything else under /api is a JSON 404, never the UI.

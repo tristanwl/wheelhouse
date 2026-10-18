@@ -78,10 +78,13 @@ const MUTATING_PROBES: Probe[] = [
         }),
       }),
   },
-  { name: "DELETE movie", run: (r) => r("/api/library/radarr/987654", { method: "DELETE" }) },
+  {
+    name: "DELETE movie",
+    run: (r) => r("/api/library/radarr/987654?confirm=true", { method: "DELETE" }),
+  },
   {
     name: "DELETE season",
-    run: (r) => r("/api/library/sonarr/987654/seasons/1", { method: "DELETE" }),
+    run: (r) => r("/api/library/sonarr/987654/seasons/1?confirm=true", { method: "DELETE" }),
   },
   {
     name: "PUT settings invalid",

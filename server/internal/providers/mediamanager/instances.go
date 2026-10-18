@@ -112,6 +112,12 @@ func CollectFromManagers[T any](
 	var wg sync.WaitGroup
 	for i, e := range entries {
 		wg.Go(func() {
+			// A provider bug must not take the server down or hide the others.
+			defer func() {
+				if recover() != nil {
+					outcomes[i].err = "unexpected error"
+				}
+			}()
 			if e.Client == nil {
 				outcomes[i].err = e.Error
 				if outcomes[i].err == "" {

@@ -62,6 +62,12 @@ startup. `app.Options{Source: ...}` (or `Runtime`) injects the config source, so
 tests build the whole app over fake services. Provider wiring lives in
 `internal/providers/all`.
 
+Library routes (`routes_library.go`, logic in `internal/library`): the two
+`DELETE /api/library/...` routes are `Admin` and require `?confirm=true`
+(issue #41), otherwise 400 and nothing is sent upstream; each confirmed delete
+logs an `audit` line. The Next UI does not send `confirm` yet, so the later UI
+port must add it after its own confirm dialog.
+
 The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
 
 ## Build, run, test
@@ -166,6 +172,7 @@ internal/config       environment settings
 internal/features     feature gating (port of lib/features/registry.ts and server.ts)
 internal/status       GET /api/status logic (port of lib/status.ts and its route)
 internal/downloads    GET /api/downloads logic
+internal/library      library, storage, search, add-meta, details, seasons bodies
 internal/explore      GET /api/explore and /api/explore/{id} logic
 internal/providers/all  the registry of every provider
 internal/middleware   request ID, security headers, access log, recovery
