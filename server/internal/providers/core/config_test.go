@@ -86,6 +86,8 @@ func TestDecodeRequiredEmptyNilAndWrongShapes(t *testing.T) {
 		{"ftp scheme", map[string]any{"url": "ftp://h", "apiKey": "k"}, "url: must be an http or https URL"},
 		{"no host", map[string]any{"url": "http://", "apiKey": "k"}, "url: must be an http or https URL"},
 		{"relative", map[string]any{"url": "/x", "apiKey": "k"}, "url: must be an http or https URL"},
+		{"credentials", map[string]any{"url": "http://u:CANARY-PASS@h", "apiKey": "k"}, "url: must not contain a username or password"},
+		{"username only", map[string]any{"url": "http://CANARY-USER@h", "apiKey": "k"}, "url: must not contain a username or password"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

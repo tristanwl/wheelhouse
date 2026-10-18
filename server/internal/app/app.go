@@ -12,6 +12,8 @@ import (
 
 	"github.com/tristanwl/wheelhouse/server/internal/features"
 	"github.com/tristanwl/wheelhouse/server/internal/middleware"
+	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
+	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/ui"
 )
 
@@ -22,6 +24,26 @@ type Options struct {
 	UI http.Handler
 	// Ffmpeg reports whether ffmpeg works on the host. Defaults to a cached probe.
 	Ffmpeg func() bool
+	// Runtime turns configured instances into clients. Defaults to a runtime
+	// over every provider and Source.
+	Runtime *core.Runtime
+	// Source is where instances come from when Runtime is nil. Defaults to an
+	// empty source (nothing configured); main passes the process environment.
+	Source core.ConfigSource
+	// Now is the clock for the 24 h warning rule. Defaults to time.Now.
+	Now func() time.Time
+}
+
+// emptySource configures nothing.
+type emptySource struct{}
+
+func (emptySource) Instances(context.Context) ([]core.Instance, error) { return nil, nil }
+
+// deps is what the route groups share.
+type deps struct {
+	rt     *core.Runtime
+	ffmpeg func() bool
+	now    func() time.Time
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -36,32 +58,46 @@ func apiNotFound(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "Not found"})
 }
 
-// Routes returns the route table without middleware.
-func Routes(o Options) http.Handler {
+// internalError answers a generic 500 for a failure that is not the caller's:
+// never the error text, which could carry configuration.
+func internalError(w http.ResponseWriter) {
+	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+}
+
+// Routes builds the router: every route, with its access level. It panics if
+// the provider registry cannot be built, which only a coding error causes.
+func Routes(o Options) *Router {
 	if o.UI == nil {
 		o.UI = ui.Handler()
 	}
 	if o.Ffmpeg == nil {
 		o.Ffmpeg = features.HasFfmpeg
 	}
-	mux := http.NewServeMux()
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	if o.Runtime == nil {
+		if o.Source == nil {
+			o.Source = emptySource{}
+		}
+		rt, err := all.NewRuntime(o.Source)
+		if err != nil {
+			panic("providers: " + err.Error())
+		}
+		o.Runtime = rt
+	}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now}
 
-	// Public: the allow-list for authentication, once there is any.
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-
-	mux.HandleFunc("GET /api/features", func(w http.ResponseWriter, _ *http.Request) {
-		// No providers exist in the skeleton, so no instances are configured.
-		writeJSON(w, http.StatusOK, features.Compute(nil, features.Environment{Ffmpeg: o.Ffmpeg()}))
-	})
+	r := NewRouter()
+	registerCore(r, d)
+	registerStack(r, d)
 
 	// Anything else under /api is a JSON 404, never the UI.
-	mux.HandleFunc("/api", apiNotFound)
-	mux.HandleFunc("/api/", apiNotFound)
+	r.HandleFunc("/api", Public, apiNotFound)
+	r.HandleFunc("/api/", Public, apiNotFound)
 
-	mux.Handle("/", o.UI)
-	return mux
+	r.Handle("/", Public, o.UI)
+	return r
 }
 
 // Handler returns the full handler: routes wrapped in the middleware chain.

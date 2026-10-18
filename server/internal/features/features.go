@@ -9,6 +9,9 @@ import (
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
+	"github.com/tristanwl/wheelhouse/server/internal/providers/mediamanager"
 )
 
 // Role is what a provider does.
@@ -145,3 +148,35 @@ var HasFfmpeg = sync.OnceValue(func() bool {
 	defer cancel()
 	return exec.CommandContext(ctx, "ffmpeg", "-version").Run() == nil
 })
+
+// InstancesOf reduces the runtime's instances to what gating needs. Instances
+// of unknown providers are skipped: they have no role, so they satisfy nothing.
+func InstancesOf(ctx context.Context, rt *core.Runtime) ([]Instance, error) {
+	resolved, err := rt.ListInstances(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []Instance
+	for _, r := range resolved {
+		if r.Definition == nil {
+			continue
+		}
+		inst := Instance{Role: Role(r.Definition.Role), Ready: r.Status == core.StatusReady}
+		if r.Definition.Role == core.RoleMediaManager {
+			if caps, ok := r.Definition.Capabilities.(mediamanager.Capabilities); ok {
+				inst.Kind = Kind(caps.Kind)
+			}
+		}
+		out = append(out, inst)
+	}
+	return out, nil
+}
+
+// Of computes the features for what the runtime has configured and the host.
+func Of(ctx context.Context, rt *core.Runtime, env Environment) (Response, error) {
+	instances, err := InstancesOf(ctx, rt)
+	if err != nil {
+		return Response{}, err
+	}
+	return Compute(instances, env), nil
+}

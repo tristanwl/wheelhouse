@@ -12,6 +12,7 @@ import (
 
 	"github.com/tristanwl/wheelhouse/server/internal/app"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
+	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 )
 
 func main() {
@@ -37,5 +38,6 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("listening", "addr", ln.Addr().String())
 
-	return app.Serve(ctx, ln, app.Handler(app.Options{Logger: log}), log)
+	handler := app.Handler(app.Options{Logger: log, Source: core.NewProcessEnvConfigSource()})
+	return app.Serve(ctx, ln, handler, log)
 }
