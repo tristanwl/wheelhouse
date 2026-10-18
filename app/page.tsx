@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatEta } from "@/lib/format";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
-import type { DownloadItem } from "@/app/api/downloads/route";
+import type { DownloadsResponse } from "@/app/api/downloads/route";
+import { describeDownloadState } from "@/lib/providers/download-client/types";
 
 interface IndexerSummary {
   total: number;
@@ -74,14 +75,6 @@ interface StorageResponse {
     freeBytes: number;
     libraryUsedBytes: number;
   }[];
-}
-
-interface DownloadsResponse {
-  up: boolean;
-  paused?: boolean;
-  kbpersec?: number;
-  items: DownloadItem[];
-  error?: string;
 }
 
 export default function DashboardPage() {
@@ -236,52 +229,66 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
           Downloads
         </h2>
-        {downloads && !downloads.up && (
-          <p className="text-sm text-red-400">
-            Failed to load downloads{downloads.error ? `: ${downloads.error}` : ""}.
-          </p>
+        {downloads && downloads.instances.length === 0 && (
+          <p className="text-sm text-slate-500">No download client configured.</p>
         )}
-        {downloads?.up && downloads.items.length === 0 && (
+        {downloads?.instances
+          .filter((i) => !i.up)
+          .map((i) => (
+            <p key={i.instanceId} className="text-sm text-red-400">
+              {i.name}: {i.error ?? "unreachable"}
+            </p>
+          ))}
+        {downloads?.instances.some((i) => i.up) && downloads.items.length === 0 && (
           <p className="text-sm text-slate-500">No active downloads.</p>
         )}
-        {downloads?.up && downloads.items.length > 0 && (
+        {downloads && downloads.items.length > 0 && (
           <div className="space-y-2">
-            {downloads.paused && <p className="text-xs font-medium text-amber-400">Queue paused</p>}
-            {downloads.items.map((item) => (
-              <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
-                  <span className="truncate">{item.filename}</span>
-                  <span
-                    className={`shrink-0 text-xs ${
-                      item.postProcessing ? "text-amber-400" : "text-slate-400"
-                    }`}
-                  >
-                    {item.status}
-                  </span>
+            {downloads.instances
+              .filter((i) => i.paused)
+              .map((i) => (
+                <p key={i.instanceId} className="text-xs font-medium text-amber-400">
+                  {downloads.instances.length > 1 ? `${i.name}: queue paused` : "Queue paused"}
+                </p>
+              ))}
+            {downloads.items.map((item) => {
+              const processing = item.state === "postprocessing";
+              const speed = downloads.instances.find(
+                (i) => i.instanceId === item.instanceId
+              )?.speedBytesPerSec;
+              return (
+                <div
+                  key={`${item.instanceId}:${item.id}`}
+                  className="rounded-lg border border-slate-800 bg-slate-900 p-3"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-4 text-sm">
+                    <span className="truncate">{item.name}</span>
+                    <span
+                      className={`shrink-0 text-xs ${processing ? "text-amber-400" : "text-slate-400"}`}
+                    >
+                      {describeDownloadState(item)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                    <div
+                      className={`h-full ${processing ? "animate-pulse bg-amber-500" : "bg-sky-500"}`}
+                      style={{ width: `${Math.min(item.progress * 100, 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-slate-500">
+                    <span>
+                      {processing
+                        ? formatBytes(item.sizeBytes)
+                        : `${Math.round(item.progress * 100)}% of ${formatBytes(item.sizeBytes)}`}
+                    </span>
+                    <span>
+                      {!processing && speed ? `${formatBytes(speed)}/s · ` : ""}
+                      {item.etaSeconds ? `${formatEta(item.etaSeconds)} left` : ""}
+                    </span>
+                  </div>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full ${
-                      item.postProcessing ? "animate-pulse bg-amber-500" : "bg-sky-500"
-                    }`}
-                    style={{ width: `${Math.min(item.percentage, 100)}%` }}
-                  />
-                </div>
-                <div className="mt-1 flex justify-between text-xs text-slate-500">
-                  <span>
-                    {item.postProcessing
-                      ? formatBytes(item.sizeMb * 1024 * 1024)
-                      : `${item.percentage}% of ${formatBytes(item.sizeMb * 1024 * 1024)}`}
-                  </span>
-                  <span>
-                    {!item.postProcessing && downloads.kbpersec
-                      ? `${formatBytes(downloads.kbpersec * 1024)}/s · `
-                      : ""}
-                    {item.timeleft && item.timeleft !== "0:00:00" ? `${item.timeleft} left` : ""}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

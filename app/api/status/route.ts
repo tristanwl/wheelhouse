@@ -6,7 +6,8 @@ import {
   getSystemStatus,
   type HealthIssue,
 } from "@/lib/arr-client";
-import { getSabnzbdQueue, getSabnzbdServers, getSabnzbdWarnings } from "@/lib/sabnzbd-client";
+import { getRuntime, redact, type DownloadClient } from "@/lib/providers";
+import { formatEta } from "@/lib/format";
 import { env } from "@/lib/env";
 import { getPlexIdentity, getPlexServerInfo, getPlexSessions } from "@/lib/plex-client";
 
@@ -77,34 +78,20 @@ interface SabStatus {
 
 async function sabStatus(): Promise<SabStatus> {
   try {
-    const [queue, servers, warnings] = await Promise.all([
-      getSabnzbdQueue(),
-      getSabnzbdServers(),
-      getSabnzbdWarnings(),
-    ]);
+    const client = await getRuntime().getClient<DownloadClient>("sabnzbd");
+    const status = await client.getStatus();
     return {
       up: true,
-      paused: queue.paused,
-      status: queue.status,
-      kbpersec: Number(queue.kbpersec),
-      queueCount: queue.noofslots_total,
-      timeleft: queue.timeleft,
-      servers: servers.map((s) => ({
-        name: s.name,
-        connections: s.connections,
-        ssl: Boolean(s.ssl),
-        enabled: Boolean(s.enable),
-      })),
-      // Excludes "Refused connection..." — that's the web UI's host
-      // whitelist rejecting client access, unrelated to server/download
-      // health, and would read as a false alarm on the dashboard.
-      warnings: warnings
-        .filter((w) => !w.text.startsWith("Refused connection"))
-        .slice(-3)
-        .map((w) => w.text),
+      paused: status.paused,
+      status: status.statusText,
+      kbpersec: status.speedBytesPerSec / 1024,
+      queueCount: status.queueCount,
+      timeleft: status.etaSeconds === null ? undefined : formatEta(status.etaSeconds),
+      servers: status.usenet?.servers,
+      warnings: status.warnings.map((w) => w.message),
     };
   } catch (err) {
-    return { up: false, error: err instanceof Error ? err.message : "unknown error" };
+    return { up: false, error: err instanceof Error ? redact(err.message) : "unknown error" };
   }
 }
 

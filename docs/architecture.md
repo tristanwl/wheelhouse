@@ -440,10 +440,11 @@ the modal every 2s via SWR until the job reaches a terminal state.
   in SABnzbd's `api.py` (not a guess), it's intentional API-compat behavior,
   not a bug. The accurate per-item status only appears in `mode=history`,
   which SABnzbd's own code comments describe as combining "the jobs still in
-  post-processing and the database history" — `getSabnzbdActivePostProc()` in
-  `lib/sabnzbd-client.ts` pulls the still-active (non-Completed/Failed)
-  entries from there and the route overlays their real status onto the
-  matching queue slot by `nzo_id`. Since the underlying nzo is the same
+  post-processing and the database history" — the SABnzbd adapter
+  (`lib/providers/download-client/sabnzbd.ts`) pulls the still-active
+  (non-Completed/Failed) entries from there and overlays their real status
+  onto the matching queue slot by `nzo_id`, surfacing it as
+  `state: "postprocessing"` with the phase in `stateDetail`. Since the underlying nzo is the same
   object in both APIs, this never double-counts — it's an enrichment of the
   queue list, not a merge of two separate lists.
 - `GET /api/storage` — sonarr/radarr `/api/v3/rootfolder` (`freeSpace`) plus
@@ -536,8 +537,9 @@ the modal every 2s via SWR until the job reaches a terminal state.
   job doesn't exist or already finished.
 
 `lib/arr-client.ts` is the shared Sonarr/Radarr REST client (adds
-`X-Api-Key`, base URL); `lib/sabnzbd-client.ts` is the equivalent for
-SABnzbd's query-param API style; `lib/plex-client.ts` talks to Plex's API
+`X-Api-Key`, base URL); `lib/providers/download-client/sabnzbd.ts` is the
+SABnzbd adapter (query-param API style; a wrong key is an HTTP 403 with a
+plain-text body); `lib/plex-client.ts` talks to Plex's API
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
 `/identity`); `lib/tmdb-client.ts` talks to TMDB directly (`api_key` query
 param, not a header — that one's TMDB's own convention, not ours).

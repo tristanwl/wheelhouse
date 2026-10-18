@@ -19,12 +19,6 @@ export const env = {
   get radarrApiKey() {
     return required("RADARR_API_KEY");
   },
-  get sabnzbdUrl() {
-    return required("SABNZBD_URL");
-  },
-  get sabnzbdApiKey() {
-    return required("SABNZBD_API_KEY");
-  },
   // Plex is optional: the server may not be claimed/tokened yet, and status
   // reporting should degrade gracefully rather than fail to boot.
   get plexUrl() {
