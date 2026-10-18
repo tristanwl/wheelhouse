@@ -1,0 +1,26 @@
+# Example Docker Compose file for Wheelhouse. Copy to docker-compose.yml,
+# create .env from .env.example, and adjust the media paths.
+services:
+  wheelhouse:
+    build: .
+    container_name: wheelhouse
+    restart: unless-stopped
+    ports:
+      - "3050:3050"
+    env_file:
+      - .env
+    volumes:
+      # Settings (codec preferences) live here so they survive rebuilds.
+      - ./config:/config
+      # Only needed for the Codecs "Convert" feature. Mount your media at
+      # the SAME in-container paths Sonarr/Radarr use (they report file
+      # paths through their APIs and Wheelhouse opens them directly).
+      - /path/to/movies:/movies
+      - /path/to/tv:/tv
+    # Optional hardware encoding (Intel/AMD VAAPI). Uncomment, and add the
+    # host's render group GID (`getent group render`) if the device isn't
+    # accessible inside the container.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # group_add:
+    #   - "105"

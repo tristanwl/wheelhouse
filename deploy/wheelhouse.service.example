@@ -1,0 +1,57 @@
+# Example rootless-Podman systemd user unit for Wheelhouse. Adjust the paths,
+# then install to ~/.config/systemd/user/container-wheelhouse.service and run:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now container-wheelhouse.service
+# (and `loginctl enable-linger $USER` so it starts at boot without a login).
+#
+# Build the image first:  podman build -t wheelhouse:latest .
+#
+# /movies and /tv must be the same in-container paths Sonarr/Radarr use; they
+# are only needed for the Codecs "Convert" feature.
+#
+# --device /dev/dri passes the GPU render node through for hardware encode.
+# Rootless Podman can't grant access the host user doesn't already have, so
+# your user must be in the host's `render`/`video` groups.
+# --group-add keep-groups is required alongside it: rootless Podman does NOT
+# propagate the host user's supplementary groups into the container by
+# default, so without it VAAPI can't open the device. Remove both lines if you
+# don't want hardware encoding.
+
+[Unit]
+Description=Podman container-wheelhouse.service
+Documentation=man:podman-generate-systemd(1)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=%t/containers
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+TimeoutStopSec=70
+ExecStart=/usr/bin/podman run \
+	--cidfile=%t/%n.ctr-id \
+	--cgroups=no-conmon \
+	--rm \
+	--sdnotify=conmon \
+	-d \
+	--name=wheelhouse \
+	--network=host \
+	--env-file=%h/wheelhouse/.env \
+	-v /path/to/movies:/movies \
+	-v /path/to/tv:/tv \
+	-v %h/wheelhouse/config:/config \
+	--device /dev/dri \
+	--group-add keep-groups \
+	--replace localhost/wheelhouse:latest
+ExecStop=/usr/bin/podman stop \
+	--ignore -t 10 \
+	--cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm \
+	-f \
+	--ignore -t 10 \
+	--cidfile=%t/%n.ctr-id
+Type=notify
+NotifyAccess=all
+
+[Install]
+WantedBy=default.target
