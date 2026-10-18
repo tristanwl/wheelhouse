@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMovies } from "@/lib/arr-client";
-import {
-  backdropUrl,
-  getMovieDetail,
-  pickTrailerKey,
-  posterUrl,
-} from "@/lib/tmdb-client";
+import { backdropUrl, getMovieDetail, pickTrailerKey, posterUrl } from "@/lib/tmdb-client";
 
 export interface ExploreDetail {
   id: number;
@@ -21,20 +16,14 @@ export interface ExploreDetail {
   trailerKey: string | null;
 }
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const id = Number(params.id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
   try {
-    const [detail, libraryMovies] = await Promise.all([
-      getMovieDetail(id),
-      getMovies(),
-    ]);
+    const [detail, libraryMovies] = await Promise.all([getMovieDetail(id), getMovies()]);
     const result: ExploreDetail = {
       id: detail.id,
       alreadyAdded: libraryMovies.some((m) => m.tmdbId === detail.id),

@@ -12,9 +12,7 @@ export function StatusCard({ name, up, lines, warnings, error }: StatusCardProps
       <div className="mb-2 flex items-center justify-between">
         <h2 className="font-medium">{name}</h2>
         <span
-          className={`h-2.5 w-2.5 rounded-full ${
-            up ? "bg-emerald-500" : "bg-red-500"
-          }`}
+          className={`h-2.5 w-2.5 rounded-full ${up ? "bg-emerald-500" : "bg-red-500"}`}
           title={up ? "up" : "down"}
         />
       </div>

@@ -26,10 +26,7 @@ function pickImage(images: { coverType: string; remoteUrl?: string }[] | undefin
   return images?.find((i) => i.coverType === type)?.remoteUrl ?? null;
 }
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { service: string; id: string } }
-) {
+export async function GET(_req: Request, { params }: { params: { service: string; id: string } }) {
   const id = Number(params.id);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });

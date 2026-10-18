@@ -99,21 +99,15 @@ export default function DashboardPage() {
     [host]
   );
 
-  const { data: status, error: statusError } = useSWR<StatusResponse>(
-    "/api/status",
-    fetcher,
-    { refreshInterval: 15000 }
-  );
-  const { data: storage } = useSWR<StorageResponse>(
-    "/api/storage",
-    fetcher,
-    { refreshInterval: 30000 }
-  );
-  const { data: downloads } = useSWR<DownloadsResponse>(
-    "/api/downloads",
-    fetcher,
-    { refreshInterval: 5000 }
-  );
+  const { data: status, error: statusError } = useSWR<StatusResponse>("/api/status", fetcher, {
+    refreshInterval: 15000,
+  });
+  const { data: storage } = useSWR<StorageResponse>("/api/storage", fetcher, {
+    refreshInterval: 30000,
+  });
+  const { data: downloads } = useSWR<DownloadsResponse>("/api/downloads", fetcher, {
+    refreshInterval: 5000,
+  });
 
   return (
     <div className="space-y-8">
@@ -121,9 +115,7 @@ export default function DashboardPage() {
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
           Service status
         </h2>
-        {statusError && (
-          <p className="text-sm text-red-400">Failed to load status.</p>
-        )}
+        {statusError && <p className="text-sm text-red-400">Failed to load status.</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <a
             href={SERVICE_URLS.sonarr}
@@ -141,9 +133,7 @@ export default function DashboardPage() {
                   : "",
                 status?.sonarr.version ? `v${status.sonarr.version}` : "",
               ].filter(Boolean)}
-              warnings={status?.sonarr.health
-                ?.filter((h) => h.type !== "ok")
-                .map((h) => h.message)}
+              warnings={status?.sonarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
               error={status?.sonarr.error}
             />
           </a>
@@ -163,9 +153,7 @@ export default function DashboardPage() {
                   : "",
                 status?.radarr.version ? `v${status.radarr.version}` : "",
               ].filter(Boolean)}
-              warnings={status?.radarr.health
-                ?.filter((h) => h.type !== "ok")
-                .map((h) => h.message)}
+              warnings={status?.radarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
               error={status?.radarr.error}
             />
           </a>
@@ -181,14 +169,9 @@ export default function DashboardPage() {
               lines={[
                 `status: ${status?.sabnzbd.status ?? "-"}`,
                 status?.sabnzbd.paused ? "paused" : "",
-                status?.sabnzbd.kbpersec
-                  ? `${formatBytes(status.sabnzbd.kbpersec * 1024)}/s`
-                  : "",
-                status?.sabnzbd.queueCount
-                  ? `${status.sabnzbd.queueCount} in queue`
-                  : "",
-                status?.sabnzbd.timeleft &&
-                status.sabnzbd.timeleft !== "0:00:00"
+                status?.sabnzbd.kbpersec ? `${formatBytes(status.sabnzbd.kbpersec * 1024)}/s` : "",
+                status?.sabnzbd.queueCount ? `${status.sabnzbd.queueCount} in queue` : "",
+                status?.sabnzbd.timeleft && status.sabnzbd.timeleft !== "0:00:00"
                   ? `${status.sabnzbd.timeleft} left`
                   : "",
                 ...(status?.sabnzbd.servers ?? []).map(
@@ -222,16 +205,12 @@ export default function DashboardPage() {
                 status?.plex.up && !status.plex.claimed
                   ? "Not claimed yet - finish setup at :32400/web"
                   : "",
-                status?.plex.up &&
-                status.plex.claimed &&
-                !status.plex.tokenConfigured
+                status?.plex.up && status.plex.claimed && !status.plex.tokenConfigured
                   ? "PLEX_TOKEN not set - showing basic status only"
                   : "",
               ].filter(Boolean)}
               error={
-                status?.plex.configured === false
-                  ? "PLEX_URL not configured"
-                  : status?.plex.error
+                status?.plex.configured === false ? "PLEX_URL not configured" : status?.plex.error
               }
             />
           </a>
@@ -239,9 +218,7 @@ export default function DashboardPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
-          Storage
-        </h2>
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">Storage</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {storage?.entries.map((entry) => (
             <Link
@@ -269,14 +246,9 @@ export default function DashboardPage() {
         )}
         {downloads?.up && downloads.items.length > 0 && (
           <div className="space-y-2">
-            {downloads.paused && (
-              <p className="text-xs font-medium text-amber-400">Queue paused</p>
-            )}
+            {downloads.paused && <p className="text-xs font-medium text-amber-400">Queue paused</p>}
             {downloads.items.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-lg border border-slate-800 bg-slate-900 p-3"
-              >
+              <div key={item.id} className="rounded-lg border border-slate-800 bg-slate-900 p-3">
                 <div className="mb-1 flex items-center justify-between gap-4 text-sm">
                   <span className="truncate">{item.filename}</span>
                   <span
@@ -290,9 +262,7 @@ export default function DashboardPage() {
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                   <div
                     className={`h-full ${
-                      item.postProcessing
-                        ? "animate-pulse bg-amber-500"
-                        : "bg-sky-500"
+                      item.postProcessing ? "animate-pulse bg-amber-500" : "bg-sky-500"
                     }`}
                     style={{ width: `${Math.min(item.percentage, 100)}%` }}
                   />
@@ -307,9 +277,7 @@ export default function DashboardPage() {
                     {!item.postProcessing && downloads.kbpersec
                       ? `${formatBytes(downloads.kbpersec * 1024)}/s · `
                       : ""}
-                    {item.timeleft && item.timeleft !== "0:00:00"
-                      ? `${item.timeleft} left`
-                      : ""}
+                    {item.timeleft && item.timeleft !== "0:00:00" ? `${item.timeleft} left` : ""}
                   </span>
                 </div>
               </div>

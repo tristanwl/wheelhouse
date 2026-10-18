@@ -34,20 +34,13 @@ function LibraryContent() {
   const searchParams = useSearchParams();
   const volumePath = searchParams.get("path") ?? "";
 
-  const { data, error, mutate } = useSWR<LibraryResponse>(
-    "/api/library",
-    fetcher
-  );
+  const { data, error, mutate } = useSWR<LibraryResponse>("/api/library", fetcher);
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("size");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [pending, setPending] = useState<LibraryItem | null>(null);
-  const [managingSeries, setManagingSeries] = useState<LibraryItem | null>(
-    null
-  );
-  const [viewingDetails, setViewingDetails] = useState<LibraryItem | null>(
-    null
-  );
+  const [managingSeries, setManagingSeries] = useState<LibraryItem | null>(null);
+  const [viewingDetails, setViewingDetails] = useState<LibraryItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -159,9 +152,7 @@ function LibraryContent() {
       </div>
 
       {error && <p className="text-sm text-red-400">Failed to load library.</p>}
-      {!data && !error && (
-        <p className="text-sm text-slate-500">Loading…</p>
-      )}
+      {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
 
       {items.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-slate-800">
@@ -220,9 +211,7 @@ function LibraryContent() {
                   <td className="px-4 py-2 text-slate-400" title={item.added}>
                     {formatAge(item.added)}
                   </td>
-                  <td className="px-4 py-2 text-slate-400">
-                    {item.monitored ? "yes" : "no"}
-                  </td>
+                  <td className="px-4 py-2 text-slate-400">{item.monitored ? "yes" : "no"}</td>
                   <td className="px-4 py-2 text-right">
                     {item.service === "sonarr" ? (
                       <button
@@ -255,9 +244,7 @@ function LibraryContent() {
           title={`Delete "${pending.title}"?`}
           body={`This removes it from ${pending.service} and deletes ${formatBytes(
             pending.sizeOnDisk
-          )} of files from disk. This can't be undone.${
-            deleteError ? ` (${deleteError})` : ""
-          }`}
+          )} of files from disk. This can't be undone.${deleteError ? ` (${deleteError})` : ""}`}
           busy={deleting}
           onConfirm={confirmDelete}
           onCancel={() => setPending(null)}
@@ -274,8 +261,7 @@ function LibraryContent() {
               (current) =>
                 current && {
                   items: current.items.filter(
-                    (i) =>
-                      !(i.service === "sonarr" && i.id === managingSeries.id)
+                    (i) => !(i.service === "sonarr" && i.id === managingSeries.id)
                   ),
                 },
               { revalidate: true }
@@ -301,9 +287,7 @@ function LibraryContent() {
 
 export default function LibraryPage() {
   return (
-    <Suspense
-      fallback={<p className="text-sm text-slate-500">Loading…</p>}
-    >
+    <Suspense fallback={<p className="text-sm text-slate-500">Loading…</p>}>
       <LibraryContent />
     </Suspense>
   );

@@ -1,20 +1,12 @@
 import { NextResponse } from "next/server";
-import {
-  deleteEpisodeFile,
-  getEpisodeFiles,
-  getSeriesById,
-  updateSeries,
-} from "@/lib/arr-client";
+import { deleteEpisodeFile, getEpisodeFiles, getSeriesById, updateSeries } from "@/lib/arr-client";
 
 export async function DELETE(
   _req: Request,
   { params }: { params: { service: string; id: string; season: string } }
 ) {
   if (params.service !== "sonarr") {
-    return NextResponse.json(
-      { error: "seasons are only available for sonarr" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "seasons are only available for sonarr" }, { status: 400 });
   }
   const id = Number(params.id);
   const seasonNumber = Number(params.season);

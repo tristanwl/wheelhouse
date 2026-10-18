@@ -6,13 +6,7 @@ import { rescanMovie, rescanSeries } from "./arr-client";
 import { ffmpegArgsFor, type Backend } from "./hw-encode";
 import type { PreferableFamily } from "./settings";
 
-export type ConversionStatus =
-  | "queued"
-  | "probing"
-  | "running"
-  | "success"
-  | "failed"
-  | "canceled";
+export type ConversionStatus = "queued" | "probing" | "running" | "success" | "failed" | "canceled";
 
 const ACTIVE_STATUSES: ConversionStatus[] = ["queued", "probing", "running"];
 
@@ -81,9 +75,7 @@ export function getJob(id: string): ConversionJob | undefined {
 }
 
 export function findActiveJobForPath(filePath: string): ConversionJob | undefined {
-  const job = jobs.find(
-    (j) => j.filePath === filePath && ACTIVE_STATUSES.includes(j.status)
-  );
+  const job = jobs.find((j) => j.filePath === filePath && ACTIVE_STATUSES.includes(j.status));
   return job && stripInternal(job);
 }
 
@@ -331,9 +323,7 @@ async function walkAndClean(dir: string) {
               `[convert-queue] restored interrupted conversion: ${full} -> ${originalPath}`
             )
           )
-          .catch((err) =>
-            console.error(`[convert-queue] failed to restore ${full}:`, err)
-          );
+          .catch((err) => console.error(`[convert-queue] failed to restore ${full}:`, err));
       }
     }
   }

@@ -9,7 +9,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
-  const validBackend = body?.backend === "vaapi" || body?.backend === "nvenc" || body?.backend === "software";
+  const validBackend =
+    body?.backend === "vaapi" || body?.backend === "nvenc" || body?.backend === "software";
   const validFamily = body?.targetFamily === "h264" || body?.targetFamily === "hevc";
   if (
     !body ||

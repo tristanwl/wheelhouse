@@ -10,15 +10,9 @@ export interface SeasonSummary {
   sizeOnDisk: number;
 }
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { service: string; id: string } }
-) {
+export async function GET(_req: Request, { params }: { params: { service: string; id: string } }) {
   if (params.service !== "sonarr") {
-    return NextResponse.json(
-      { error: "seasons are only available for sonarr" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "seasons are only available for sonarr" }, { status: 400 });
   }
   const id = Number(params.id);
   if (!Number.isInteger(id)) {

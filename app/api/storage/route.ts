@@ -18,10 +18,7 @@ export async function GET() {
     getMovies(),
   ]);
 
-  const tvUsed = series.reduce(
-    (sum, s) => sum + (s.statistics?.sizeOnDisk ?? 0),
-    0
-  );
+  const tvUsed = series.reduce((sum, s) => sum + (s.statistics?.sizeOnDisk ?? 0), 0);
   const moviesUsed = movies.reduce((sum, m) => sum + (m.sizeOnDisk ?? 0), 0);
 
   const entries: StorageEntry[] = [

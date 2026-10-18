@@ -27,11 +27,7 @@ const LIMIT = 40;
 
 type ExplorePage = { results?: ExploreHit[]; hasMore?: boolean; error?: string };
 
-export default function ExploreCategoryPage({
-  params,
-}: {
-  params: { category: string };
-}) {
+export default function ExploreCategoryPage({ params }: { params: { category: string } }) {
   const { category } = params;
   const label = CATEGORY_LABELS[category];
 
@@ -154,9 +150,7 @@ export default function ExploreCategoryPage({
       </div>
 
       {(error || pageError) && (
-        <p className="text-sm text-red-400">
-          Failed to load: {pageError ?? "request failed"}
-        </p>
+        <p className="text-sm text-red-400">Failed to load: {pageError ?? "request failed"}</p>
       )}
       {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
 

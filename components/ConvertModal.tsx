@@ -96,8 +96,7 @@ export function ConvertModal({
     jobId ? `/api/codec-analysis/convert/${jobId}` : null,
     fetcher,
     {
-      refreshInterval: (latest) =>
-        latest && DONE_STATUSES.has(latest.status) ? 0 : 2000,
+      refreshInterval: (latest) => (latest && DONE_STATUSES.has(latest.status) ? 0 : 2000),
     }
   );
 
@@ -136,9 +135,7 @@ export function ConvertModal({
       if (!res.ok) throw new Error(body.error ?? `start failed: ${res.status}`);
       setJobId(body.id);
     } catch (err) {
-      setStartError(
-        err instanceof Error ? err.message : "Failed to start conversion."
-      );
+      setStartError(err instanceof Error ? err.message : "Failed to start conversion.");
     } finally {
       setStarting(false);
     }
@@ -182,26 +179,20 @@ export function ConvertModal({
         {!jobId && (
           <>
             <p className="mb-1 text-sm text-slate-300">
-              Re-encode this file from <span className="font-medium">{codec}</span>{" "}
-              to <span className="font-medium">{FAMILY_LABEL[targetFamily]}</span>,
-              in place.
+              Re-encode this file from <span className="font-medium">{codec}</span> to{" "}
+              <span className="font-medium">{FAMILY_LABEL[targetFamily]}</span>, in place.
             </p>
             <p className="mb-4 text-xs text-slate-500">
-              Current size {formatBytes(originalSize)}. Runs on the server
-              with ffmpeg and can take a long time for large files. Only one
-              conversion runs at a time. The original is kept alongside as a{" "}
-              <code>.bak</code> file after a successful conversion; nothing
-              deletes it automatically, so clean it up once you&apos;ve
-              confirmed playback.
+              Current size {formatBytes(originalSize)}. Runs on the server with ffmpeg and can take
+              a long time for large files. Only one conversion runs at a time. The original is kept
+              alongside as a <code>.bak</code> file after a successful conversion; nothing deletes
+              it automatically, so clean it up once you&apos;ve confirmed playback.
             </p>
 
             <label className="mb-1 block text-xs text-slate-400">Encoder</label>
             <div className="mb-4 space-y-1.5">
               {options.map((opt) => (
-                <label
-                  key={opt.backend}
-                  className="flex items-start gap-2 text-sm text-slate-300"
-                >
+                <label key={opt.backend} className="flex items-start gap-2 text-sm text-slate-300">
                   <input
                     type="radio"
                     className="mt-0.5"
@@ -233,9 +224,7 @@ export function ConvertModal({
               )}
             </div>
 
-            {startError && (
-              <p className="mb-3 text-xs text-red-400">{startError}</p>
-            )}
+            {startError && <p className="mb-3 text-xs text-red-400">{startError}</p>}
             <div className="flex justify-end gap-2">
               <button
                 onClick={onClose}
@@ -286,8 +275,7 @@ export function ConvertModal({
                 {formatBytes(originalSize)} → {formatBytes(job.newSize)}
                 {originalSize > 0 &&
                   ` (${(100 - (job.newSize / originalSize) * 100).toFixed(0)}% smaller)`}
-                . Original kept at{" "}
-                <code className="break-all">{job.backupPath}</code>.
+                . Original kept at <code className="break-all">{job.backupPath}</code>.
               </p>
             )}
             {job.status === "failed" && job.error && (
@@ -296,9 +284,7 @@ export function ConvertModal({
 
             {job.log && (
               <div>
-                <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">
-                  Output
-                </p>
+                <p className="mb-1 text-xs uppercase tracking-wide text-slate-500">Output</p>
                 <pre
                   ref={logRef}
                   className="max-h-56 overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-black/40 p-2 font-mono text-[11px] leading-snug text-slate-400"

@@ -6,17 +6,9 @@ import {
   getSystemStatus,
   type HealthIssue,
 } from "@/lib/arr-client";
-import {
-  getSabnzbdQueue,
-  getSabnzbdServers,
-  getSabnzbdWarnings,
-} from "@/lib/sabnzbd-client";
+import { getSabnzbdQueue, getSabnzbdServers, getSabnzbdWarnings } from "@/lib/sabnzbd-client";
 import { env } from "@/lib/env";
-import {
-  getPlexIdentity,
-  getPlexServerInfo,
-  getPlexSessions,
-} from "@/lib/plex-client";
+import { getPlexIdentity, getPlexServerInfo, getPlexSessions } from "@/lib/plex-client";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +43,7 @@ async function arrStatus(service: "sonarr" | "radarr"): Promise<ArrStatus> {
       indexers: {
         total: indexers.length,
         enabled: indexers.filter((i) => i.enableRss).length,
-        issues: health
-          .filter((h) => h.source.startsWith("Indexer"))
-          .map((h) => h.message),
+        issues: health.filter((h) => h.source.startsWith("Indexer")).map((h) => h.message),
       },
     };
   } catch (err) {
@@ -152,10 +142,7 @@ async function plexStatus(): Promise<PlexStatus> {
 
     if (identity.claimed && tokenConfigured) {
       try {
-        const [info, sessions] = await Promise.all([
-          getPlexServerInfo(),
-          getPlexSessions(),
-        ]);
+        const [info, sessions] = await Promise.all([getPlexServerInfo(), getPlexSessions()]);
         return {
           ...base,
           friendlyName: info.friendlyName,

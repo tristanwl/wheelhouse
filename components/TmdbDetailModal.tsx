@@ -112,11 +112,7 @@ export function TmdbDetailModal({
           <div className="w-32 shrink-0">
             {data?.posterUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={data.posterUrl}
-                alt={data.title}
-                className="w-full rounded object-cover"
-              />
+              <img src={data.posterUrl} alt={data.title} className="w-full rounded object-cover" />
             ) : (
               <div className="flex h-48 w-32 items-center justify-center rounded bg-slate-800 text-xs text-slate-600">
                 No poster

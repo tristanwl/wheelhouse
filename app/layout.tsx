@@ -8,11 +8,7 @@ export const metadata: Metadata = {
   description: "A dashboard and companion for your *arr media stack",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>

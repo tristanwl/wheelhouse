@@ -83,9 +83,7 @@ export function ExploreSection({
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-slate-500">
-          {label}
-        </h2>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-slate-500">{label}</h2>
         <Link
           href={`/explore/${category}`}
           className="text-xs font-medium text-slate-400 hover:text-slate-200"
@@ -94,9 +92,7 @@ export function ExploreSection({
         </Link>
       </div>
       {(error || data?.error) && (
-        <p className="text-sm text-red-400">
-          Failed to load: {data?.error ?? "request failed"}
-        </p>
+        <p className="text-sm text-red-400">Failed to load: {data?.error ?? "request failed"}</p>
       )}
       {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
 
@@ -117,10 +113,7 @@ export function ExploreSection({
               const added = hit.alreadyAdded || addedIds.has(hit.id);
               return (
                 <div key={hit.id} className="w-36 shrink-0">
-                  <button
-                    onClick={() => setViewingId(hit.id)}
-                    className="block w-full text-left"
-                  >
+                  <button onClick={() => setViewingId(hit.id)} className="block w-full text-left">
                     <div className="relative">
                       {hit.posterUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -180,9 +173,7 @@ export function ExploreSection({
           searchNow={searchNow}
           minimumAvailability={minimumAvailability}
           onClose={() => setViewingId(null)}
-          onAdded={() =>
-            setAddedIds((prev) => new Set(prev).add(viewingHit.id))
-          }
+          onAdded={() => setAddedIds((prev) => new Set(prev).add(viewingHit.id))}
         />
       )}
 
