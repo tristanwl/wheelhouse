@@ -166,6 +166,8 @@ func (s *configSpec) decode(raw map[string]any) (any, error) {
 				fail(f.Name, "must not be empty")
 			case f.Format == "url" && !validHTTPURL(str):
 				fail(f.Name, "must be an http or https URL")
+			case f.Format == "url" && hasURLCredentials(str):
+				fail(f.Name, "must not contain a username or password")
 			default:
 				dst.SetString(str)
 			}
@@ -218,6 +220,14 @@ func validHTTPURL(s string) bool {
 		return false
 	}
 	return (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
+}
+
+// hasURLCredentials reports whether a URL carries "user:pass@". The Next app
+// never worked with these (fetch refuses them), and a credential belongs in the
+// provider's own secret setting, not in a URL that is logged and linked.
+func hasURLCredentials(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && u.User != nil
 }
 
 // secretValues returns the values of the secret settings present in raw, for

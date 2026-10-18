@@ -25,15 +25,45 @@ media server).
 A Go server that will replace the Next app is being built alongside it in
 `server/`, following [wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md)
 (migration steps 2 and 3: skeleton, middleware, embedded UI placeholder, and
-the provider core). It serves only `/healthz`, `/api/features` and a placeholder
-page so far; nothing here describes it until the cut-over, and the Next app is
-unchanged. See [server/README.md](../server/README.md).
+the provider core, then the providers and, from step 5, the API routes). So far
+it serves `/healthz`, `/api/features`, `/api/status`, `/api/downloads` and a
+placeholder page; nothing here describes it until the cut-over, and the Next app
+is unchanged. See [server/README.md](../server/README.md).
+
+### Go routes and wiring (`server/internal/app`, `providers/all`)
+
+- **One registry.** `providers/all` builds the registry from every provider's
+  `Definition()` and a runtime over a `ConfigSource`; `app.Options{Source}` (or a
+  ready `Runtime`) injects it, `main` passes the process environment, tests pass
+  a fake one.
+- **Access levels.** Every route is registered through `app.Router.Handle(pattern,
+  level, handler)` with `Public`, `Authenticated` or `Admin` (all public until
+  Phase 2). The router's `authorize` is the single place a session check will go.
+  `router_test.go` lists every route with its level, and fails for a route that
+  is missing or not listed, or that builds its own mux.
+- **Features.** `features.Of(ctx, runtime, env)` is `getFeatures()`: the
+  instances' roles, kinds and readiness against `Definitions`, plus the
+  once-per-process `ffmpeg -version` probe.
+- **Status.** `status.Compute` fans out to every enabled media manager,
+  download client and media server in parallel (per-instance isolation: an
+  error or panic is a `down` entry with a redacted reason). The state is
+  `ok|degraded|needs-setup|down` (manager health warnings or errors, SABnzbd-style
+  errors younger than 24 h, an unclaimed Plex or unconfigured Jellyfin). The
+  `link` is computed on the server from the configured URL: scheme, port (none
+  for a scheme's default) and path prefix, plus `/web` for Plex; never host,
+  credentials or query.
+- **Downloads.** `downloads.Compute` returns `instances` (one per enabled client,
+  `up` false with the reason when it cannot answer) and normalized `items`, both
+  in configured order.
+- A configured URL with `user:pass@` is an invalid config (the Next app never
+  worked with these either: `fetch` refuses them), so the instance shows as down
+  instead of sending Basic auth upstream.
 
 ### Go provider core (`server/internal/providers/core`)
 
 The Go port of `lib/providers/core/`, with the same behaviour and ported tests,
-and no routes or providers yet (migration steps 4 and 5). It is not wired into
-anything; the Next app's provider layer above is still the one that runs.
+(migration step 3). The Go server builds its runtime over it; the Next app's
+provider layer above is still the one that runs.
 
 - **Definitions and registry.** A `Definition` has an id, a `Role`, a display
   name, a `Config` struct (zero value) and a `Create` factory. `NewRegistry`
