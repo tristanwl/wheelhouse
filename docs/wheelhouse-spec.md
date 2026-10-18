@@ -150,6 +150,33 @@ Today's `fetch` calls have no timeout, so one dead service can hang
   string).
 - A `User-Agent: Wheelhouse/<version>`.
 
+### Response caching
+
+Measured on a real instance (Radarr with 659 movies): `/api/storage`,
+`/api/library`, Explore and codec analysis each take about 0.55-0.6 s, and
+almost all of that is waiting on Radarr/Sonarr, because every request
+refetches the full movie or series list. The app itself uses 77 MB of memory
+and answers `/api/status` in about 60 ms. The fix is a cache, not a different
+language.
+
+The HTTP client gets an optional response cache, used by the media-manager
+adapters first (PR 5):
+
+- **GET only**, keyed by instance + path + query, with a short TTL per call
+  (for example 5-10 s for library lists; none for status and queue data).
+- **In-flight de-duplication**: concurrent requests for the same key share one
+  upstream call, so a page that loads three endpoints that each want the
+  library makes one request to Radarr, not three.
+- **Invalidation on writes**: add, delete and rescan clear that instance's
+  entries, so the UI never shows a deleted movie because of the cache.
+- Errors are never cached.
+- Per-instance and in memory. No shared cache and no persistence.
+
+Acceptance: a second `/api/library` request inside the TTL makes no upstream
+call (test against the counting local server used for the HTTP helper), the
+first request after a delete does, and warm `/api/library` on the reference
+instance drops from about 0.6 s to well under 100 ms.
+
 ### Config source
 
 ```ts
@@ -375,7 +402,8 @@ Each PR keeps the app working.
    normalization, fixtures + contract tests.
 4. **Plex → MediaServer**: adapter, `state` mapping, contract tests.
 5. **Sonarr/Radarr → MediaManager instances**: `[service]` → `[instanceId]`,
-   iterate instances in status/storage/explore, fix storage double-count.
+   iterate instances in status/storage/explore, fix storage double-count, and
+   add the response cache (see "Response caching").
 6. **`/api/status` + dashboard**: instance-based cards.
 7. **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
    seeding rows, hardlink check in the converter.
@@ -498,3 +526,16 @@ need Pro). The result decides go or no-go.
 - **Queue persistence.** Job state is in memory, so a restart discards
   running and queued conversions. Decide whether to persist it (SQLite in
   Phase 2 makes this cheap).
+- **Next.js versus a lighter stack (decide at the start of Phase 2).** Staying
+  on TypeScript is the settled choice: the app is I/O-bound (ffmpeg does the
+  heavy work as a separate process), uses 77 MB, and TypeScript gives shared
+  client/server types and zod schemas that will drive the admin forms. The
+  open question is the framework. The UI is almost entirely client-rendered
+  with SWR and barely uses server rendering, while Next.js has cost us 23
+  security advisories and the 14 to 15 breaking changes in a week. The
+  alternative is a Vite single-page app with a small Node server (Hono or
+  Fastify). Next's middleware and API routes make the auth work in Phase 2
+  easier, so weigh that against the churn and attack surface before building
+  auth on top of it. A rewrite to Go was considered and rejected (no
+  measurable gain, large cost); revisit only if a no-runtime single binary
+  becomes a goal.
