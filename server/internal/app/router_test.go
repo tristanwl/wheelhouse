@@ -31,13 +31,15 @@ func TestEveryRouteHasAnAccessLevel(t *testing.T) {
 	// Spelled out on purpose: adding or removing a route is a visible change here,
 	// and Phase 2 reviews each level. Everything is public until authentication exists.
 	want := map[string]Level{
-		"GET /healthz":       Public,
-		"GET /api/features":  Public,
-		"GET /api/status":    Public,
-		"GET /api/downloads": Public,
-		"/api":               Public,
-		"/api/":              Public,
-		"/":                  Public,
+		"GET /healthz":          Public,
+		"GET /api/features":     Public,
+		"GET /api/status":       Public,
+		"GET /api/downloads":    Public,
+		"GET /api/explore":      Public,
+		"GET /api/explore/{id}": Public,
+		"/api":                  Public,
+		"/api/":                 Public,
+		"/":                     Public,
 
 		// Codecs.
 		"GET /api/codec-analysis":                         Public,
