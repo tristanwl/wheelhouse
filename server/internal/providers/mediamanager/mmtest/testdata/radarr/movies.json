@@ -1,0 +1,626 @@
+[
+  {
+    "title": "Example Movie 1",
+    "originalTitle": "Example Movie 1",
+    "originalLanguage": {
+      "id": 1,
+      "name": "English"
+    },
+    "alternateTitles": [],
+    "secondaryYearSourceId": 0,
+    "sortTitle": "example movie 1",
+    "sizeOnDisk": 2377765057,
+    "status": "released",
+    "overview": "Placeholder overview for Example Movie 1.",
+    "inCinemas": "2025-06-04T00:00:00Z",
+    "physicalRelease": "2025-08-27T00:00:00Z",
+    "digitalRelease": "2025-06-30T00:00:00Z",
+    "releaseDate": "2025-06-30T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/movie1/poster.jpg",
+        "remoteUrl": "https://example.com/images/movie1/poster.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/movie1/fanart.jpg",
+        "remoteUrl": "https://example.com/images/movie1/fanart.jpg"
+      }
+    ],
+    "website": "",
+    "year": 2025,
+    "youTubeTrailerId": "",
+    "studio": "Example Studio",
+    "path": "/movies/Example Movie 1 (2025)",
+    "qualityProfileId": 6,
+    "hasFile": true,
+    "movieFileId": 1,
+    "monitored": true,
+    "minimumAvailability": "released",
+    "isAvailable": true,
+    "folderName": "/movies/Example Movie 1 (2025)",
+    "runtime": 125,
+    "cleanTitle": "examplemovie1",
+    "imdbId": "tt0000001",
+    "tmdbId": 900001,
+    "titleSlug": "900001",
+    "rootFolderPath": "/movies",
+    "certification": "R",
+    "genres": ["Action", "Thriller", "Crime"],
+    "keywords": [],
+    "tags": [],
+    "added": "2025-07-30T07:11:22Z",
+    "ratings": {
+      "imdb": {
+        "votes": 164154,
+        "value": 6.8,
+        "type": "user"
+      },
+      "tmdb": {
+        "votes": 3044,
+        "value": 7.265,
+        "type": "user"
+      },
+      "metacritic": {
+        "votes": 0,
+        "value": 59,
+        "type": "user"
+      },
+      "trakt": {
+        "votes": 13687,
+        "value": 7.22715,
+        "type": "user"
+      }
+    },
+    "movieFile": {
+      "movieId": 1,
+      "relativePath": "Example Movie 1 (2025).mkv",
+      "path": "/movies/Example Movie 1 (2025)/Example Movie 1 (2025).mkv",
+      "size": 2377765057,
+      "dateAdded": "2025-07-30T07:20:31Z",
+      "sceneName": "Example.Movie.1.(2025).1080p.WEB-DL.x264-GROUP",
+      "releaseGroup": "GROUP",
+      "edition": "",
+      "languages": [
+        {
+          "id": 1,
+          "name": "English"
+        }
+      ],
+      "quality": {
+        "quality": {
+          "id": 15,
+          "name": "WEBRip-1080p",
+          "source": "webrip",
+          "resolution": 1080,
+          "modifier": "none"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0,
+          "isRepack": false
+        }
+      },
+      "indexerFlags": 0,
+      "mediaInfo": {
+        "audioBitrate": 768000,
+        "audioChannels": 5.1,
+        "audioCodec": "EAC3 Atmos",
+        "audioLanguages": "eng",
+        "audioStreamCount": 1,
+        "videoBitDepth": 10,
+        "videoBitrate": 0,
+        "videoCodec": "x265",
+        "videoFps": 23.976,
+        "videoDynamicRange": "",
+        "videoDynamicRangeType": "",
+        "resolution": "1920x800",
+        "runTime": "2:04:47",
+        "scanType": "Progressive",
+        "subtitles": "eng/eng/fre"
+      },
+      "originalFilePath": "Example.Movie.1.(2025).1080p.WEB-DL.x264-GROUP/Example.Movie.1.(2025).1080p.WEB-DL.x264-GROUP.mkv",
+      "qualityCutoffNotMet": false,
+      "id": 1
+    },
+    "popularity": 53.878,
+    "lastSearchTime": "2025-07-30T07:11:57Z",
+    "statistics": {
+      "movieFileCount": 1,
+      "sizeOnDisk": 2377765057,
+      "releaseGroups": ["iVy"]
+    },
+    "id": 1
+  },
+  {
+    "title": "Example Movie 2",
+    "originalTitle": "Example Movie 2",
+    "originalLanguage": {
+      "id": 1,
+      "name": "English"
+    },
+    "alternateTitles": [],
+    "secondaryYearSourceId": 0,
+    "sortTitle": "example movie 2",
+    "sizeOnDisk": 1322780932,
+    "status": "released",
+    "overview": "Placeholder overview for Example Movie 2.",
+    "inCinemas": "2016-01-14T00:00:00Z",
+    "physicalRelease": "2016-06-07T00:00:00Z",
+    "digitalRelease": "2016-01-13T00:00:00Z",
+    "releaseDate": "2016-01-13T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/movie2/poster.jpg",
+        "remoteUrl": "https://example.com/images/movie2/poster.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/movie2/fanart.jpg",
+        "remoteUrl": "https://example.com/images/movie2/fanart.jpg"
+      }
+    ],
+    "website": "",
+    "year": 2016,
+    "youTubeTrailerId": "",
+    "studio": "Example Studio",
+    "path": "/movies/Example Movie 2 (2016)",
+    "qualityProfileId": 6,
+    "hasFile": true,
+    "movieFileId": 2,
+    "monitored": true,
+    "minimumAvailability": "released",
+    "isAvailable": true,
+    "folderName": "/movies/Example Movie 2 (2016)",
+    "runtime": 144,
+    "cleanTitle": "examplemovie2",
+    "imdbId": "tt0000002",
+    "tmdbId": 900002,
+    "titleSlug": "900002",
+    "rootFolderPath": "/movies",
+    "certification": "R",
+    "genres": ["War", "History", "Drama"],
+    "keywords": [],
+    "tags": [],
+    "added": "2025-07-30T07:32:54Z",
+    "ratings": {
+      "imdb": {
+        "votes": 182384,
+        "value": 7.3,
+        "type": "user"
+      },
+      "tmdb": {
+        "votes": 4063,
+        "value": 7.278,
+        "type": "user"
+      },
+      "metacritic": {
+        "votes": 0,
+        "value": 48,
+        "type": "user"
+      },
+      "rottenTomatoes": {
+        "votes": 0,
+        "value": 52,
+        "type": "user"
+      },
+      "trakt": {
+        "votes": 9658,
+        "value": 7.64071,
+        "type": "user"
+      }
+    },
+    "movieFile": {
+      "movieId": 2,
+      "relativePath": "Example Movie 2 (2016).mkv",
+      "path": "/movies/Example Movie 2 (2016)/Example Movie 2 (2016).mkv",
+      "size": 1322780932,
+      "dateAdded": "2025-07-30T07:33:18Z",
+      "edition": "",
+      "languages": [
+        {
+          "id": 1,
+          "name": "English"
+        }
+      ],
+      "quality": {
+        "quality": {
+          "id": 8,
+          "name": "WEBDL-480p",
+          "source": "webdl",
+          "resolution": 480,
+          "modifier": "none"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0,
+          "isRepack": false
+        }
+      },
+      "indexerFlags": 0,
+      "mediaInfo": {
+        "audioBitrate": 127999,
+        "audioChannels": 2,
+        "audioCodec": "AAC",
+        "audioLanguages": "eng",
+        "audioStreamCount": 1,
+        "videoBitDepth": 8,
+        "videoBitrate": 1084657,
+        "videoCodec": "x264",
+        "videoFps": 23.976,
+        "videoDynamicRange": "",
+        "videoDynamicRangeType": "",
+        "resolution": "720x304",
+        "runTime": "2:24:49",
+        "scanType": "Progressive",
+        "subtitles": ""
+      },
+      "qualityCutoffNotMet": true,
+      "id": 2
+    },
+    "popularity": 14.3862,
+    "statistics": {
+      "movieFileCount": 1,
+      "sizeOnDisk": 1322780932,
+      "releaseGroups": []
+    },
+    "id": 2
+  },
+  {
+    "title": "Example Movie 3",
+    "originalTitle": "Example Movie 3",
+    "originalLanguage": {
+      "id": 1,
+      "name": "English"
+    },
+    "alternateTitles": [],
+    "secondaryYearSourceId": 0,
+    "sortTitle": "example movie 3",
+    "sizeOnDisk": 8372216235,
+    "status": "released",
+    "overview": "Placeholder overview for Example Movie 3.",
+    "inCinemas": "2007-10-10T00:00:00Z",
+    "physicalRelease": "2009-03-05T00:00:00Z",
+    "digitalRelease": "2010-12-25T00:00:00Z",
+    "releaseDate": "2009-03-05T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/movie3/poster.jpg",
+        "remoteUrl": "https://example.com/images/movie3/poster.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/movie3/fanart.jpg",
+        "remoteUrl": "https://example.com/images/movie3/fanart.jpg"
+      }
+    ],
+    "website": "",
+    "year": 2007,
+    "youTubeTrailerId": "",
+    "studio": "Example Studio",
+    "path": "/movies/Example Movie 3 (2007)",
+    "qualityProfileId": 6,
+    "hasFile": true,
+    "movieFileId": 3,
+    "monitored": true,
+    "minimumAvailability": "released",
+    "isAvailable": true,
+    "folderName": "/movies/Example Movie 3 (2007)",
+    "runtime": 90,
+    "cleanTitle": "examplemovie3",
+    "imdbId": "tt0000003",
+    "tmdbId": 900003,
+    "titleSlug": "900003",
+    "rootFolderPath": "/movies",
+    "certification": "G",
+    "genres": ["Documentary"],
+    "keywords": [],
+    "tags": [],
+    "added": "2025-07-30T07:32:54Z",
+    "ratings": {
+      "imdb": {
+        "votes": 14997,
+        "value": 7.9,
+        "type": "user"
+      },
+      "tmdb": {
+        "votes": 383,
+        "value": 7.655,
+        "type": "user"
+      },
+      "metacritic": {
+        "votes": 0,
+        "value": 72,
+        "type": "user"
+      },
+      "rottenTomatoes": {
+        "votes": 0,
+        "value": 87,
+        "type": "user"
+      },
+      "trakt": {
+        "votes": 597,
+        "value": 7.86767,
+        "type": "user"
+      }
+    },
+    "movieFile": {
+      "movieId": 3,
+      "relativePath": "Example Movie 3 (2007).mkv",
+      "path": "/movies/Example Movie 3 (2007)/Example Movie 3 (2007).mkv",
+      "size": 8372216235,
+      "dateAdded": "2025-07-30T07:34:23Z",
+      "releaseGroup": "GROUP",
+      "edition": "",
+      "languages": [
+        {
+          "id": 1,
+          "name": "English"
+        }
+      ],
+      "quality": {
+        "quality": {
+          "id": 7,
+          "name": "Bluray-1080p",
+          "source": "bluray",
+          "resolution": 1080,
+          "modifier": "none"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0,
+          "isRepack": false
+        }
+      },
+      "indexerFlags": 0,
+      "mediaInfo": {
+        "audioBitrate": 768000,
+        "audioChannels": 5.1,
+        "audioCodec": "WMA",
+        "audioLanguages": "eng",
+        "audioStreamCount": 1,
+        "videoBitDepth": 8,
+        "videoBitrate": 10365754,
+        "videoCodec": "VC1",
+        "videoFps": 23.976,
+        "videoDynamicRange": "",
+        "videoDynamicRangeType": "",
+        "resolution": "1920x1080",
+        "runTime": "1:39:43",
+        "scanType": "Progressive",
+        "subtitles": ""
+      },
+      "qualityCutoffNotMet": false,
+      "id": 3
+    },
+    "popularity": 3.0487,
+    "statistics": {
+      "movieFileCount": 1,
+      "sizeOnDisk": 8372216235,
+      "releaseGroups": ["NOVO"]
+    },
+    "id": 3
+  },
+  {
+    "title": "Example Movie 4",
+    "originalTitle": "Example Movie 4",
+    "originalLanguage": {
+      "id": 1,
+      "name": "English"
+    },
+    "alternateTitles": [],
+    "secondaryYearSourceId": 0,
+    "sortTitle": "example movie 4",
+    "sizeOnDisk": 0,
+    "status": "announced",
+    "overview": "Placeholder overview for Example Movie 4.",
+    "inCinemas": "2027-01-13T00:00:00Z",
+    "releaseDate": "2027-04-13T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/movie4/poster.jpg",
+        "remoteUrl": "https://example.com/images/movie4/poster.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/movie4/fanart.jpg",
+        "remoteUrl": "https://example.com/images/movie4/fanart.jpg"
+      }
+    ],
+    "website": "",
+    "year": 2027,
+    "youTubeTrailerId": "",
+    "studio": "Example Studio",
+    "path": "/movies/Example Movie 4 (2027)",
+    "qualityProfileId": 6,
+    "hasFile": false,
+    "movieFileId": 0,
+    "monitored": false,
+    "minimumAvailability": "released",
+    "isAvailable": false,
+    "folderName": "/movies/Example Movie 4 (2027)",
+    "runtime": 0,
+    "cleanTitle": "examplemovie4",
+    "imdbId": "tt0000004",
+    "tmdbId": 900004,
+    "titleSlug": "900004",
+    "rootFolderPath": "/movies",
+    "certification": "R",
+    "genres": ["Action", "Crime", "Thriller"],
+    "keywords": [],
+    "tags": [],
+    "added": "2025-07-31T04:28:17Z",
+    "ratings": {
+      "tmdb": {
+        "votes": 0,
+        "value": 0,
+        "type": "user"
+      }
+    },
+    "collection": {
+      "title": "Example Collection 4",
+      "tmdbId": 900005
+    },
+    "popularity": 12.8552,
+    "statistics": {
+      "movieFileCount": 0,
+      "sizeOnDisk": 0,
+      "releaseGroups": []
+    },
+    "id": 4
+  },
+  {
+    "title": "Example Movie 5",
+    "originalTitle": "Example Movie 5",
+    "originalLanguage": {
+      "id": 1,
+      "name": "English"
+    },
+    "alternateTitles": [],
+    "secondaryYearSourceId": 0,
+    "sortTitle": "example movie 5",
+    "sizeOnDisk": 1523129937,
+    "status": "released",
+    "overview": "Placeholder overview for Example Movie 5.",
+    "inCinemas": "2025-05-08T00:00:00Z",
+    "physicalRelease": "2025-08-26T00:00:00Z",
+    "digitalRelease": "2025-07-07T00:00:00Z",
+    "releaseDate": "2025-07-07T00:00:00Z",
+    "images": [
+      {
+        "coverType": "poster",
+        "url": "/MediaCover/movie5/poster.jpg",
+        "remoteUrl": "https://example.com/images/movie5/poster.jpg"
+      },
+      {
+        "coverType": "fanart",
+        "url": "/MediaCover/movie5/fanart.jpg",
+        "remoteUrl": "https://example.com/images/movie5/fanart.jpg"
+      }
+    ],
+    "website": "",
+    "year": 2025,
+    "youTubeTrailerId": "",
+    "studio": "Example Studio",
+    "path": "/movies/Example Movie 5 (2025)",
+    "qualityProfileId": 6,
+    "hasFile": true,
+    "movieFileId": 5,
+    "monitored": true,
+    "minimumAvailability": "released",
+    "isAvailable": true,
+    "folderName": "/movies/Example Movie 5 (2025)",
+    "runtime": 94,
+    "cleanTitle": "examplemovie5",
+    "imdbId": "tt0000005",
+    "tmdbId": 900006,
+    "titleSlug": "900006",
+    "rootFolderPath": "/movies",
+    "certification": "PG-13",
+    "genres": ["Action", "Adventure", "Drama"],
+    "keywords": [],
+    "tags": [],
+    "added": "2025-08-01T05:56:59Z",
+    "ratings": {
+      "imdb": {
+        "votes": 50892,
+        "value": 6.3,
+        "type": "user"
+      },
+      "tmdb": {
+        "votes": 1324,
+        "value": 7,
+        "type": "user"
+      },
+      "metacritic": {
+        "votes": 0,
+        "value": 51,
+        "type": "user"
+      },
+      "trakt": {
+        "votes": 6228,
+        "value": 6.92791,
+        "type": "user"
+      }
+    },
+    "movieFile": {
+      "movieId": 5,
+      "relativePath": "Example Movie 5 (2025).mkv",
+      "path": "/movies/Example Movie 5 (2025)/Example Movie 5 (2025).mkv",
+      "size": 1523129937,
+      "dateAdded": "2026-09-04T01:37:15Z",
+      "sceneName": "Example.Movie.5.(2025).1080p.WEB-DL.x264-GROUP",
+      "releaseGroup": "GROUP",
+      "edition": "",
+      "languages": [
+        {
+          "id": 1,
+          "name": "English"
+        },
+        {
+          "id": 26,
+          "name": "Hindi"
+        },
+        {
+          "id": 43,
+          "name": "Tamil"
+        },
+        {
+          "id": 45,
+          "name": "Telugu"
+        }
+      ],
+      "quality": {
+        "quality": {
+          "id": 18,
+          "name": "WEBDL-2160p",
+          "source": "webdl",
+          "resolution": 2160,
+          "modifier": "none"
+        },
+        "revision": {
+          "version": 1,
+          "real": 0,
+          "isRepack": false
+        }
+      },
+      "indexerFlags": 0,
+      "mediaInfo": {
+        "audioBitrate": 110687,
+        "audioChannels": 2,
+        "audioCodec": "AAC",
+        "audioLanguages": "eng/hin/tam/tel",
+        "audioStreamCount": 4,
+        "videoBitDepth": 8,
+        "videoBitrate": 1710413,
+        "videoCodec": "h265",
+        "videoFps": 23.976,
+        "videoDynamicRange": "",
+        "videoDynamicRangeType": "",
+        "resolution": "3836x2074",
+        "runTime": "1:34:04",
+        "scanType": "Progressive",
+        "subtitles": "eng/eng/eng/eng/cze/ger/gre/spa/est/ind/ita/kor/dut/por/tha/vie/chi/chi/chi"
+      },
+      "originalFilePath": "Example.Movie.5.(2025).1080p.WEB-DL.x264-GROUP/Example.Movie.5.(2025).1080p.WEB-DL.x264-GROUP.mkv",
+      "qualityCutoffNotMet": false,
+      "id": 5
+    },
+    "collection": {
+      "title": "Example Collection 5",
+      "tmdbId": 900007
+    },
+    "popularity": 21.4477,
+    "lastSearchTime": "2025-08-01T05:57:00Z",
+    "statistics": {
+      "movieFileCount": 1,
+      "sizeOnDisk": 1523129937,
+      "releaseGroups": ["TBMovies"]
+    },
+    "id": 5
+  }
+]

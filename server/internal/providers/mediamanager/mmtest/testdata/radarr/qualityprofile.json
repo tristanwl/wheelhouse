@@ -1,0 +1,100 @@
+[
+  {
+    "name": "Example Profile 1",
+    "upgradeAllowed": false,
+    "cutoff": 25,
+    "items": [
+      {
+        "quality": {
+          "id": 0,
+          "name": "Unknown",
+          "source": "unknown",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": false
+      },
+      {
+        "quality": {
+          "id": 24,
+          "name": "WORKPRINT",
+          "source": "workprint",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": true
+      },
+      {
+        "quality": {
+          "id": 25,
+          "name": "CAM",
+          "source": "cam",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": true
+      }
+    ],
+    "minFormatScore": 0,
+    "cutoffFormatScore": 0,
+    "minUpgradeFormatScore": 1,
+    "formatItems": [],
+    "language": {
+      "id": 1,
+      "name": "English"
+    },
+    "id": 1
+  },
+  {
+    "name": "Example Profile 2",
+    "upgradeAllowed": false,
+    "cutoff": 25,
+    "items": [
+      {
+        "quality": {
+          "id": 0,
+          "name": "Unknown",
+          "source": "unknown",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": false
+      },
+      {
+        "quality": {
+          "id": 24,
+          "name": "WORKPRINT",
+          "source": "workprint",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": true
+      },
+      {
+        "quality": {
+          "id": 25,
+          "name": "CAM",
+          "source": "cam",
+          "resolution": 0,
+          "modifier": "none"
+        },
+        "items": [],
+        "allowed": true
+      }
+    ],
+    "minFormatScore": 0,
+    "cutoffFormatScore": 0,
+    "minUpgradeFormatScore": 1,
+    "formatItems": [],
+    "language": {
+      "id": 1,
+      "name": "English"
+    },
+    "id": 2
+  }
+]

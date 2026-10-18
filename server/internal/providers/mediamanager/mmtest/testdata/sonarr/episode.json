@@ -1,0 +1,34 @@
+[
+  {
+    "seriesId": 1,
+    "tvdbId": 601001,
+    "episodeFileId": 101,
+    "seasonNumber": 1,
+    "episodeNumber": 4,
+    "title": "Example Episode 1",
+    "airDate": "2013-06-09",
+    "airDateUtc": "2013-06-10T00:00:00Z",
+    "runtime": 60,
+    "overview": "Placeholder overview.",
+    "hasFile": true,
+    "monitored": false,
+    "unverifiedSceneNumbering": false,
+    "id": 1001
+  },
+  {
+    "seriesId": 2,
+    "tvdbId": 602001,
+    "episodeFileId": 201,
+    "seasonNumber": 3,
+    "episodeNumber": 9,
+    "title": "Example Episode 1",
+    "airDate": "2025-08-18",
+    "airDateUtc": "2025-08-19T01:00:00Z",
+    "runtime": 45,
+    "overview": "Placeholder overview.",
+    "hasFile": true,
+    "monitored": true,
+    "unverifiedSceneNumbering": false,
+    "id": 2001
+  }
+]
