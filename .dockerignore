@@ -8,3 +8,5 @@ node_modules
 *.log
 *.tsbuildinfo
 docs
+# The Go server is built separately until the Dockerfile switches to it
+server

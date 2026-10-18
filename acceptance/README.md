@@ -37,6 +37,20 @@ WHEELHOUSE_CMD="go run ./server/cmd/wheelhouse" WHEELHOUSE_CWD=. npm run test:ac
   `LANG`, `LC_ALL`, `TMPDIR` and `TZ` from the test process and nothing else.
 - `WHEELHOUSE_CWD`: the working directory (default: the repository root).
 
+Against the Go server's skeleton (`docs/wheelhouse-spec-phase2.md`, step 2):
+
+```sh
+make -C server build
+WHEELHOUSE_CMD=./server/wheelhouse npx vitest run --config acceptance/vitest.config.mts boot \
+  -t "page |reports only the Dashboard|unknown routes"
+```
+
+The skeleton has no providers, so most scenarios fail until the later steps
+port them; the command above runs the ones that already apply (readiness on
+`/api/features`, every page answers HTML, only the Dashboard is available,
+unknown routes are 404). Any file name or `-t` pattern narrows a run the same
+way; there is no other scope switch.
+
 The suite kills only the process it spawned, on success, failure and exit.
 Each test file starts its own servers, so files run in parallel; the whole run
 takes about 15 seconds (one test waits out the real 8 s upstream timeout).

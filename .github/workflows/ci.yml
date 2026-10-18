@@ -38,3 +38,34 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run test:acceptance
+
+  # The Go server in server/ (docs/wheelhouse-spec-phase2.md, migration step 2).
+  # Actions here are pinned by commit SHA; the older jobs still use tags.
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache: true
+          cache-dependency-path: |
+            server/go.sum
+            server/go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          working-directory: server
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      - name: build
+        run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
