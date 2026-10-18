@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWRInfinite from "swr/infinite";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { fetcher } from "@/lib/fetcher";
 import type { AddMeta } from "@/app/api/add-meta/route";
 import type { ExploreHit } from "@/app/api/explore/route";
@@ -27,8 +28,8 @@ const LIMIT = 40;
 
 type ExplorePage = { results?: ExploreHit[]; hasMore?: boolean; error?: string };
 
-export default function ExploreCategoryPage({ params }: { params: { category: string } }) {
-  const { category } = params;
+export default function ExploreCategoryPage() {
+  const { category } = useParams<{ category: string }>();
   const label = CATEGORY_LABELS[category];
 
   const { data, error, size, setSize, isValidating } = useSWRInfinite<ExplorePage>(

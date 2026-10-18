@@ -56,7 +56,7 @@ cp .env.example .env.local   # point at your services
 npm run dev
 ```
 
-Requires Node 20+. `npm test` runs the tests; see
+Requires Node 22.12+ (24 recommended). `npm test` runs the tests; see
 [CONTRIBUTING.md](CONTRIBUTING.md) for the full pre-PR checklist.
 
 ## Credits

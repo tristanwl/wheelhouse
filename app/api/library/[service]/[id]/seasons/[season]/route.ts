@@ -3,13 +3,14 @@ import { deleteEpisodeFile, getEpisodeFiles, getSeriesById, updateSeries } from 
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { service: string; id: string; season: string } }
+  { params }: { params: Promise<{ service: string; id: string; season: string }> }
 ) {
-  if (params.service !== "sonarr") {
+  const { service, id: idParam, season } = await params;
+  if (service !== "sonarr") {
     return NextResponse.json({ error: "seasons are only available for sonarr" }, { status: 400 });
   }
-  const id = Number(params.id);
-  const seasonNumber = Number(params.season);
+  const id = Number(idParam);
+  const seasonNumber = Number(season);
   if (!Number.isInteger(id) || !Number.isInteger(seasonNumber)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
