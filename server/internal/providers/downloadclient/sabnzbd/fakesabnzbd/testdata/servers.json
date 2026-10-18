@@ -1,0 +1,36 @@
+{
+  "config": {
+    "servers": [
+      {
+        "connections": 20,
+        "enable": 1,
+        "port": 563,
+        "ssl": 1,
+        "ssl_verify": 2,
+        "priority": 0,
+        "retention": 0,
+        "timeout": 60,
+        "optional": 0,
+        "required": 0,
+        "name": "news.example.com",
+        "displayname": "news.example.com",
+        "host": "news.example.com"
+      },
+      {
+        "connections": 8,
+        "enable": 0,
+        "port": 563,
+        "ssl": 0,
+        "ssl_verify": 2,
+        "priority": 0,
+        "retention": 0,
+        "timeout": 60,
+        "optional": 0,
+        "required": 0,
+        "name": "backup.example.net",
+        "displayname": "backup.example.net",
+        "host": "backup.example.net"
+      }
+    ]
+  }
+}
