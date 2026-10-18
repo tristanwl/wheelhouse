@@ -38,6 +38,12 @@ export const ENV_MAPPINGS: readonly EnvMapping[] = [
     vars: { url: "PLEX_URL", token: "PLEX_TOKEN" },
   },
   {
+    providerId: "jellyfin",
+    instanceId: "jellyfin",
+    name: "Jellyfin",
+    vars: { url: "JELLYFIN_URL", apiKey: "JELLYFIN_API_KEY" },
+  },
+  {
     providerId: "tmdb",
     instanceId: "tmdb",
     name: "TMDB",

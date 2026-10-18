@@ -16,10 +16,19 @@ describe("EnvConfigSource", () => {
       SABNZBD_API_KEY: "ak",
       PLEX_URL: "http://plex:32400",
       PLEX_TOKEN: "pt",
+      JELLYFIN_URL: "http://jellyfin:8096",
+      JELLYFIN_API_KEY: "jk",
       TMDB_API_KEY: "tk",
     }).getInstances();
 
-    expect(instances.map((i) => i.id)).toEqual(["sonarr", "radarr", "sabnzbd", "plex", "tmdb"]);
+    expect(instances.map((i) => i.id)).toEqual([
+      "sonarr",
+      "radarr",
+      "sabnzbd",
+      "plex",
+      "jellyfin",
+      "tmdb",
+    ]);
     expect(instances[0]).toEqual({
       id: "sonarr",
       providerId: "sonarr",
@@ -28,6 +37,13 @@ describe("EnvConfigSource", () => {
       config: { url: "http://sonarr:8989", apiKey: "sk" },
     });
     expect(instances[3].config).toEqual({ url: "http://plex:32400", token: "pt" });
+    expect(instances[4]).toEqual({
+      id: "jellyfin",
+      providerId: "jellyfin",
+      name: "Jellyfin",
+      enabled: true,
+      config: { url: "http://jellyfin:8096", apiKey: "jk" },
+    });
   });
 
   it("keeps a half-configured provider so it can be reported as invalid", async () => {

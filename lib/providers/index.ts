@@ -6,6 +6,7 @@ import { listManagers } from "./media-manager/instances";
 import type { ManagerKind } from "./media-manager/types";
 import { radarrProvider } from "./media-manager/radarr";
 import { sonarrProvider } from "./media-manager/sonarr";
+import { jellyfinProvider } from "./media-server/jellyfin";
 import { plexProvider } from "./media-server/plex";
 
 export * from "./core/types";
@@ -34,6 +35,7 @@ export const registry = createRegistry([
   radarrProvider,
   sabnzbdProvider,
   plexProvider,
+  jellyfinProvider,
 ]);
 
 // One runtime per server process; globalThis keeps it across Next.js dev reloads.

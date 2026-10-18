@@ -11,7 +11,7 @@ export interface MediaServerStatus {
   notice?: string;
   name?: string;
   version?: string;
-  /** undefined when the server can't say (no credentials, or they were rejected). */
+  /** Sessions actually playing something (not merely connected clients). undefined when the server can't say (no credentials, or they were rejected). */
   activeSessions?: number;
   /** Whether Wheelhouse is authenticated to the server (so session data is available). */
   authenticated: boolean;

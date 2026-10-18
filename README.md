@@ -8,7 +8,7 @@
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
 
 A self-hosted dashboard and companion for your *arr media stack: live status
-for Sonarr, Radarr, SABnzbd and Plex; storage usage per volume; library
+for Sonarr, Radarr, SABnzbd, Plex and Jellyfin; storage usage per volume; library
 browsing and deletion (including per-season TV deletes); movie discovery via
 TMDB; and a codec analysis view that finds files worth converting to your
 preferred codec per resolution tier and can run the conversion with ffmpeg,
@@ -60,7 +60,8 @@ Set via environment variables (see [.env.example](.env.example)):
 | `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; same |
 | `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | no | Extra instance, e.g. `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*`. See below |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
-| `PLEX_URL`, `PLEX_TOKEN` | no | Status card only |
+| `PLEX_URL`, `PLEX_TOKEN` | no | Media server status card only |
+| `JELLYFIN_URL`, `JELLYFIN_API_KEY` | no | Media server status card only; key from Dashboard → API Keys in Jellyfin. Can run alongside Plex |
 | `TMDB_API_KEY` | no | Enables Explore; free key from themoviedb.org |
 
 ### More than one Sonarr or Radarr
