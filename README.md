@@ -1,5 +1,12 @@
 # Wheelhouse
 
+[![CI](https://github.com/tristanwl/wheelhouse/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tristanwl/wheelhouse/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/tristanwl/wheelhouse?include_prereleases&sort=semver)](https://github.com/tristanwl/wheelhouse/releases)
+[![Docker Hub](https://img.shields.io/docker/v/tristanwl/wheelhouse?sort=semver&logo=docker&label=docker)](https://hub.docker.com/r/tristanwl/wheelhouse)
+[![License: GPL-3.0](https://img.shields.io/github/license/tristanwl/wheelhouse)](LICENSE)
+[![Node.js 22.12+](https://img.shields.io/badge/node-%E2%89%A522.12-339933?logo=node.js&logoColor=white)](.nvmrc)
+![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
+
 A self-hosted dashboard and companion for your *arr media stack: live status
 for Sonarr, Radarr, SABnzbd and Plex; storage usage per volume; library
 browsing and deletion (including per-season TV deletes); movie discovery via
@@ -22,12 +29,18 @@ or TMDB.
 ```sh
 git clone https://github.com/tristanwl/wheelhouse.git
 cd wheelhouse
-cp .env.example .env                           # fill in URLs and API keys
+cp .env.example .env                               # fill in URLs and API keys
 cp docker-compose.example.yml docker-compose.yml   # adjust media paths
-docker compose up -d --build
+docker compose up -d
 ```
 
 Then open http://localhost:3050.
+
+This pulls the published image, [`tristanwl/wheelhouse`](https://hub.docker.com/r/tristanwl/wheelhouse)
+on Docker Hub (linux/amd64). There is no `latest` tag while Wheelhouse is
+alpha; pin a version, for example `tristanwl/wheelhouse:0.0.1`. To build from
+source instead, uncomment `build: .` in the compose file and run
+`docker compose up -d --build`.
 
 Podman/systemd users: see [deploy/wheelhouse.service.example](deploy/wheelhouse.service.example).
 
