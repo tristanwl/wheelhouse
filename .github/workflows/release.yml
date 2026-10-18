@@ -34,7 +34,7 @@ jobs:
           [ -n "$USERNAME" ] || { echo "::error::Set the DOCKERHUB_USERNAME repository variable"; exit 1; }
           [ -n "$PAT" ] || { echo "::error::Set the DOCKERHUB_PAT repository secret"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
