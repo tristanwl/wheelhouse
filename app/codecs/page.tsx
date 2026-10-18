@@ -10,7 +10,7 @@ import type { ConversionJob } from "@/lib/convert-queue";
 import type { CodecPreferences, PreferableFamily } from "@/lib/settings";
 import { ConvertModal } from "@/components/ConvertModal";
 
-type Service = "radarr" | "sonarr";
+type Kind = "movies" | "series";
 
 const BUCKET_LABELS: Record<CodecFamily, string> = {
   h264: "H.264",
@@ -31,14 +31,14 @@ function reasonLabel(c: ConversionCandidate): string {
 }
 
 export default function CodecsPage() {
-  const [service, setService] = useState<Service>("radarr");
+  const [kind, setKind] = useState<Kind>("movies");
   const [copied, setCopied] = useState(false);
   const [converting, setConverting] = useState<{
     candidate: ConversionCandidate;
     jobId?: string;
   } | null>(null);
   const { data, error, mutate } = useSWR<CodecAnalysisResponse & { error?: string }>(
-    `/api/codec-analysis?service=${service}`,
+    `/api/codec-analysis?kind=${kind}`,
     fetcher
   );
 
@@ -111,9 +111,9 @@ export default function CodecsPage() {
         </div>
         <div className="flex rounded-md border border-slate-700 text-sm">
           <button
-            onClick={() => setService("radarr")}
+            onClick={() => setKind("movies")}
             className={`rounded-l-md px-3 py-1.5 ${
-              service === "radarr"
+              kind === "movies"
                 ? "bg-violet-900 text-violet-200"
                 : "text-slate-400 hover:bg-slate-800"
             }`}
@@ -121,9 +121,9 @@ export default function CodecsPage() {
             Movies
           </button>
           <button
-            onClick={() => setService("sonarr")}
+            onClick={() => setKind("series")}
             className={`rounded-r-md px-3 py-1.5 ${
-              service === "sonarr" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
+              kind === "series" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
             }`}
           >
             TV
@@ -154,8 +154,15 @@ export default function CodecsPage() {
       </div>
 
       {(error || data?.error) && (
-        <p className="text-sm text-red-400">Failed to load: {data?.error ?? "request failed"}</p>
+        <p className="text-sm text-red-400">
+          Failed to load: {data?.error ?? error?.message ?? "request failed"}
+        </p>
       )}
+      {data?.problems?.map((p) => (
+        <p key={p.instanceId} className="text-sm text-red-400">
+          {p.name}: {p.error}
+        </p>
+      ))}
       {!data && !error && <p className="text-sm text-slate-500">Analyzing…</p>}
 
       {data && (
@@ -306,7 +313,7 @@ export default function CodecsPage() {
 
       {converting && (
         <ConvertModal
-          service={converting.candidate.service}
+          instanceId={converting.candidate.instanceId}
           itemId={converting.candidate.itemId}
           filePath={converting.candidate.filePath}
           title={converting.candidate.title}

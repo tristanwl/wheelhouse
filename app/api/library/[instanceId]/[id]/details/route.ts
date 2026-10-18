@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMovieDetail, getSeriesDetail } from "@/lib/arr-client";
+import { resolveManager } from "@/lib/manager-route";
 
 export interface ItemRating {
   source: string;
@@ -28,17 +28,20 @@ function pickImage(images: { coverType: string; remoteUrl?: string }[] | undefin
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ service: string; id: string }> }
+  { params }: { params: Promise<{ instanceId: string; id: string }> }
 ) {
-  const { service, id: idParam } = await params;
+  const { instanceId, id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
+  const resolved = await resolveManager(instanceId);
+  if ("response" in resolved) return resolved.response;
+  const { client } = resolved;
 
   try {
-    if (service === "sonarr") {
-      const s = await getSeriesDetail(id);
+    if (client.kind === "series") {
+      const s = await client.getSeriesDetail(id);
       const details: ItemDetails = {
         title: s.title,
         overview: s.overview ?? null,
@@ -58,29 +61,25 @@ export async function GET(
       return NextResponse.json(details);
     }
 
-    if (service === "radarr") {
-      const m = await getMovieDetail(id);
-      const ratings: ItemRating[] = Object.entries(m.ratings ?? {})
-        .filter(([, r]) => r && typeof r.value === "number")
-        .map(([source, r]) => ({ source, value: r.value, votes: r.votes }));
-      const details: ItemDetails = {
-        title: m.title,
-        overview: m.overview ?? null,
-        year: m.year ?? null,
-        genres: m.genres ?? [],
-        runtime: m.runtime ?? null,
-        certification: m.certification ?? null,
-        status: m.status ?? null,
-        network: null,
-        studio: m.studio ?? null,
-        posterUrl: pickImage(m.images, "poster"),
-        fanartUrl: pickImage(m.images, "fanart"),
-        ratings,
-      };
-      return NextResponse.json(details);
-    }
-
-    return NextResponse.json({ error: "unknown service" }, { status: 400 });
+    const m = await client.getMovieDetail(id);
+    const ratings: ItemRating[] = Object.entries(m.ratings ?? {})
+      .filter(([, r]) => r && typeof r.value === "number")
+      .map(([source, r]) => ({ source, value: r.value, votes: r.votes }));
+    const details: ItemDetails = {
+      title: m.title,
+      overview: m.overview ?? null,
+      year: m.year ?? null,
+      genres: m.genres ?? [],
+      runtime: m.runtime ?? null,
+      certification: m.certification ?? null,
+      status: m.status ?? null,
+      network: null,
+      studio: m.studio ?? null,
+      posterUrl: pickImage(m.images, "poster"),
+      fanartUrl: pickImage(m.images, "fanart"),
+      ratings,
+    };
+    return NextResponse.json(details);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "failed to load details" },

@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const validFamily = body?.targetFamily === "h264" || body?.targetFamily === "hevc";
   if (
     !body ||
-    (body.service !== "radarr" && body.service !== "sonarr") ||
+    typeof body.instanceId !== "string" ||
     typeof body.itemId !== "number" ||
     typeof body.filePath !== "string" ||
     typeof body.title !== "string" ||
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   const job = enqueueConversion({
-    service: body.service,
+    instanceId: body.instanceId,
     itemId: body.itemId,
     filePath: body.filePath,
     title: body.title,

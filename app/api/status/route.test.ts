@@ -4,6 +4,7 @@ import {
   startFakePlex,
   type PlexScenario,
 } from "@/lib/providers/media-server/__fixtures__/plex/server";
+import { createArrStack } from "@/lib/providers/media-manager/__fixtures__/env";
 import { GET } from "./route";
 
 // Calls the real route handler through the real env config and provider
@@ -92,5 +93,85 @@ describe("/api/status: Plex card", () => {
     const body = (await (await GET()).json()) as { plex: Record<string, unknown> };
     expect(body.plex).toMatchObject({ up: false, configured: true });
     expect(String(body.plex.error)).toContain("url");
+  });
+});
+
+describe("/api/status: Sonarr and Radarr cards", () => {
+  let stack: ReturnType<typeof createArrStack>;
+
+  beforeEach(() => {
+    for (const name of ["PLEX_URL", "PLEX_TOKEN", "SABNZBD_URL", "SABNZBD_API_KEY"]) {
+      vi.stubEnv(name, "");
+    }
+    stack = createArrStack();
+  });
+
+  afterEach(() => stack.stop());
+
+  async function status() {
+    return (await (await GET()).json()) as {
+      sonarr: Record<string, unknown>;
+      radarr: Record<string, unknown>;
+    };
+  }
+
+  it("keeps the response shape for the default instances", async () => {
+    await stack.sonarr();
+    await stack.radarr();
+    const body = await status();
+
+    expect(body.sonarr).toEqual({
+      up: true,
+      configured: true,
+      version: "4.0.15.2941",
+      health: expect.any(Array),
+      queueCount: 2,
+      indexers: { total: 2, enabled: 2, issues: expect.any(Array) },
+    });
+    expect(body.radarr).toMatchObject({
+      up: true,
+      configured: true,
+      version: "5.26.2.10099",
+      queueCount: 0,
+    });
+    expect(body.radarr.health).toEqual([
+      expect.objectContaining({ source: "IndexerLongTermStatusCheck", type: "warning" }),
+      expect.objectContaining({ source: "UpdateCheck" }),
+      expect.objectContaining({ source: "DownloadClientRootFolderCheck" }),
+    ]);
+  });
+
+  it("reports not configured, without failing, when nothing is set", async () => {
+    const body = await status();
+    expect(body.sonarr).toEqual({ up: false, configured: false, health: [], queueCount: 0 });
+    expect(body.radarr).toEqual({ up: false, configured: false, health: [], queueCount: 0 });
+  });
+
+  it("explains a wrong API key, and never echoes it", async () => {
+    await stack.radarr({}, "wrong-key-value-123");
+    const body = await status();
+    expect(body.radarr).toMatchObject({
+      up: false,
+      configured: true,
+      error: "radarr: API key incorrect",
+    });
+    expect(JSON.stringify(body)).not.toContain("wrong-key-value-123");
+  });
+
+  it("reports a half-configured service as a configuration error", async () => {
+    vi.stubEnv("SONARR_URL", "http://sonarr.example.com:8989");
+    const body = await status();
+    expect(body.sonarr).toMatchObject({ up: false, configured: true });
+    expect(String(body.sonarr.error)).toContain("apiKey");
+  });
+
+  it("reports down, with a reason, when the service is unreachable", async () => {
+    const radarr = await stack.radarr();
+    await radarr.close();
+    expect((await status()).radarr).toMatchObject({
+      up: false,
+      configured: true,
+      error: "radarr: connection refused",
+    });
   });
 });

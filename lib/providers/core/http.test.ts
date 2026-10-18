@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHttpClient, joinUrl, ProviderError, redact } from "./http";
 
 describe("redact", () => {
@@ -117,5 +117,144 @@ describe("createHttpClient", () => {
   it("reports invalid JSON as a ProviderError", async () => {
     const client = createHttpClient({ baseUrl: base, label: "bad" });
     await expect(client.json("/notjson")).rejects.toThrow("bad /notjson returned invalid JSON");
+  });
+});
+
+describe("createHttpClient response cache", () => {
+  let server: http.Server;
+  let base: string;
+  let hits: Record<string, number>;
+  let delayMs = 0;
+
+  beforeAll(async () => {
+    server = http.createServer((req, res) => {
+      const path = new URL(req.url ?? "/", "http://x").pathname;
+      hits[path] = (hits[path] ?? 0) + 1;
+      setTimeout(() => {
+        if (path === "/flaky" && hits[path] === 1) {
+          res.statusCode = 500;
+          res.statusMessage = "Server Error";
+          return res.end();
+        }
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify({ path, n: hits[path] }));
+      }, delayMs);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  beforeEach(() => {
+    hits = {};
+    delayMs = 0;
+  });
+
+  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+
+  const client = () => createHttpClient({ baseUrl: base, label: "cached" });
+
+  it("does not cache unless the call asks for it", async () => {
+    const c = client();
+    await c.json("/list");
+    await c.json("/list");
+    expect(hits["/list"]).toBe(2);
+  });
+
+  it("answers a second call inside the TTL without going upstream", async () => {
+    const c = client();
+    const first = await c.json("/list", { cacheTtlMs: 5000 });
+    const second = await c.json("/list", { cacheTtlMs: 5000 });
+    expect(second).toEqual(first);
+    expect(hits["/list"]).toBe(1);
+  });
+
+  it("goes upstream again once the TTL has passed", async () => {
+    const c = client();
+    await c.json("/list", { cacheTtlMs: 40 });
+    await new Promise((r) => setTimeout(r, 80));
+    await c.json("/list", { cacheTtlMs: 40 });
+    expect(hits["/list"]).toBe(2);
+  });
+
+  it("keys on path and query", async () => {
+    const c = client();
+    await c.json("/list", { cacheTtlMs: 5000, query: { page: 1 } });
+    await c.json("/list", { cacheTtlMs: 5000, query: { page: 2 } });
+    await c.json("/other", { cacheTtlMs: 5000 });
+    await c.json("/list", { cacheTtlMs: 5000, query: { page: 1 } });
+    expect(hits).toEqual({ "/list": 2, "/other": 1 });
+  });
+
+  it("shares one upstream call between concurrent identical requests", async () => {
+    delayMs = 60;
+    const c = client();
+    const results = await Promise.all([
+      c.json("/list", { cacheTtlMs: 5000 }),
+      c.json("/list", { cacheTtlMs: 5000 }),
+      c.json("/list", { cacheTtlMs: 5000 }),
+    ]);
+    expect(hits["/list"]).toBe(1);
+    expect(results[1]).toEqual(results[0]);
+    expect(results[2]).toEqual(results[0]);
+  });
+
+  it("hands each caller its own copy", async () => {
+    const c = client();
+    const first = await c.json<{ n: number }>("/list", { cacheTtlMs: 5000 });
+    first.n = 999;
+    expect((await c.json<{ n: number }>("/list", { cacheTtlMs: 5000 })).n).toBe(1);
+  });
+
+  it("never caches errors, and a failed call doesn't poison the next", async () => {
+    const c = client();
+    await expect(c.json("/flaky", { cacheTtlMs: 5000 })).rejects.toThrow("failed: 500");
+    expect(await c.json("/flaky", { cacheTtlMs: 5000 })).toMatchObject({ n: 2 });
+    expect(await c.json("/flaky", { cacheTtlMs: 5000 })).toMatchObject({ n: 2 });
+    expect(hits["/flaky"]).toBe(2);
+  });
+
+  it("shares a failure between concurrent callers but retries afterwards", async () => {
+    delayMs = 40;
+    const c = client();
+    const settled = await Promise.allSettled([
+      c.json("/flaky", { cacheTtlMs: 5000 }),
+      c.json("/flaky", { cacheTtlMs: 5000 }),
+    ]);
+    expect(settled.map((s) => s.status)).toEqual(["rejected", "rejected"]);
+    expect(hits["/flaky"]).toBe(1);
+    await expect(c.json("/flaky", { cacheTtlMs: 5000 })).resolves.toMatchObject({ n: 2 });
+  });
+
+  it("invalidate() makes the next read go upstream", async () => {
+    const c = client();
+    await c.json("/list", { cacheTtlMs: 5000 });
+    c.invalidate();
+    await c.json("/list", { cacheTtlMs: 5000 });
+    expect(hits["/list"]).toBe(2);
+  });
+
+  it("does not let a read that was in flight during a write repopulate the cache", async () => {
+    delayMs = 60;
+    const c = client();
+    const inFlight = c.json("/list", { cacheTtlMs: 5000 });
+    await new Promise((r) => setTimeout(r, 10));
+    c.invalidate(); // a write completed while the read was still pending
+    await inFlight;
+    delayMs = 0;
+    await c.json("/list", { cacheTtlMs: 5000 });
+    expect(hits["/list"]).toBe(2);
+  });
+
+  it("only caches GET", async () => {
+    const c = client();
+    await c.fetch("/list", { method: "POST", cacheTtlMs: 5000 });
+    await c.fetch("/list", { method: "POST", cacheTtlMs: 5000 });
+    expect(hits["/list"]).toBe(2);
+  });
+
+  it("keeps caches of different clients (instances) apart", async () => {
+    await client().json("/list", { cacheTtlMs: 5000 });
+    await client().json("/list", { cacheTtlMs: 5000 });
+    expect(hits["/list"]).toBe(2);
   });
 });

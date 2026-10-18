@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMovies } from "@/lib/arr-client";
+import { collectFromManagers, getMediaManagers } from "@/lib/providers";
 import {
   getNowPlaying,
   getPopular,
@@ -55,11 +55,15 @@ export async function GET(req: Request) {
   const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
 
   try {
-    const [{ results: movies, hasMore }, libraryMovies] = await Promise.all([
+    // "In library" means in any movie instance. One that can't be reached just
+    // doesn't contribute, rather than taking the whole page down.
+    const [{ results: movies, hasMore }, library] = await Promise.all([
       CATEGORY_FETCHERS[category](limit, page),
-      getMovies(),
+      getMediaManagers("movies").then((entries) =>
+        collectFromManagers(entries, (client) => client.getMovies())
+      ),
     ]);
-    const addedIds = new Set(libraryMovies.map((m) => m.tmdbId));
+    const addedIds = new Set(library.results.flatMap((r) => r.value.map((m) => m.tmdbId)));
     return NextResponse.json({ results: movies.map((m) => toHit(m, addedIds)), hasMore });
   } catch (err) {
     return NextResponse.json(

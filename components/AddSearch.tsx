@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { mutate as globalMutate } from "swr";
 import { fetcher } from "@/lib/fetcher";
 import type { SearchHit } from "@/app/api/search/route";
 import type { AddMeta } from "@/app/api/add-meta/route";
 import { AddQualityModal } from "./AddQualityModal";
 
-type Service = "sonarr" | "radarr";
+type Kind = "series" | "movies";
 
 const MIN_AVAILABILITY_OPTIONS = [
   { value: "announced", label: "Announced" },
@@ -16,7 +16,7 @@ const MIN_AVAILABILITY_OPTIONS = [
 ];
 
 export function AddSearch() {
-  const [service, setService] = useState<Service>("sonarr");
+  const [kind, setKind] = useState<Kind>("series");
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -29,20 +29,31 @@ export function AddSearch() {
 
   const [pendingAdd, setPendingAdd] = useState<SearchHit | null>(null);
   const [adding, setAdding] = useState(false);
-  const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
+  const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
 
-  // Reload add options (quality profiles, root folder) whenever the target
-  // service changes, and reset any in-progress search from the old service.
-  useEffect(() => {
+  // Results are tagged with the instance they came from; each instance has its
+  // own quality profiles and root folders, so those load when you pick a hit.
+  function chooseKind(next: Kind) {
+    setKind(next);
     setResults(null);
     setSearchError(null);
     setAddError(null);
+    setPendingAdd(null);
     setMeta(null);
-    fetcher<AddMeta>(`/api/add-meta?service=${service}`)
+  }
+
+  function startAdd(hit: SearchHit) {
+    setPendingAdd(hit);
+    setAddError(null);
+    setMeta(null);
+    fetcher<AddMeta>(`/api/add-meta?instanceId=${encodeURIComponent(hit.instanceId)}`)
       .then(setMeta)
-      .catch(() => setSearchError("Failed to load quality profiles."));
-  }, [service]);
+      .catch((err) => {
+        setPendingAdd(null);
+        setSearchError(err instanceof Error ? err.message : "Failed to load quality profiles.");
+      });
+  }
 
   async function runSearch() {
     if (!term.trim()) {
@@ -53,7 +64,7 @@ export function AddSearch() {
     setSearchError(null);
     try {
       const data = await fetcher<{ results?: SearchHit[]; error?: string }>(
-        `/api/search?service=${service}&term=${encodeURIComponent(term)}`
+        `/api/search?kind=${kind}&term=${encodeURIComponent(term)}`
       );
       if (data.error) throw new Error(data.error);
       setResults(data.results ?? []);
@@ -73,18 +84,18 @@ export function AddSearch() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          service,
+          instanceId: pendingAdd.instanceId,
           id: pendingAdd.id,
           qualityProfileId,
           rootFolderPath: meta.rootFolderPath,
           monitored,
           searchNow,
-          ...(service === "radarr" ? { minimumAvailability } : {}),
+          ...(kind === "movies" ? { minimumAvailability } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? `add failed: ${res.status}`);
-      setAddedIds((prev) => new Set(prev).add(pendingAdd.id));
+      setAddedKeys((prev) => new Set(prev).add(`${pendingAdd.instanceId}:${pendingAdd.id}`));
       globalMutate("/api/library");
       setPendingAdd(null);
     } catch (err) {
@@ -94,22 +105,25 @@ export function AddSearch() {
     }
   }
 
+  // Only name the instance when more than one gave results.
+  const showInstance = new Set((results ?? []).map((h) => h.instanceId)).size > 1;
+
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex rounded-md border border-slate-700 text-sm">
           <button
-            onClick={() => setService("sonarr")}
+            onClick={() => chooseKind("series")}
             className={`rounded-l-md px-3 py-1.5 ${
-              service === "sonarr" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
+              kind === "series" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
             }`}
           >
             TV Show
           </button>
           <button
-            onClick={() => setService("radarr")}
+            onClick={() => chooseKind("movies")}
             className={`rounded-r-md px-3 py-1.5 ${
-              service === "radarr"
+              kind === "movies"
                 ? "bg-violet-900 text-violet-200"
                 : "text-slate-400 hover:bg-slate-800"
             }`}
@@ -122,7 +136,7 @@ export function AddSearch() {
           value={term}
           onChange={(e) => setTerm(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && runSearch()}
-          placeholder={`Search for a ${service === "sonarr" ? "TV show" : "movie"} to add…`}
+          placeholder={`Search for a ${kind === "series" ? "TV show" : "movie"} to add…`}
           className="min-w-[240px] flex-1 rounded-md border border-slate-800 bg-slate-950 px-3 py-1.5 text-sm outline-none focus:border-slate-600"
         />
         <button
@@ -133,7 +147,7 @@ export function AddSearch() {
           {searching ? "Searching…" : "Search"}
         </button>
 
-        {service === "radarr" && (
+        {kind === "movies" && (
           <select
             value={minimumAvailability}
             onChange={(e) => setMinimumAvailability(e.target.value)}
@@ -174,10 +188,10 @@ export function AddSearch() {
       {results && results.length > 0 && (
         <div className="max-h-96 space-y-2 overflow-y-auto">
           {results.map((hit) => {
-            const added = hit.alreadyAdded || addedIds.has(hit.id);
+            const added = hit.alreadyAdded || addedKeys.has(`${hit.instanceId}:${hit.id}`);
             return (
               <div
-                key={hit.id}
+                key={`${hit.instanceId}:${hit.id}`}
                 className="flex gap-3 rounded-md border border-slate-800 bg-slate-950/50 p-2"
               >
                 {hit.posterUrl ? (
@@ -198,7 +212,13 @@ export function AddSearch() {
                       <p className="truncate text-sm font-medium">
                         {hit.title} <span className="text-slate-500">{hit.year}</span>
                       </p>
-                      {hit.subtitle && <p className="text-xs text-slate-500">{hit.subtitle}</p>}
+                      {(hit.subtitle || showInstance) && (
+                        <p className="text-xs text-slate-500">
+                          {[hit.subtitle, showInstance ? hit.instanceName : null]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
                     </div>
                     {added ? (
                       <span className="shrink-0 rounded-full bg-emerald-900 px-2 py-0.5 text-xs text-emerald-300">
@@ -206,8 +226,8 @@ export function AddSearch() {
                       </span>
                     ) : (
                       <button
-                        onClick={() => setPendingAdd(hit)}
-                        disabled={!meta}
+                        onClick={() => startAdd(hit)}
+                        disabled={pendingAdd !== null}
                         className="shrink-0 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
                       >
                         Add

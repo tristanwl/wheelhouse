@@ -18,7 +18,9 @@ planned — see [wheelhouse-spec.md](./wheelhouse-spec.md).
 Next.js 15 (App Router, React 19, TypeScript), Tailwind CSS, SWR for client-side
 polling. Single container, no database — it's a thin read/aggregate/proxy
 layer over Sonarr, Radarr, and SABnzbd's existing APIs. Routes live in
-`app/`, shared UI in `components/`, and the per-service API clients in `lib/`.
+`app/`, shared UI in `components/`, and the per-service adapters in
+`lib/providers/` (one directory per role: media manager, download client,
+media server).
 
 ## Conventions
 
@@ -89,7 +91,11 @@ page, not just `/library`. TV Show/Movie toggle, a search box hitting
 Sonarr's/Radarr's own lookup (TheTVDB/TMDB — same catalog their own "Add New"
 screen searches), and inline controls for monitored, search-now, and
 (movies only) minimum availability. Each result shows poster/title/year/
-overview and either an "Add" button or an "In library" badge.
+overview and either an "Add" button or an "In library" badge. With more than
+one instance of a kind (say Radarr and Radarr 4K), the search covers all of
+them and each hit is one instance's answer, labeled with the instance name;
+Add posts to that instance, and its quality profiles and root folder load when
+you click it.
 
 Quality profile is **not** one of the always-visible controls — Explore's
 Add button and `TmdbDetailModal`'s "Add to library" button work the same
@@ -174,7 +180,7 @@ an earlier one — the page de-dupes by tmdbId.
 
 ### Codec Analysis
 
-`app/codecs/page.tsx` + `lib/codec.ts` + `GET /api/codec-analysis?service=`.
+`app/codecs/page.tsx` + `lib/codec.ts` + `GET /api/codec-analysis?kind=`.
 Grew out of a one-off analysis originally done by hand over SSH against
 Radarr's API; useful enough to become a real feature. Deliberately **not**
 a "convert everything to one fixed codec" tool — the recommendation logic
@@ -220,7 +226,7 @@ same codec under different names.
 
 Movies: one `GET /api/v3/movie` call already returns `movieFile.mediaInfo`
 inline per movie when a file exists — no extra per-item calls needed
-(`RadarrMovie.movieFile` in `lib/arr-client.ts`). TV has no equivalent bulk
+(`RadarrMovie.movieFile` in `lib/providers/media-manager/types.ts`). TV has no equivalent bulk
 endpoint — Sonarr's episode-file media info is only available per series
 (`GET /api/v3/episodefile?seriesId=`), so the route fans out one call per
 series via `Promise.all` and flattens the results.
@@ -229,7 +235,8 @@ TV candidates are labeled by actual episode, e.g. `Band of Brothers —
 S01E01 "Currahee"`, not just a season — this needed a second per-series
 call. Sonarr's `episodefile` resource only carries a season number;
 episode number and title live on the separate `episode` resource
-(`GET /api/v3/episode?seriesId=`, `lib/arr-client.ts`'s `Episode` type),
+(`GET /api/v3/episode?seriesId=`, the `Episode` type in
+`lib/providers/media-manager/types.ts`),
 linked back to a file via `episodeFileId`. `episodeLabel()` in
 `app/api/codec-analysis/route.ts` matches episodes to files by that id —
 an array match rather than one-to-one, since an aired double-episode can
@@ -408,15 +415,17 @@ the modal every 2s via SWR until the job reaches a terminal state.
 
 ## API routes (all server-side proxies — API keys never reach the browser)
 
-- `GET /api/status` — aggregates sonarr/radarr system status + health +
-  queue + indexers, sabnzbd's queue + configured servers + warnings, and
+- `GET /api/status` — aggregates the default sonarr and radarr instances'
+  system status + health + queue + indexers, sabnzbd's queue + configured servers + warnings, and
   Plex's identity/sessions, into one response. Each service fails
   independently (`up: false` + error message) rather than taking the whole
   route down. Plex degrades in stages: no `PLEX_URL` → `configured: false`;
   unclaimed or no `PLEX_TOKEN` → basic version info only via the
   unauthenticated `/identity` endpoint; claimed + tokened → also fetches
   server name and active session count via `/` and `/status/sessions`.
-  Sonarr/Radarr's indexer summary (`{ total, enabled, issues }`) comes from
+  Without `SONARR_*`/`RADARR_*` set, those two keys answer `configured:
+  false` and the dashboard says so. (One card per instance comes with the
+  instance-based status response, not yet.) Sonarr/Radarr's indexer summary (`{ total, enabled, issues }`) comes from
   `/api/v3/indexer` cross-referenced with `/api/v3/health` entries whose
   `source` starts with `Indexer` — there's no per-indexer live backoff/health
   endpoint in this API version (`/api/v3/indexerstatus` 404s on both
@@ -447,17 +456,26 @@ the modal every 2s via SWR until the job reaches a terminal state.
   `state: "postprocessing"` with the phase in `stateDetail`. Since the underlying nzo is the same
   object in both APIs, this never double-counts — it's an enrichment of the
   queue list, not a merge of two separate lists.
-- `GET /api/storage` — sonarr/radarr `/api/v3/rootfolder` (`freeSpace`) plus
-  the sum of `sizeOnDisk` across the library for that volume. Note: the
+- `GET /api/storage` — `{ entries, instances }`. For every media-manager
+  instance, its `/api/v3/rootfolder` entries (`freeSpace`) plus the
+  `sizeOnDisk` of the library items inside that root folder (matched by path
+  prefix on whole path segments, deepest root wins), so several root folders
+  or instances don't each get the whole library's size. Note: the
   Sonarr/Radarr API doesn't expose a `totalSpace` field, so this reports free
-  space + library-used space rather than a true used/total percentage.
-- `GET /api/library` — merged sonarr series + radarr movies:
-  `{ service, id, title, sizeOnDisk, monitored, rootFolderPath, added }[]`
-  (`added` is Sonarr/Radarr's own `added` field, an ISO timestamp of when the
-  item was added to that service — used for the Age column/sort).
-- `DELETE /api/library/[service]/[id]` — whole-item delete
-  (`deleteFiles=true`) via Sonarr/Radarr's own delete endpoint.
-- `GET /api/library/[service]/[id]/details` — powers the detail card:
+  space + library-used space rather than a true used/total percentage. An
+  instance that can't be read is listed in `instances` with `up: false` and
+  its reason, and the others are still returned.
+- `GET /api/library` — every instance's items merged: `{ items, instances }`
+  where an item is `{ instanceId, instanceName, kind, id, title, sizeOnDisk,
+  monitored, rootFolderPath, added }` (`added` is Sonarr/Radarr's own `added`
+  field, an ISO timestamp of when the item was added — used for the
+  Age column/sort). `instances` lists every configured media manager with
+  `up`/`error`, so the page can say which one is down or that none exist.
+  Ids are only unique within an instance: `instanceId` + `id` is the key.
+- `DELETE /api/library/[instanceId]/[id]` — whole-item delete
+  (`deleteFiles=true`) via Sonarr/Radarr's own delete endpoint. The default
+  instances are `sonarr` and `radarr`; extras are `radarr-4k` and so on.
+- `GET /api/library/[instanceId]/[id]/details` — powers the detail card:
   `{ title, overview, year, genres, runtime, certification, status, network,
   studio, posterUrl, fanartUrl, ratings }`. `posterUrl`/`fanartUrl` are the
   `remoteUrl` from each item's `images[]` (thetvdb.com / image.tmdb.org CDN
@@ -466,26 +484,30 @@ the modal every 2s via SWR until the job reaches a terminal state.
   exposes multiple rating sources (imdb/tmdb/metacritic/trakt) as an object
   keyed by source; Sonarr exposes one (TVDB) — both get normalized to the
   same `{ source, value, votes }[]` shape.
-- `GET /api/library/[service]/[id]/seasons` — sonarr only. Returns
+- `GET /api/library/[instanceId]/[id]/seasons` — series instances only. Returns
   `series.seasons[]` reshaped to `{ seasonNumber, monitored,
   episodeFileCount, episodeCount, totalEpisodeCount, sizeOnDisk }`. This data
   comes straight from the series resource — no extra episode-level calls
   needed.
-- `DELETE /api/library/[service]/[id]/seasons/[season]` — sonarr only. Looks
+- `DELETE /api/library/[instanceId]/[id]/seasons/[season]` — series instances only. Looks
   up that series' episode files via `/api/v3/episodefile?seriesId=`, deletes
   each file individually (`DELETE /api/v3/episodefile/{id}`), then `PUT`s the
   series back with that season's `monitored` flag set to `false` — so Sonarr
   doesn't immediately re-grab what you just cleared.
-- `GET /api/search?service=&term=` — proxies Sonarr's/Radarr's lookup
-  endpoint, normalized to `{ id, alreadyAdded, title, year, overview,
-  posterUrl, subtitle }[]` (`id` is the external tvdbId/tmdbId — what you POST
-  to `/api/add`; `subtitle` is network for sonarr, studio for radarr). Capped
-  at 8 results.
-- `GET /api/add-meta?service=` — `{ qualityProfiles: [{id, name}],
-  rootFolderPath }` for populating the add form. Only one root folder exists
-  per service on this setup, so it's used directly rather than exposed as a
-  choice.
-- `POST /api/add` — body `{ service, id, qualityProfileId, rootFolderPath,
+- `GET /api/search?kind=movies|series&term=` — proxies the lookup endpoint of
+  every instance of that kind, normalized to `{ results, problems? }` with
+  `results` = `{ instanceId, instanceName, id, alreadyAdded, title, year,
+  overview, posterUrl, subtitle }[]` (`id` is the external tvdbId/tmdbId —
+  what you POST to `/api/add`; `subtitle` is network for series, studio for
+  movies). Capped at 8 results per instance, so a movie in two Radarrs shows
+  up once per instance, each with its own `alreadyAdded`. An instance that
+  fails goes to `problems`; if all fail the route answers 502.
+- `GET /api/add-meta?instanceId=` (or `?kind=movies|series` for the first
+  ready instance of that kind, which is what Explore uses) —
+  `{ instanceId, instanceName, qualityProfiles: [{id, name}], rootFolderPath }`
+  for populating the add form. The first root folder is used directly rather
+  than exposed as a choice.
+- `POST /api/add` — body `{ instanceId, id, qualityProfileId, rootFolderPath,
   monitored, searchNow, minimumAvailability? }`. Re-fetches the canonical
   item by external id (see "Add to library" above) and creates it.
   `qualityProfileId` comes from `AddQualityModal`'s per-add confirmation
@@ -494,17 +516,19 @@ the modal every 2s via SWR until the job reaches a terminal state.
   see "Explore" above. `limit` defaults to 20 (max 60); `page` is 1-based in
   units of `limit`. Returns `{ results: [{ id, alreadyAdded, title, year,
   overview, posterUrl, voteAverage }], hasMore }` (`id` is the tmdbId, same as `/api/search`'s radarr
-  results — both feed the same `/api/add`).
+  results — both feed the same `/api/add`). `alreadyAdded` is true when the
+  movie is in any Radarr instance; an instance that can't be read is simply
+  left out of that check.
 - `GET /api/explore/[id]` — one movie's full detail + trailer for
   `TmdbDetailModal`: `{ id, alreadyAdded, title, overview, year, genres,
   runtime, voteAverage, posterUrl, backdropUrl, trailerKey }`. `trailerKey`
   is a YouTube video id or `null`; the frontend embeds it directly
   (`youtube.com/embed/<key>`) rather than linking out.
-- `GET /api/codec-analysis?service=radarr|sonarr` — see "Codec Analysis"
-  above. Returns `{ totalCount, totalSize, preferences: { hd, uhd },
+- `GET /api/codec-analysis?kind=movies|series` — see "Codec Analysis"
+  above, across every instance of that kind. Returns `{ totalCount, totalSize, preferences: { hd, uhd },
   buckets: { h264, hevc, legacy }, candidates: [{ title, codec, resolution,
-  bitDepth, size, service, itemId, filePath, tier, targetFamily, reason }],
-  matching: [...], skippedCount }`. Read-only — doesn't touch media files.
+  bitDepth, size, instanceId, itemId, filePath, tier, targetFamily, reason }],
+  matching: [...], skippedCount, problems? }`. Read-only — doesn't touch media files.
   `preferences` reflects whatever's currently persisted, so the UI doesn't
   need a second round-trip to know what drove the candidate list.
 - `GET`/`PUT /api/codec-analysis/settings` — `{ hd: "h264"|"hevc", uhd:
@@ -516,9 +540,9 @@ the modal every 2s via SWR until the job reaches a terminal state.
   — six entries (software × 2 families always available, VAAPI × 2 and
   NVENC × 2 probed live). See "Hardware encoding" above — `available`
   reflects a real test encode, not just a capability guess.
-- `POST /api/codec-analysis/convert` — body `{ service, itemId, filePath,
+- `POST /api/codec-analysis/convert` — body `{ instanceId, itemId, filePath,
   title, originalSize, backend: "software"|"vaapi"|"nvenc", targetFamily:
-  "h264"|"hevc" }` (straight from a candidate's `service`/`itemId`/
+  "h264"|"hevc" }` (straight from a candidate's `instanceId`/`itemId`/
   `filePath`/`title`/`size`/`targetFamily` plus the modal's encoder-backend
   choice). Enqueues a conversion job and returns it immediately (`status:
   "queued"`); doesn't block on the encode. If a job is already
@@ -528,7 +552,7 @@ the modal every 2s via SWR until the job reaches a terminal state.
   `GET` lists all jobs (queued/running/recently finished) from the
   in-memory queue.
 - `GET /api/codec-analysis/convert/[jobId]` — one job's live status:
-  `{ id, service, itemId, filePath, title, originalSize, backend,
+  `{ id, instanceId, itemId, filePath, title, originalSize, backend,
   targetFamily, status, progressPercent, error?, newSize?, backupPath?,
   log, createdAt, startedAt?, finishedAt? }`. Polled by `ConvertModal`
   every 2s until `status` is `success`/`failed`/`canceled`.
@@ -536,8 +560,11 @@ the modal every 2s via SWR until the job reaches a terminal state.
   outright, or kills a running ffmpeg process for a running one. 400 if the
   job doesn't exist or already finished.
 
-`lib/arr-client.ts` is the shared Sonarr/Radarr REST client (adds
-`X-Api-Key`, base URL); `lib/providers/download-client/sabnzbd.ts` is the
+`lib/providers/media-manager/` holds the Sonarr and Radarr adapters
+(`sonarr.ts`, `radarr.ts`) on top of `arr-http.ts`, which adds `X-Api-Key`
+and the `/api/v3` prefix and turns an HTTP 401 into an "API key incorrect"
+error; `instances.ts` lists the configured instances of a kind for the routes.
+`lib/providers/download-client/sabnzbd.ts` is the
 SABnzbd adapter (query-param API style; a wrong key is an HTTP 403 with a
 plain-text body); `lib/providers/media-server/plex.ts` is the Plex adapter
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
@@ -546,20 +573,28 @@ param, not a header — that one's TMDB's own convention, not ours).
 
 ## Config
 
-Server-side-only env vars (never sent to the client):
+Server-side-only env vars (never sent to the client). All are optional; a
+service that isn't configured is reported as such instead of breaking the app:
 
 ```
 SONARR_URL, SONARR_API_KEY
 RADARR_URL, RADARR_API_KEY
 SABNZBD_URL, SABNZBD_API_KEY
-PLEX_URL, PLEX_TOKEN   # optional — see below
-TMDB_API_KEY            # optional — see below
+PLEX_URL, PLEX_TOKEN
+TMDB_API_KEY
 ```
 
-`PLEX_URL`/`PLEX_TOKEN` and `TMDB_API_KEY` are optional and the app degrades
-gracefully without them (unlike the first three, which are required and the
-app won't boot without). `PLEX_TOKEN` can't be known until the Plex server
-has been claimed via its own web UI — it lives in Plex's own
+Extra Sonarr/Radarr instances use `RADARR_<ID>_URL` and
+`RADARR_<ID>_API_KEY` (same for `SONARR_`), e.g. `RADARR_4K_URL` is the
+instance `radarr-4k`, shown as "Radarr 4K". This is the interim way to
+configure several instances until configuration moves to a database.
+
+Sonarr/Radarr responses for the library lists are cached for 5 seconds per
+instance (concurrent requests share one upstream call; adding, deleting or
+rescanning clears that instance's cache; errors are never cached).
+
+`PLEX_URL`/`PLEX_TOKEN` and `TMDB_API_KEY` degrade gracefully without them.
+`PLEX_TOKEN` can't be known until the Plex server has been claimed via its own web UI — it lives in Plex's own
 `Preferences.xml` (`PlexOnlineToken` attribute) once that's done, under the
 server's `Plex Media Server` application-support directory. `TMDB_API_KEY`
 is a free API key from themoviedb.org (account settings → API) — only used

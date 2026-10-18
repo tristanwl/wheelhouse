@@ -42,12 +42,12 @@ export interface CodecFileInfo {
   resolution: string | null;
   bitDepth: number | null;
   size: number;
-  // Identify + locate the underlying file for conversion: itemId is the
-  // movie id (radarr) or series id (sonarr), used to trigger a rescan
-  // afterward; filePath is the absolute path as Radarr/Sonarr see it,
+  // Identify + locate the underlying file for conversion: instanceId and
+  // itemId (the movie or series id in that instance) are used to trigger a
+  // rescan afterward; filePath is the absolute path as Radarr/Sonarr see it,
   // which only works if Wheelhouse mounts the media at the same paths
   // the *arr apps use.
-  service: "radarr" | "sonarr";
+  instanceId: string;
   itemId: number;
   filePath: string;
 }

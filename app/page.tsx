@@ -8,6 +8,7 @@ import { formatBytes, formatEta } from "@/lib/format";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
 import type { DownloadsResponse } from "@/app/api/downloads/route";
+import type { StorageResponse } from "@/app/api/storage/route";
 import { describeDownloadState } from "@/lib/providers/download-client/types";
 
 interface IndexerSummary {
@@ -18,6 +19,7 @@ interface IndexerSummary {
 
 interface ArrStatus {
   up: boolean;
+  configured: boolean;
   version?: string;
   health: { type: string; message: string }[];
   queueCount: number;
@@ -69,15 +71,6 @@ interface StatusResponse {
 // rather than assuming any particular hostname resolves for every client.
 const DEFAULT_HOST = "localhost";
 
-interface StorageResponse {
-  entries: {
-    label: string;
-    path: string;
-    freeBytes: number;
-    libraryUsedBytes: number;
-  }[];
-}
-
 export default function DashboardPage() {
   const [host, setHost] = useState(DEFAULT_HOST);
   useEffect(() => {
@@ -128,7 +121,11 @@ export default function DashboardPage() {
                 status?.sonarr.version ? `v${status.sonarr.version}` : "",
               ].filter(Boolean)}
               warnings={status?.sonarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
-              error={status?.sonarr.error}
+              error={
+                status?.sonarr.configured === false
+                  ? "SONARR_URL not configured"
+                  : status?.sonarr.error
+              }
             />
           </a>
           <a
@@ -148,7 +145,11 @@ export default function DashboardPage() {
                 status?.radarr.version ? `v${status.radarr.version}` : "",
               ].filter(Boolean)}
               warnings={status?.radarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
-              error={status?.radarr.error}
+              error={
+                status?.radarr.configured === false
+                  ? "RADARR_URL not configured"
+                  : status?.radarr.error
+              }
             />
           </a>
           <a
@@ -208,10 +209,20 @@ export default function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">Storage</h2>
+        {storage && storage.instances.length === 0 && (
+          <p className="text-sm text-slate-500">No Sonarr or Radarr instance configured.</p>
+        )}
+        {storage?.instances
+          .filter((i) => !i.up)
+          .map((i) => (
+            <p key={i.instanceId} className="text-sm text-red-400">
+              {i.name}: {i.error ?? "unreachable"}
+            </p>
+          ))}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {storage?.entries.map((entry) => (
             <Link
-              key={entry.path}
+              key={`${entry.instanceId}:${entry.path}`}
               href={`/library?path=${encodeURIComponent(entry.path)}`}
               className="block transition hover:opacity-80"
             >

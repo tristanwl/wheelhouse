@@ -6,9 +6,11 @@ import { fetcher } from "@/lib/fetcher";
 import { formatBytes } from "@/lib/format";
 import { ConfirmModal } from "./ConfirmModal";
 import { ModalCloseButton } from "./ModalCloseButton";
-import type { SeasonSummary } from "@/app/api/library/[service]/[id]/seasons/route";
+import type { SeasonSummary } from "@/app/api/library/[instanceId]/[id]/seasons/route";
 
 interface SeriesModalProps {
+  instanceId: string;
+  instanceName: string;
   seriesId: number;
   title: string;
   onClose: () => void;
@@ -22,6 +24,8 @@ interface SeasonsResponse {
 }
 
 export function SeriesModal({
+  instanceId,
+  instanceName,
   seriesId,
   title,
   onClose,
@@ -29,7 +33,7 @@ export function SeriesModal({
   onSeasonChanged,
 }: SeriesModalProps) {
   const { data, error, mutate } = useSWR<SeasonsResponse>(
-    `/api/library/sonarr/${seriesId}/seasons`,
+    `/api/library/${instanceId}/${seriesId}/seasons`,
     fetcher
   );
 
@@ -44,7 +48,7 @@ export function SeriesModal({
     setBusy(true);
     setActionError(null);
     try {
-      const res = await fetch(`/api/library/sonarr/${seriesId}`, {
+      const res = await fetch(`/api/library/${instanceId}/${seriesId}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -64,7 +68,7 @@ export function SeriesModal({
     setActionError(null);
     try {
       const res = await fetch(
-        `/api/library/sonarr/${seriesId}/seasons/${pendingSeason.seasonNumber}`,
+        `/api/library/${instanceId}/${seriesId}/seasons/${pendingSeason.seasonNumber}`,
         { method: "DELETE" }
       );
       if (!res.ok) {
@@ -159,7 +163,7 @@ export function SeriesModal({
       {confirmingWholeSeries && (
         <ConfirmModal
           title={`Delete "${title}"?`}
-          body={`This removes the whole series from sonarr and deletes ${formatBytes(
+          body={`This removes the whole series from ${instanceName} and deletes ${formatBytes(
             totalSize
           )} of files from disk. This can't be undone.${actionError ? ` (${actionError})` : ""}`}
           busy={busy}

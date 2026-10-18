@@ -1,24 +1,20 @@
 import { NextResponse } from "next/server";
-import { deleteMovie, deleteSeries } from "@/lib/arr-client";
+import { resolveManager } from "@/lib/manager-route";
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ service: string; id: string }> }
+  { params }: { params: Promise<{ instanceId: string; id: string }> }
 ) {
-  const { service, id: idParam } = await params;
+  const { instanceId, id: idParam } = await params;
   const id = Number(idParam);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
+  const resolved = await resolveManager(instanceId);
+  if ("response" in resolved) return resolved.response;
 
   try {
-    if (service === "sonarr") {
-      await deleteSeries(id);
-    } else if (service === "radarr") {
-      await deleteMovie(id);
-    } else {
-      return NextResponse.json({ error: "unknown service" }, { status: 400 });
-    }
+    await resolved.client.remove(id);
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json(

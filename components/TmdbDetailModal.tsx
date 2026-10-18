@@ -11,6 +11,7 @@ import type { ExploreDetail } from "@/app/api/explore/[id]/route";
 interface TmdbDetailModalProps {
   id: number;
   fallbackTitle: string;
+  instanceId: string | null;
   qualityProfiles: QualityProfile[];
   rootFolderPath: string | null;
   monitored: boolean;
@@ -30,6 +31,7 @@ function formatRuntime(minutes: number | null): string | null {
 export function TmdbDetailModal({
   id,
   fallbackTitle,
+  instanceId,
   qualityProfiles,
   rootFolderPath,
   monitored,
@@ -49,7 +51,7 @@ export function TmdbDetailModal({
   const isAdded = data?.alreadyAdded || added;
 
   async function confirmAdd(qualityProfileId: number) {
-    if (!rootFolderPath) return;
+    if (!rootFolderPath || !instanceId) return;
     setAdding(true);
     setAddError(null);
     try {
@@ -57,7 +59,7 @@ export function TmdbDetailModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          service: "radarr",
+          instanceId,
           id,
           qualityProfileId,
           rootFolderPath,

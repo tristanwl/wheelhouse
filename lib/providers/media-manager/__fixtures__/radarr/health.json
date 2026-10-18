@@ -1,0 +1,20 @@
+[
+  {
+    "source": "IndexerLongTermStatusCheck",
+    "type": "warning",
+    "message": "Example health message for IndexerLongTermStatusCheck",
+    "wikiUrl": "https://wiki.servarr.com/radarr/system#indexers-are-unavailable-due-to-failures"
+  },
+  {
+    "source": "UpdateCheck",
+    "type": "warning",
+    "message": "Example health message for UpdateCheck",
+    "wikiUrl": "https://wiki.servarr.com/radarr/system#new-update-is-available"
+  },
+  {
+    "source": "DownloadClientRootFolderCheck",
+    "type": "warning",
+    "message": "Example health message for DownloadClientRootFolderCheck",
+    "wikiUrl": "https://wiki.servarr.com/radarr/system#downloads-in-root-folder"
+  }
+]

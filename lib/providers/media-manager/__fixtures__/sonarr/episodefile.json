@@ -1,0 +1,104 @@
+[
+  {
+    "seriesId": 1,
+    "seasonNumber": 1,
+    "relativePath": "Season 1/Example Series 1 - S01E01.mkv",
+    "path": "/tv/Example Series 1 (2013)/Season 1/Example Series 1 - S01E01.mkv",
+    "size": 4610490430,
+    "dateAdded": "2025-07-30T07:47:29Z",
+    "releaseGroup": "GROUP",
+    "languages": [
+      {
+        "id": 1,
+        "name": "English"
+      }
+    ],
+    "quality": {
+      "quality": {
+        "id": 3,
+        "name": "WEBDL-1080p",
+        "source": "web",
+        "resolution": 1080
+      },
+      "revision": {
+        "version": 1,
+        "real": 0,
+        "isRepack": false
+      }
+    },
+    "customFormats": [],
+    "customFormatScore": 0,
+    "indexerFlags": 0,
+    "releaseType": "singleEpisode",
+    "mediaInfo": {
+      "audioBitrate": 224000,
+      "audioChannels": 2,
+      "audioCodec": "EAC3",
+      "audioLanguages": "eng",
+      "audioStreamCount": 1,
+      "videoBitDepth": 8,
+      "videoBitrate": 0,
+      "videoCodec": "x264",
+      "videoFps": 29.97,
+      "videoDynamicRange": "",
+      "videoDynamicRangeType": "",
+      "resolution": "1920x1080",
+      "runTime": "44:04",
+      "scanType": "Progressive",
+      "subtitles": "eng"
+    },
+    "qualityCutoffNotMet": false,
+    "id": 101
+  },
+  {
+    "seriesId": 2,
+    "seasonNumber": 3,
+    "relativePath": "Season 3/Example Series 2 - S03E01.mkv",
+    "path": "/tv/Example Series 2 (2023)/Season 3/Example Series 2 - S03E01.mkv",
+    "size": 1232981360,
+    "dateAdded": "2026-03-23T10:52:18Z",
+    "releaseGroup": "GROUP",
+    "languages": [
+      {
+        "id": 1,
+        "name": "English"
+      }
+    ],
+    "quality": {
+      "quality": {
+        "id": 3,
+        "name": "WEBDL-1080p",
+        "source": "web",
+        "resolution": 1080
+      },
+      "revision": {
+        "version": 1,
+        "real": 0,
+        "isRepack": false
+      }
+    },
+    "customFormats": [],
+    "customFormatScore": 0,
+    "indexerFlags": 0,
+    "releaseType": "singleEpisode",
+    "mediaInfo": {
+      "audioBitrate": 0,
+      "audioChannels": 2,
+      "audioCodec": "AAC",
+      "audioLanguages": "eng",
+      "audioStreamCount": 1,
+      "videoBitDepth": 8,
+      "videoBitrate": 0,
+      "videoCodec": "h264",
+      "videoFps": 29.97,
+      "videoDynamicRange": "",
+      "videoDynamicRangeType": "",
+      "resolution": "1920x1080",
+      "runTime": "41:29",
+      "scanType": "Progressive",
+      "subtitles": "eng"
+    },
+    "qualityCutoffNotMet": false,
+    "id": 201
+  }
+]

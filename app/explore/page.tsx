@@ -20,9 +20,11 @@ export default function ExplorePage() {
   const [minimumAvailability, setMinimumAvailability] = useState("released");
 
   useEffect(() => {
-    fetcher<AddMeta>("/api/add-meta?service=radarr")
+    fetcher<AddMeta>("/api/add-meta?kind=movies")
       .then(setMeta)
-      .catch(() => setMetaError("Failed to load quality profiles."));
+      .catch((err) =>
+        setMetaError(err instanceof Error ? err.message : "Failed to load quality profiles.")
+      );
   }, []);
 
   return (
@@ -62,6 +64,7 @@ export default function ExplorePage() {
       <ExploreSection
         category="theaters"
         label="In Theaters"
+        instanceId={meta?.instanceId ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}
@@ -71,6 +74,7 @@ export default function ExplorePage() {
       <ExploreSection
         category="bluray"
         label="Recent Blu-ray / Digital Releases"
+        instanceId={meta?.instanceId ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}
@@ -80,6 +84,7 @@ export default function ExplorePage() {
       <ExploreSection
         category="popular"
         label="Popular"
+        instanceId={meta?.instanceId ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}

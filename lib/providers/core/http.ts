@@ -44,12 +44,45 @@ export interface HttpClientOptions {
 export interface RequestOptions extends Omit<RequestInit, "signal"> {
   query?: Record<string, string | number | boolean | undefined>;
   timeoutMs?: number;
+  /**
+   * Opt in to caching this GET response for this long. Concurrent identical
+   * calls share one upstream request; errors are never cached; writes should
+   * call `invalidate()`. Ignored for anything but GET.
+   */
+  cacheTtlMs?: number;
 }
 
 export interface HttpClient {
   /** Resolves with the Response; throws ProviderError on network errors and non-2xx. */
   fetch(path: string, init?: RequestOptions): Promise<Response>;
   json<T>(path: string, init?: RequestOptions): Promise<T>;
+  /** Drops every cached response of this client (call after add, delete, rescan). */
+  invalidate(): void;
+}
+
+// What a cached response keeps: enough to hand each caller a fresh Response,
+// so one caller reading or mutating its copy can't affect another's.
+interface CachedResponse {
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  body: ArrayBuffer;
+}
+
+interface CacheEntry {
+  value: Promise<CachedResponse>;
+  /** Unset while the upstream call is in flight. */
+  expiresAt?: number;
+}
+
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
+
+function replay(cached: CachedResponse): Response {
+  return new Response(NULL_BODY_STATUSES.has(cached.status) ? null : cached.body.slice(0), {
+    status: cached.status,
+    statusText: cached.statusText,
+    headers: cached.headers,
+  });
 }
 
 /** Joins a base URL (with optional path prefix) and a path without dropping the prefix. */
@@ -88,8 +121,18 @@ function describeNetworkError(err: unknown): string {
 export function createHttpClient(options: HttpClientOptions): HttpClient {
   const { baseUrl, label, headers = {}, secrets = [], timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
-  async function doFetch(path: string, init: RequestOptions = {}): Promise<Response> {
-    const { query, timeoutMs: perCallTimeout, headers: extraHeaders, ...rest } = init;
+  // Per client, so per instance: the key only needs the URL (path + query).
+  const cache = new Map<string, CacheEntry>();
+
+  async function request(path: string, init: RequestOptions = {}): Promise<Response> {
+    const {
+      query,
+      timeoutMs: perCallTimeout,
+      headers: extraHeaders,
+      cacheTtlMs: ignoredTtl,
+      ...rest
+    } = init;
+    void ignoredTtl;
     const url = new URL(joinUrl(baseUrl, path));
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -124,8 +167,46 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
     return res;
   }
 
+  async function doFetch(path: string, init: RequestOptions = {}): Promise<Response> {
+    const ttl = init.cacheTtlMs;
+    const method = (init.method ?? "GET").toUpperCase();
+    if (!ttl || ttl <= 0 || method !== "GET") return request(path, init);
+
+    const url = new URL(joinUrl(baseUrl, path));
+    for (const [name, value] of Object.entries(init.query ?? {})) {
+      if (value !== undefined) url.searchParams.set(name, String(value));
+    }
+    const key = url.href;
+
+    const existing = cache.get(key);
+    if (existing && (existing.expiresAt === undefined || existing.expiresAt > Date.now())) {
+      return replay(await existing.value);
+    }
+
+    const entry: CacheEntry = {
+      value: request(path, init).then(async (res) => ({
+        status: res.status,
+        statusText: res.statusText,
+        headers: [...res.headers.entries()],
+        body: await res.arrayBuffer(),
+      })),
+    };
+    cache.set(key, entry);
+    entry.value.then(
+      () => {
+        // Only keep it if a write hasn't cleared (or replaced) the entry meanwhile.
+        if (cache.get(key) === entry) entry.expiresAt = Date.now() + ttl;
+      },
+      () => {
+        if (cache.get(key) === entry) cache.delete(key);
+      }
+    );
+    return replay(await entry.value);
+  }
+
   return {
     fetch: doFetch,
+    invalidate: () => cache.clear(),
     async json<T>(path: string, init?: RequestOptions): Promise<T> {
       const res = await doFetch(path, init);
       try {
