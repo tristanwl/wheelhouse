@@ -69,3 +69,46 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
+
+  # The Vite UI in web/ (docs/wheelhouse-spec-phase2.md, migration step 6): its own
+  # checks, then the build embedded in the Go binary and driven in a real browser.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache: true
+          cache-dependency-path: |
+            server/go.sum
+            server/go.mod
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm audit
+      - run: npm run build
+      - name: embed the build and test the Go side with it
+        run: |
+          npm run embed
+          cd ../server
+          go vet ./...
+          go test ./internal/ui ./internal/app ./internal/middleware
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
+      - run: npx playwright-core install --with-deps chromium
+      - name: browser smoke test
+        run: npm run test:smoke
+        env:
+          WHEELHOUSE_SMOKE_REQUIRED: "1"

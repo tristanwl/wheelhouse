@@ -5,7 +5,7 @@ Go skeleton, provider core in `server/internal/providers/core`), as are the
 providers of step 4. Step 5 is in progress: the provider registration, the
 access-level router, the feature registry, `/api/status`, `/api/downloads` and
 `/api/explore` are done, as are the codec and converter routes (step 7, pulled
-forward); the other routes are not built yet. It replaces the "Next.js
+forward) and the library group; step 6 (the Vite UI in `web/`) is done. It replaces the "Next.js
 versus a lighter stack" open question in [wheelhouse-spec.md](wheelhouse-spec.md)
 and defines the work needed to reach 1.0.0.
 
@@ -140,7 +140,8 @@ The behaviour is defined first, then the server is rebuilt against it.
 5. **API routes and the feature registry,** passing the acceptance suite.
    (In progress: foundation, features, status, downloads, explore and the library
    group (library, storage, search, add, add-meta, details, seasons, deletes) done.)
-6. **UI to Vite:** pages and components move to the SPA served by the Go server.
+6. **UI to Vite** (done): pages and components move to the SPA in `web/`, served
+   by the Go server (`web/README.md`).
 7. **Converter in Go:** ffmpeg arguments, hardware-encode detection, hardlink
    check, queue. (Done, pulled forward with step 5: `internal/codecs`,
    `internal/converter`, `app/routes_codecs.go`.)
