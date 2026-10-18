@@ -40,6 +40,7 @@ answers a generic 500 and never logs the panic value.
 | ---------- | --------- | ------------------------ |
 | `PORT`     | `3000`    | TCP port                 |
 | `HOSTNAME` | `0.0.0.0` | Address to listen on     |
+| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH`. Tests and the acceptance suite set it; installs keep the default until issue #31 |
 
 The services are configured with the same variables as the Next app (`SONARR_URL`,
 `SONARR_API_KEY`, ..., `TMDB_API_KEY`; see the main README). A service URL must
@@ -69,6 +70,33 @@ logs an `audit` line. The Next UI does not send `confirm` yet, so the later UI
 port must add it after its own confirm dialog.
 
 The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
+
+## Codecs and the converter
+
+`GET /api/codec-analysis` (library analysis across instances, with `problems`),
+`GET`/`PUT /api/codec-analysis/settings` (`/config/settings.json`),
+`GET /api/codec-analysis/encoders` (real throwaway encodes, cached),
+`GET`/`POST /api/codec-analysis/convert`, `GET /api/codec-analysis/convert/{jobId}`
+and `POST /api/codec-analysis/convert/{jobId}/cancel` are ported from
+`app/api/codec-analysis/**` (`internal/codecs`, `internal/converter`).
+
+- ffmpeg and ffprobe run through `os/exec` with a context, never a shell; the
+  arguments come from validated enums and an absolute, resolved path.
+- A file path in a request is resolved (`..` refused, `EvalSymlinks`, regular
+  file) and must be inside a media root (`converter.DefaultMediaRoots`,
+  `WHEELHOUSE_MEDIA_ROOTS`), or the request is a 400. The check repeats when the
+  job starts and just before the swap.
+- A file with more than one hard link answers 409 `{code: "hardlinked",
+  linkCount}` until the body has `acknowledgeHardlink: true`.
+- The output is written to `.wheelhouse-convert-<id><ext>` next to the original,
+  forced to 8-bit (`yuv420p`) with audio and subtitles copied; a non-empty result
+  replaces the original, which stays as `<file>.bak`. On start-up, leftover temp
+  files are removed and a `.bak` whose file is missing is renamed back.
+- Tests use fake `ffmpeg`/`ffprobe` shell scripts that print `-progress` output
+  and exit with real codes (success, failure, cancel, empty output); a test runs
+  the real ffmpeg when the machine has one (with `libx264`) and skips otherwise.
+- HDR (`VideoDynamicRange` in `mediamanager.MediaInfo`) is deliberately not used
+  yet (issue #32); the queue is in memory behind `converter.Queue` (issue #33).
 
 ## Build, run, test
 
@@ -172,6 +200,8 @@ internal/config       environment settings
 internal/features     feature gating (port of lib/features/registry.ts and server.ts)
 internal/status       GET /api/status logic (port of lib/status.ts and its route)
 internal/downloads    GET /api/downloads logic
+internal/codecs       codec analysis and preferences (lib/codec.ts, lib/settings.ts)
+internal/converter    ffmpeg queue, encoder detection, path containment, hardlink check
 internal/library      library, storage, search, add-meta, details, seasons bodies
 internal/explore      GET /api/explore and /api/explore/{id} logic
 internal/providers/all  the registry of every provider

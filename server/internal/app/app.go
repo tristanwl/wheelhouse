@@ -32,6 +32,11 @@ type Options struct {
 	Source core.ConfigSource
 	// Now is the clock for the 24 h warning rule. Defaults to time.Now.
 	Now func() time.Time
+	// Context bounds background work (running conversions are killed when it is
+	// cancelled). Defaults to context.Background.
+	Context context.Context
+	// Converter configures the codec routes; the zero value uses the defaults.
+	Converter ConverterOptions
 }
 
 // emptySource configures nothing.
@@ -44,6 +49,8 @@ type deps struct {
 	rt     *core.Runtime
 	ffmpeg func() bool
 	now    func() time.Time
+	ctx    context.Context
+	conv   ConverterOptions
 	// log receives audit entries; never nil.
 	log *slog.Logger
 }
@@ -88,14 +95,18 @@ func Routes(o Options) *Router {
 		}
 		o.Runtime = rt
 	}
+	if o.Context == nil {
+		o.Context = context.Background()
+	}
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter}
 
 	r := NewRouter()
 	registerCore(r, d)
 	registerStack(r, d)
+	registerCodecs(r, d)
 	registerLibrary(r, d)
 	registerExplore(r, d)
 
