@@ -1,7 +1,7 @@
 # Wheelhouse architecture
 
 Wheelhouse is a self-hosted dashboard and companion for the *arr media stack
-(Sonarr, Radarr, SABnzbd, Plex). It shows live service status and storage
+(Sonarr, Radarr, SABnzbd, Plex or Jellyfin). It shows live service status and storage
 usage per media volume, lets you browse and delete library items — including
 deleting individual TV seasons rather than whole series — directly through
 Sonarr/Radarr's own APIs, and includes a codec analysis view that recommends
@@ -435,7 +435,12 @@ the modal every 2s via SWR until the job reaches a terminal state.
   degrades in stages: unclaimed → `needs-setup`; no or rejected `PLEX_TOKEN`
   → `ok` with basic version info from the unauthenticated `/identity`
   endpoint and a `notice`; claimed + tokened → also server name and active
-  session count via `/` and `/status/sessions`. With nothing configured the
+  session count via `/` and `/status/sessions`. Jellyfin follows the same
+  stages with its own signals: setup wizard not completed → `needs-setup`; no
+  or rejected `JELLYFIN_API_KEY` → `ok` with the unauthenticated
+  `/System/Info/Public` data and a `notice`; with a working key, the name and
+  the number of sessions that are playing something (not merely connected
+  clients) via `/System/Info` and `/Sessions`. With nothing configured the
   answer is `{ instances: [] }`.
   Sonarr/Radarr's indexer summary (`{ total, enabled, issues }`) comes from
   `/api/v3/indexer` cross-referenced with `/api/v3/health` entries whose
@@ -580,7 +585,9 @@ error; `instances.ts` lists the configured instances of a kind for the routes.
 SABnzbd adapter (query-param API style; a wrong key is an HTTP 403 with a
 plain-text body); `lib/providers/media-server/plex.ts` is the Plex adapter
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
-`/identity`); `lib/tmdb-client.ts` talks to TMDB directly (`api_key` query
+`/identity`); `lib/providers/media-server/jellyfin.ts` is the Jellyfin adapter
+(`Authorization: MediaBrowser Token="<key>"` for anything beyond
+`/System/Info/Public`; Jellyfin 12 rejects `X-Emby-Token`); `lib/tmdb-client.ts` talks to TMDB directly (`api_key` query
 param, not a header — that one's TMDB's own convention, not ours).
 
 ## Config
@@ -593,6 +600,7 @@ SONARR_URL, SONARR_API_KEY
 RADARR_URL, RADARR_API_KEY
 SABNZBD_URL, SABNZBD_API_KEY
 PLEX_URL, PLEX_TOKEN
+JELLYFIN_URL, JELLYFIN_API_KEY
 TMDB_API_KEY
 ```
 
@@ -605,12 +613,14 @@ Sonarr/Radarr responses for the library lists are cached for 5 seconds per
 instance (concurrent requests share one upstream call; adding, deleting or
 rescanning clears that instance's cache; errors are never cached).
 
-`PLEX_URL`/`PLEX_TOKEN` and `TMDB_API_KEY` degrade gracefully without them.
+`PLEX_URL`/`PLEX_TOKEN`, `JELLYFIN_URL`/`JELLYFIN_API_KEY` and `TMDB_API_KEY` degrade gracefully without them.
 `PLEX_TOKEN` can't be known until the Plex server has been claimed via its own web UI — it lives in Plex's own
 `Preferences.xml` (`PlexOnlineToken` attribute) once that's done, under the
 server's `Plex Media Server` application-support directory. `TMDB_API_KEY`
 is a free API key from themoviedb.org (account settings → API) — only used
 by `/explore`; the rest of the app works fine without it.
+
+`JELLYFIN_API_KEY` is created in Jellyfin under Dashboard → API Keys.
 
 Keep the env file out of version control and readable only by the user
 running the container (mode 600). The Dockerfile sets `HOSTNAME=0.0.0.0` so

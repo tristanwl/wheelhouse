@@ -313,7 +313,7 @@ interface MediaServerStatus {
   notice?: string;               // plain words for the user; never names config keys
   name?: string;
   version?: string;
-  activeSessions?: number;       // undefined when we can't read it
+  activeSessions?: number;       // sessions playing something; undefined when we can't read it
   authenticated: boolean;        // do we have working credentials?
 }
 ```
@@ -328,7 +328,20 @@ Plex: unclaimed gives `needs-setup`; no token or a rejected token (HTTP 401
 with an HTML page) gives `ok` with `authenticated: false`; any other failure
 reading details keeps the server `ok` with a notice. Jellyfin uses
 `/System/Info/Public` (unauthenticated) and, with an API key, `/System/Info`
-and `/Sessions`. Library refresh after a codec conversion is the obvious next
+and `/Sessions`: a setup wizard that isn't completed gives `needs-setup`; no
+key or a rejected key (HTTP 401, empty body) gives `ok` with
+`authenticated: false`; other failures reading details keep it `ok` with a
+notice. The key goes in `Authorization: MediaBrowser Token="..."` (Jellyfin
+12.x answers the older `X-Emby-Token` header with a 401; the `Authorization`
+form also works on 10.x).
+
+`activeSessions` counts sessions that are playing something, not connected
+clients. Jellyfin's `/Sessions` lists every connected client (a browser tab
+sitting on the home page is a session), so the adapter counts only those with
+a `NowPlayingItem`; a paused stream still counts, since it holds the slot.
+Plex's `/status/sessions` already lists only playback. The `MediaServer`
+interface needed no change for Jellyfin; only the meaning of `activeSessions`
+was written down. Library refresh after a codec conversion is the obvious next
 method, but it is deferred to Phase 3 so Phase 1 doesn't grow past
 status-only.
 
@@ -480,8 +493,14 @@ Each PR keeps the app working.
    in a `down` instance's error.
 7. **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
    seeding rows, hardlink check in the converter.
-8. **Jellyfin adapter**: proves the MediaServer interface with a second
-   implementation.
+8. ✅ **Jellyfin adapter**: proves the MediaServer interface with a second
+   implementation. Fixtures come from a real Jellyfin 12.2.0 (official Docker
+   image), sanitized. The interface did not change; `activeSessions` now
+   explicitly means sessions playing something (see "Role: MediaServer").
+   Decisions: the key is sent only as `Authorization: MediaBrowser
+   Token="..."` because 12.x rejects `X-Emby-Token`; the adapter treats 403 like
+   401 ("key rejected"); the web link has no extra path (Jellyfin's UI is at
+   the root).
 9. **Feature registry + nav gating**.
 
 PRs 3–6 can't be skipped past: after PR 5, the first non-default instance

@@ -8,6 +8,11 @@ import {
   startFakePlex,
   type PlexScenario,
 } from "@/lib/providers/media-server/__fixtures__/plex/server";
+import {
+  GOOD_KEY as JELLYFIN_KEY,
+  startFakeJellyfin,
+  type JellyfinScenario,
+} from "@/lib/providers/media-server/__fixtures__/jellyfin/server";
 import { createArrStack } from "@/lib/providers/media-manager/__fixtures__/env";
 import type { StatusInstance, StatusResponse } from "@/lib/status";
 import { GET } from "./route";
@@ -20,7 +25,14 @@ describe("/api/status", () => {
 
   beforeEach(() => {
     stack = createArrStack();
-    for (const name of ["PLEX_URL", "PLEX_TOKEN", "SABNZBD_URL", "SABNZBD_API_KEY"]) {
+    for (const name of [
+      "PLEX_URL",
+      "PLEX_TOKEN",
+      "JELLYFIN_URL",
+      "JELLYFIN_API_KEY",
+      "SABNZBD_URL",
+      "SABNZBD_API_KEY",
+    ]) {
       vi.stubEnv(name, "");
     }
     // The SABnzbd fixture's warnings are from a fixed moment: put "now" an hour after the latest.
@@ -46,6 +58,14 @@ describe("/api/status", () => {
     stops.push(server.close);
     vi.stubEnv("PLEX_URL", server.url);
     vi.stubEnv("PLEX_TOKEN", token ?? "");
+    return server;
+  }
+
+  async function jellyfin(scenario: JellyfinScenario, key: string | null = JELLYFIN_KEY) {
+    const server = await startFakeJellyfin(scenario);
+    stops.push(server.close);
+    vi.stubEnv("JELLYFIN_URL", server.url);
+    vi.stubEnv("JELLYFIN_API_KEY", key ?? "");
     return server;
   }
 
@@ -206,5 +226,64 @@ describe("/api/status", () => {
         Object.keys(instance.link ?? {}).every((k) => ["protocol", "port", "path"].includes(k))
       ).toBe(true);
     }
+  });
+
+  describe("media servers", () => {
+    it("shows a Jellyfin card when only JELLYFIN_* is set", async () => {
+      await jellyfin({ setupCompleted: true, sessions: "mixed" });
+
+      const { body, byId } = await get();
+      expect(body.instances.map((i) => [i.id, i.role, i.state])).toEqual([
+        ["jellyfin", "mediaServer", "ok"],
+      ]);
+      expect(byId("jellyfin")).toMatchObject({
+        name: "Jellyfin",
+        providerId: "jellyfin",
+        version: "12.2.0",
+        detail: { authenticated: true, activeSessions: 1, name: "Example Jellyfin" },
+      });
+    });
+
+    it("flags a Jellyfin whose setup isn't finished as needing setup", async () => {
+      await jellyfin({ setupCompleted: false, sessions: "none" }, null);
+      const instance = (await get()).byId("jellyfin");
+      expect(instance.state).toBe("needs-setup");
+      expect(instance).toMatchObject({ detail: { state: "needs-setup", authenticated: false } });
+    });
+
+    it("keeps a Jellyfin with a rejected key ok, with its notice in the detail", async () => {
+      await jellyfin({ setupCompleted: true, sessions: "playing" }, "stale-key-value");
+      const { byId, text } = await get();
+      expect(byId("jellyfin").state).toBe("ok");
+      expect(String((byId("jellyfin") as { detail: { notice?: string } }).detail.notice)).toMatch(
+        /api key was rejected/i
+      );
+      expect(text).not.toContain("stale-key-value");
+    });
+
+    it("shows Plex and Jellyfin side by side as two media-server cards", async () => {
+      await plex({ claimed: true, sessions: "active" });
+      await jellyfin({ setupCompleted: true, sessions: "playing" });
+
+      const { body, byId } = await get();
+      expect(body.instances.map((i) => [i.id, i.role, i.state])).toEqual([
+        ["plex", "mediaServer", "ok"],
+        ["jellyfin", "mediaServer", "ok"],
+      ]);
+      expect(byId("plex")).toMatchObject({ detail: { activeSessions: 2 } });
+      expect(byId("jellyfin")).toMatchObject({ detail: { activeSessions: 1 } });
+    });
+
+    it("one media server failing doesn't break the other", async () => {
+      await plex({ claimed: true, sessions: "idle" });
+      const dead = await jellyfin({ setupCompleted: true, sessions: "none" });
+      await dead.close();
+
+      const { byId } = await get();
+      expect(byId("jellyfin").state).toBe("down");
+      expect(byId("jellyfin").error).toMatch(/connection refused/i);
+      expect(byId("plex").state).toBe("ok");
+      expect(byId("plex")).toMatchObject({ detail: { activeSessions: 0 } });
+    });
   });
 });
