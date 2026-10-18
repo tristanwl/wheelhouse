@@ -34,9 +34,10 @@ jobs:
           [ -n "$USERNAME" ] || { echo "::error::Set the DOCKERHUB_USERNAME repository variable"; exit 1; }
           [ -n "$PAT" ] || { echo "::error::Set the DOCKERHUB_PAT repository secret"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Check the tag is on main and matches package.json
         run: |
@@ -46,15 +47,15 @@ jobs:
           [ "$version" = "$GITHUB_REF_NAME" ] \
             || { echo "::error::Tag $GITHUB_REF_NAME does not match package.json ($version)"; exit 1; }
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PAT }}
 
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
           # No `latest` tag until authentication ships: an unauthenticated
@@ -64,8 +65,11 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref_name, '0.0.') }}
 
-      # amd64 only for now: libva-intel-driver (Dockerfile) is x86-only.
-      - uses: docker/build-push-action@v6
+      # amd64 only until the arm64 image has been verified on real hardware
+      # (issue #14). The Dockerfile is multi-arch ready: it cross-compiles and
+      # installs the Intel drivers on x86 only. The version stamped into the
+      # binary is read from package.json, which the check above ties to the tag.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64
