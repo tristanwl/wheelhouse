@@ -31,10 +31,16 @@ git clone https://github.com/tristanwl/wheelhouse.git
 cd wheelhouse
 cp .env.example .env                               # fill in URLs and API keys
 cp docker-compose.example.yml docker-compose.yml   # adjust media paths
+mkdir config                                       # settings volume (create it yourself)
 docker compose up -d
 ```
 
 Then open http://localhost:3050.
+
+The container runs as a non-root user (UID/GID 1000 by default). If your media
+or `./config` belong to someone else, set `user: "UID:GID"` in the compose
+file. Create `./config` before the first start: if Docker creates it, it is
+root-owned and Wheelhouse can't save settings.
 
 This pulls the published image, [`tristanwl/wheelhouse`](https://hub.docker.com/r/tristanwl/wheelhouse)
 on Docker Hub (linux/amd64). There is no `latest` tag while Wheelhouse is
