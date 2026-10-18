@@ -16,6 +16,13 @@ What it serves today:
   (`{protocol, port?, path}`, never host, credentials or query).
 - `GET /api/downloads` returns `instances` (every client, `up` false with a
   reason when it cannot answer) and normalized `items`.
+- `GET /api/explore?category=theaters|bluray|popular[&limit=1..60][&page=n]`
+  returns `results` (TMDB movies with `alreadyAdded`, true when any Radarr
+  instance has the movie) and `hasMore`. `GET /api/explore/{id}` returns one
+  movie's detail with `genres`, `runtime`, `backdropUrl` and `trailerKey`. A
+  category that is not one of the three or an `id` that is not an integer is a
+  400. TMDB not configured, rejected, down or slow is a 502 with a redacted
+  message; a Radarr that cannot answer just does not count as "in library".
 - Any other `/api/...` path is a JSON 404.
 - Everything else is the embedded UI: a placeholder page (`internal/ui/dist`),
   with a fallback to `index.html` for paths that are not files. Replaced by the
@@ -166,6 +173,7 @@ internal/features     feature gating (port of lib/features/registry.ts and serve
 internal/status       GET /api/status logic (port of lib/status.ts and its route)
 internal/downloads    GET /api/downloads logic
 internal/library      library, storage, search, add-meta, details, seasons bodies
+internal/explore      GET /api/explore and /api/explore/{id} logic
 internal/providers/all  the registry of every provider
 internal/middleware   request ID, security headers, access log, recovery
 internal/providers/core  provider core (port of lib/providers/core)

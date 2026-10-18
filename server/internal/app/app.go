@@ -97,6 +97,7 @@ func Routes(o Options) *Router {
 	registerCore(r, d)
 	registerStack(r, d)
 	registerLibrary(r, d)
+	registerExplore(r, d)
 
 	// Anything else under /api is a JSON 404, never the UI.
 	r.HandleFunc("/api", Public, apiNotFound)
