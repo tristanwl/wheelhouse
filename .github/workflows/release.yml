@@ -1,0 +1,95 @@
+name: Release
+
+# Pushing a tag like 0.0.1 runs the full CI checks, then builds the image,
+# pushes it to Docker Hub, and creates a GitHub release with generated notes.
+#
+# One-time setup (repo settings -> Secrets and variables -> Actions):
+#   secret   DOCKERHUB_PAT        Docker Hub access token with read/write
+#   variable DOCKERHUB_USERNAME   Docker Hub user or org that owns the image
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release
+    env:
+      IMAGE: ${{ vars.DOCKERHUB_USERNAME }}/wheelhouse
+    steps:
+      - name: Check Docker Hub configuration
+        env:
+          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          PAT: ${{ secrets.DOCKERHUB_PAT }}
+        run: |
+          [ -n "$USERNAME" ] || { echo "::error::Set the DOCKERHUB_USERNAME repository variable"; exit 1; }
+          [ -n "$PAT" ] || { echo "::error::Set the DOCKERHUB_PAT repository secret"; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag is on main and matches package.json
+        run: |
+          git branch -r --contains "$GITHUB_SHA" | grep -qE '^\s*origin/main$' \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+          version="$(node -p "require('./package.json').version")"
+          [ "$version" = "$GITHUB_REF_NAME" ] \
+            || { echo "::error::Tag $GITHUB_REF_NAME does not match package.json ($version)"; exit 1; }
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PAT }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          # No `latest` tag until authentication ships: an unauthenticated
+          # app should not be what `docker pull wheelhouse` gets by default.
+          flavor: latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref_name, '0.0.') }}
+
+      # amd64 only for now: libva-intel-driver (Dockerfile) is x86-only.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$GITHUB_REF_NAME"
+          flags=()
+          notes="Docker image: \`docker pull $IMAGE:$version\`"
+          case "$GITHUB_REF_NAME" in
+            0.0.* | *-*)
+              flags+=(--prerelease)
+              notes="$notes"$'\n\n'"**Alpha.** Wheelhouse has no authentication yet. Run it only on a trusted network."
+              ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag --generate-notes \
+            --title "Wheelhouse $version" \
+            --notes "$notes" \
+            "${flags[@]}"
