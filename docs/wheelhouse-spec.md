@@ -735,16 +735,4 @@ need Pro). The result decides go or no-go.
 - **Queue persistence.** Job state is in memory, so a restart discards
   running and queued conversions. Decide whether to persist it (SQLite in
   Phase 2 makes this cheap).
-- **Next.js versus a lighter stack (decide at the start of Phase 2).** Staying
-  on TypeScript is the settled choice: the app is I/O-bound (ffmpeg does the
-  heavy work as a separate process), uses 77 MB, and TypeScript gives shared
-  client/server types and zod schemas that will drive the admin forms. The
-  open question is the framework. The UI is almost entirely client-rendered
-  with SWR and barely uses server rendering, while Next.js has cost us 23
-  security advisories and the 14 to 15 breaking changes in a week. The
-  alternative is a Vite single-page app with a small Node server (Hono or
-  Fastify). Next's middleware and API routes make the auth work in Phase 2
-  easier, so weigh that against the churn and attack surface before building
-  auth on top of it. A rewrite to Go was considered and rejected (no
-  measurable gain, large cost); revisit only if a no-runtime single binary
-  becomes a goal.
+- **Next.js versus a lighter stack.** Decided: see [wheelhouse-spec-phase2.md](wheelhouse-spec-phase2.md).
