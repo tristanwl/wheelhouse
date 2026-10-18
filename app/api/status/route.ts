@@ -6,10 +6,9 @@ import {
   getSystemStatus,
   type HealthIssue,
 } from "@/lib/arr-client";
-import { getRuntime, redact, type DownloadClient } from "@/lib/providers";
+import { getRuntime, redact, type DownloadClient, type MediaServer } from "@/lib/providers";
 import { formatEta } from "@/lib/format";
 import { env } from "@/lib/env";
-import { getPlexIdentity, getPlexServerInfo, getPlexSessions } from "@/lib/plex-client";
 
 export const dynamic = "force-dynamic";
 
@@ -98,8 +97,12 @@ async function sabStatus(): Promise<SabStatus> {
 interface PlexStatus {
   up: boolean;
   configured: boolean;
-  tokenConfigured: boolean;
-  claimed?: boolean;
+  /** Whether Wheelhouse can read session data (a working token). */
+  authenticated?: boolean;
+  /** The server itself isn't ready (an unclaimed Plex). */
+  needsSetup?: boolean;
+  /** Something for the user to know or do, in plain words. */
+  notice?: string;
   version?: string;
   friendlyName?: string;
   activeSessions?: number;
@@ -107,47 +110,29 @@ interface PlexStatus {
 }
 
 async function plexStatus(): Promise<PlexStatus> {
-  const tokenConfigured = Boolean(env.plexToken);
-  if (!env.plexUrl) {
-    return {
-      up: false,
-      configured: false,
-      tokenConfigured,
-      error: "PLEX_URL not configured",
-    };
+  const runtime = getRuntime();
+  const resolved = (await runtime.listInstances()).find((r) => r.instance.id === "plex");
+  if (!resolved) return { up: false, configured: false };
+  if (resolved.status !== "ready") {
+    return { up: false, configured: true, error: resolved.error ?? resolved.status };
   }
-
   try {
-    const identity = await getPlexIdentity();
-    const base: PlexStatus = {
+    const status = await (await runtime.getClient<MediaServer>("plex")).getStatus();
+    return {
       up: true,
       configured: true,
-      tokenConfigured,
-      claimed: identity.claimed,
-      version: identity.version,
+      authenticated: status.authenticated,
+      needsSetup: status.state === "needs-setup",
+      notice: status.notice,
+      version: status.version,
+      friendlyName: status.name,
+      activeSessions: status.activeSessions,
     };
-
-    if (identity.claimed && tokenConfigured) {
-      try {
-        const [info, sessions] = await Promise.all([getPlexServerInfo(), getPlexSessions()]);
-        return {
-          ...base,
-          friendlyName: info.friendlyName,
-          activeSessions: sessions.size,
-        };
-      } catch {
-        // Token present but invalid/expired — fall back to unauthenticated info.
-        return base;
-      }
-    }
-
-    return base;
   } catch (err) {
     return {
       up: false,
       configured: true,
-      tokenConfigured,
-      error: err instanceof Error ? err.message : "unknown error",
+      error: err instanceof Error ? redact(err.message) : "unknown error",
     };
   }
 }

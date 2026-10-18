@@ -539,7 +539,7 @@ the modal every 2s via SWR until the job reaches a terminal state.
 `lib/arr-client.ts` is the shared Sonarr/Radarr REST client (adds
 `X-Api-Key`, base URL); `lib/providers/download-client/sabnzbd.ts` is the
 SABnzbd adapter (query-param API style; a wrong key is an HTTP 403 with a
-plain-text body); `lib/plex-client.ts` talks to Plex's API
+plain-text body); `lib/providers/media-server/plex.ts` is the Plex adapter
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
 `/identity`); `lib/tmdb-client.ts` talks to TMDB directly (`api_key` query
 param, not a header — that one's TMDB's own convention, not ours).

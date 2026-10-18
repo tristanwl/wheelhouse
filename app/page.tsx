@@ -47,8 +47,9 @@ interface SabStatus {
 interface PlexStatus {
   up: boolean;
   configured: boolean;
-  tokenConfigured: boolean;
-  claimed?: boolean;
+  authenticated?: boolean;
+  needsSetup?: boolean;
+  notice?: string;
   version?: string;
   friendlyName?: string;
   activeSessions?: number;
@@ -188,20 +189,15 @@ export default function DashboardPage() {
               lines={[
                 status?.plex.friendlyName ?? "",
                 status?.plex.version ? `v${status.plex.version}` : "",
-                status?.plex.tokenConfigured
+                status?.plex.authenticated
                   ? `${status.plex.activeSessions ?? 0} active session${
                       status.plex.activeSessions === 1 ? "" : "s"
                     }`
                   : "",
               ].filter(Boolean)}
-              warnings={[
-                status?.plex.up && !status.plex.claimed
-                  ? "Not claimed yet - finish setup at :32400/web"
-                  : "",
-                status?.plex.up && status.plex.claimed && !status.plex.tokenConfigured
-                  ? "PLEX_TOKEN not set - showing basic status only"
-                  : "",
-              ].filter(Boolean)}
+              warnings={[status?.plex.up ? status.plex.notice : ""].filter((w): w is string =>
+                Boolean(w)
+              )}
               error={
                 status?.plex.configured === false ? "PLEX_URL not configured" : status?.plex.error
               }
