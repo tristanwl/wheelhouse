@@ -7,7 +7,9 @@ import type { ConnectionResult } from "../core/types";
 // categories are TMDB-specific. It is a provider so that it shows up in
 // config, testConnection and feature gating. Revisit when TVDB is on the table.
 
-const configSchema = z.object({ apiKey: z.string().min(1) });
+// `url` is optional and exists so tests (and anyone behind a TMDB-compatible
+// proxy) can point at another API root; it is the full base including "/3".
+const configSchema = z.object({ apiKey: z.string().min(1), url: z.url().optional() });
 
 type TmdbConfig = z.infer<typeof configSchema>;
 
@@ -17,13 +19,13 @@ export interface TmdbClient {
   testConnection(): Promise<ConnectionResult>;
 }
 
-const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+export const DEFAULT_TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
 function createClient(config: TmdbConfig, label: string): TmdbClient {
   // TMDB takes its key as an `api_key` query parameter. The http helper never
   // echoes URLs in errors, and the key is redacted from them as well.
   const http = createHttpClient({
-    baseUrl: TMDB_BASE_URL,
+    baseUrl: config.url ?? DEFAULT_TMDB_BASE_URL,
     label,
     headers: { Accept: "application/json" },
     secrets: [config.apiKey],

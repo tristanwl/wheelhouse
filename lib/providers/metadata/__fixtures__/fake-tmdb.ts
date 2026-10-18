@@ -9,16 +9,24 @@ export interface FakeTmdbOptions {
   movieIds?: number[];
 }
 
-const json = (body: unknown, status = 200) =>
+export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
-const movie = (id: number) => ({
+export const movie = (id: number) => ({
   id,
   title: `Example Movie ${id}`,
   overview: "A made-up plot.",
   release_date: "2024-01-01",
   poster_path: `/poster${id}.jpg`,
   vote_average: 7.5,
+});
+
+export const movieDetail = (id: number) => ({
+  ...movie(id),
+  genres: [{ id: 1, name: "Drama" }],
+  runtime: 100,
+  backdrop_path: "/backdrop.jpg",
+  videos: { results: [] },
 });
 
 /**
@@ -56,13 +64,7 @@ export function installFakeTmdb(options: FakeTmdbOptions = {}) {
       return json({ images: { base_url: "http://image.example.com" } });
     const detail = /^\/movie\/(\d+)$/.exec(path);
     if (detail) {
-      return json({
-        ...movie(Number(detail[1])),
-        genres: [{ id: 1, name: "Drama" }],
-        runtime: 100,
-        backdrop_path: "/backdrop.jpg",
-        videos: { results: [] },
-      });
+      return json(movieDetail(Number(detail[1])));
     }
     // Any list endpoint.
     return json({ results: movieIds.map(movie), total_pages: 1 });

@@ -9,6 +9,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:acceptance": "vitest run --config acceptance/vitest.config.mts",
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check ."

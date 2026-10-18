@@ -28,6 +28,11 @@ npm run typecheck && npm run lint && npm run format:check && npm test && npm run
 environment variables (every page and API answers 200; only the Dashboard is
 enabled): `npm run build`, then run `.next/standalone/server.js`.
 
+`npm run test:acceptance` (after a build) runs the black-box HTTP suite in
+`acceptance/` against the built server; CI runs it as its own job. It is the
+definition of done for the Go port, so a new route must be added to
+`acceptance/routes.ts` (see `acceptance/README.md`).
+
 ## How it is built
 
 Next.js 15 (App Router) + React 19, SWR for polling, Tailwind. No database.
