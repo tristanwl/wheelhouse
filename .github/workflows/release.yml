@@ -65,7 +65,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref_name, '0.0.') }}
 
       # amd64 only for now: libva-intel-driver (Dockerfile) is x86-only.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
