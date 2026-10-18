@@ -75,21 +75,36 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create GitHub release
+      # Works whether the release is created here (tag pushed from a terminal)
+      # or by hand in the GitHub UI first (which also creates the tag): an
+      # existing release keeps its title and generated notes and gets the image
+      # line and the right pre-release flag added.
+      - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="$GITHUB_REF_NAME"
-          flags=()
-          notes="Docker image: \`docker pull $IMAGE:$version\`"
-          case "$GITHUB_REF_NAME" in
-            0.0.* | *-*)
-              flags+=(--prerelease)
-              notes="$notes"$'\n\n'"**Alpha.** Wheelhouse has no authentication yet. Run it only on a trusted network."
-              ;;
-          esac
-          gh release create "$GITHUB_REF_NAME" \
-            --verify-tag --generate-notes \
-            --title "Wheelhouse $version" \
-            --notes "$notes" \
-            "${flags[@]}"
+          prerelease=false
+          case "$version" in 0.0.* | *-*) prerelease=true ;; esac
+
+          extra="Docker image: \`docker pull $IMAGE:$version\`"
+          if [ "$prerelease" = true ]; then
+            extra="$extra"$'\n\n'"**Alpha.** Wheelhouse has no authentication yet. Run it only on a trusted network."
+          fi
+
+          if gh release view "$version" > /dev/null 2>&1; then
+            body="$(gh release view "$version" --json body --jq .body)"
+            if ! grep -qF "docker pull $IMAGE:$version" <<< "$body"; then
+              printf '%s\n\n%s\n' "$extra" "$body" > "$RUNNER_TEMP/notes.md"
+              gh release edit "$version" --notes-file "$RUNNER_TEMP/notes.md"
+            fi
+            gh release edit "$version" --prerelease="$prerelease"
+          else
+            flags=()
+            [ "$prerelease" = true ] && flags+=(--prerelease)
+            gh release create "$version" \
+              --verify-tag --generate-notes \
+              --title "Wheelhouse $version" \
+              --notes "$extra" \
+              "${flags[@]}"
+          fi
