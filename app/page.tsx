@@ -1,69 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { formatBytes, formatEta } from "@/lib/format";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
 import type { DownloadsResponse } from "@/app/api/downloads/route";
+import { STATUS_ROLES, describeInstance, serviceHref, type StatusResponse } from "@/lib/status";
 import type { StorageResponse } from "@/app/api/storage/route";
 import { describeDownloadState } from "@/lib/providers/download-client/types";
-
-interface IndexerSummary {
-  total: number;
-  enabled: number;
-  issues: string[];
-}
-
-interface ArrStatus {
-  up: boolean;
-  configured: boolean;
-  version?: string;
-  health: { type: string; message: string }[];
-  queueCount: number;
-  indexers?: IndexerSummary;
-  error?: string;
-}
-
-interface SabServerStatus {
-  name: string;
-  connections: number;
-  ssl: boolean;
-  enabled: boolean;
-}
-
-interface SabStatus {
-  up: boolean;
-  paused?: boolean;
-  status?: string;
-  kbpersec?: number;
-  queueCount?: number;
-  timeleft?: string;
-  servers?: SabServerStatus[];
-  warnings?: string[];
-  error?: string;
-}
-
-interface PlexStatus {
-  up: boolean;
-  configured: boolean;
-  authenticated?: boolean;
-  needsSetup?: boolean;
-  notice?: string;
-  version?: string;
-  friendlyName?: string;
-  activeSessions?: number;
-  error?: string;
-}
-
-interface StatusResponse {
-  sonarr: ArrStatus;
-  radarr: ArrStatus;
-  sabnzbd: SabStatus;
-  plex: PlexStatus;
-}
 
 // Fallback for the initial server-rendered pass — swapped for whatever
 // hostname the browser actually used to reach Wheelhouse once mounted, so
@@ -76,16 +23,6 @@ export default function DashboardPage() {
   useEffect(() => {
     setHost(window.location.hostname);
   }, []);
-  const SERVICE_URLS = useMemo(
-    () => ({
-      sonarr: `http://${host}:8989`,
-      radarr: `http://${host}:7878`,
-      sabnzbd: `http://${host}:8080`,
-      plex: `http://${host}:32400/web`,
-    }),
-    [host]
-  );
-
   const { data: status, error: statusError } = useSWR<StatusResponse>("/api/status", fetcher, {
     refreshInterval: 15000,
   });
@@ -103,108 +40,58 @@ export default function DashboardPage() {
           Service status
         </h2>
         {statusError && <p className="text-sm text-red-400">Failed to load status.</p>}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <a
-            href={SERVICE_URLS.sonarr}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block transition hover:opacity-80"
-          >
-            <StatusCard
-              name="Sonarr"
-              up={status?.sonarr.up ?? false}
-              lines={[
-                `queue: ${status?.sonarr.queueCount ?? "-"}`,
-                status?.sonarr.indexers
-                  ? `indexers: ${status.sonarr.indexers.enabled}/${status.sonarr.indexers.total}`
-                  : "",
-                status?.sonarr.version ? `v${status.sonarr.version}` : "",
-              ].filter(Boolean)}
-              warnings={status?.sonarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
-              error={
-                status?.sonarr.configured === false
-                  ? "SONARR_URL not configured"
-                  : status?.sonarr.error
-              }
-            />
-          </a>
-          <a
-            href={SERVICE_URLS.radarr}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block transition hover:opacity-80"
-          >
-            <StatusCard
-              name="Radarr"
-              up={status?.radarr.up ?? false}
-              lines={[
-                `queue: ${status?.radarr.queueCount ?? "-"}`,
-                status?.radarr.indexers
-                  ? `indexers: ${status.radarr.indexers.enabled}/${status.radarr.indexers.total}`
-                  : "",
-                status?.radarr.version ? `v${status.radarr.version}` : "",
-              ].filter(Boolean)}
-              warnings={status?.radarr.health?.filter((h) => h.type !== "ok").map((h) => h.message)}
-              error={
-                status?.radarr.configured === false
-                  ? "RADARR_URL not configured"
-                  : status?.radarr.error
-              }
-            />
-          </a>
-          <a
-            href={SERVICE_URLS.sabnzbd}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block transition hover:opacity-80"
-          >
-            <StatusCard
-              name="SABnzbd"
-              up={status?.sabnzbd.up ?? false}
-              lines={[
-                `status: ${status?.sabnzbd.status ?? "-"}`,
-                status?.sabnzbd.paused ? "paused" : "",
-                status?.sabnzbd.kbpersec ? `${formatBytes(status.sabnzbd.kbpersec * 1024)}/s` : "",
-                status?.sabnzbd.queueCount ? `${status.sabnzbd.queueCount} in queue` : "",
-                status?.sabnzbd.timeleft && status.sabnzbd.timeleft !== "0:00:00"
-                  ? `${status.sabnzbd.timeleft} left`
-                  : "",
-                ...(status?.sabnzbd.servers ?? []).map(
-                  (s) =>
-                    `${s.enabled ? "server" : "server disabled"}: ${s.name} (${s.connections} conn${s.ssl ? ", ssl" : ""})`
-                ),
-              ].filter(Boolean)}
-              warnings={status?.sabnzbd.warnings}
-              error={status?.sabnzbd.error}
-            />
-          </a>
-          <a
-            href={SERVICE_URLS.plex}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block transition hover:opacity-80"
-          >
-            <StatusCard
-              name="Plex"
-              up={status?.plex.up ?? false}
-              lines={[
-                status?.plex.friendlyName ?? "",
-                status?.plex.version ? `v${status.plex.version}` : "",
-                status?.plex.authenticated
-                  ? `${status.plex.activeSessions ?? 0} active session${
-                      status.plex.activeSessions === 1 ? "" : "s"
-                    }`
-                  : "",
-              ].filter(Boolean)}
-              warnings={[status?.plex.up ? status.plex.notice : ""].filter((w): w is string =>
-                Boolean(w)
-              )}
-              error={
-                status?.plex.configured === false ? "PLEX_URL not configured" : status?.plex.error
-              }
-            />
-          </a>
-        </div>
+        {status && status.instances.length === 0 && (
+          <p className="text-sm text-slate-500">
+            No services are configured yet. See the{" "}
+            <a
+              href="https://github.com/tristanwl/wheelhouse#configuration"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              Configuration section of the README
+            </a>
+            .
+          </p>
+        )}
+        {STATUS_ROLES.map(({ role, heading }) => {
+          const group = status?.instances.filter((i) => i.role === role) ?? [];
+          if (group.length === 0) return null;
+          return (
+            <div key={role} className="mb-4 last:mb-0">
+              <h3 className="mb-2 text-xs font-medium text-slate-500">{heading}</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {group.map((instance) => {
+                  const { lines, warnings } = describeInstance(instance);
+                  const card = (
+                    <StatusCard
+                      name={instance.name}
+                      state={instance.state}
+                      lines={lines}
+                      warnings={warnings}
+                      error={instance.error}
+                    />
+                  );
+                  return instance.link ? (
+                    <a
+                      key={instance.id}
+                      href={serviceHref(host, instance.link)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block min-w-0 transition hover:opacity-80"
+                    >
+                      {card}
+                    </a>
+                  ) : (
+                    <div key={instance.id} className="min-w-0">
+                      {card}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </section>
 
       <section>

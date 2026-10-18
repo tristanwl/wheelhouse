@@ -4,6 +4,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHttpClient, joinUrl, ProviderError, redact } from "./http";
 
 describe("redact", () => {
+  it("masks credentials embedded in a URL", () => {
+    expect(redact("failed: http://user:pa55word@host.example.com:8080/x")).toBe(
+      "failed: http://***@host.example.com:8080/x"
+    );
+  });
+
   it("strips known secret values, including URL-encoded ones", () => {
     expect(redact("key abc123XYZ and abc%2B123", ["abc123XYZ", "abc+123"])).toBe("key *** and ***");
   });

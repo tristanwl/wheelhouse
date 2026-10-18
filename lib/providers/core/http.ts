@@ -17,6 +17,9 @@ export class ProviderError extends Error {
 // them (SABnzbd, for one, takes its API key as a query parameter).
 const SECRET_PARAM = /\b(api[_-]?key|token|password|passwd|secret|x-plex-token)=([^&\s"'<>]+)/gi;
 
+// user:password@ in a URL.
+const URL_CREDENTIALS = /(\/\/)[^/\s@]+@/g;
+
 /** Replaces known secret values and common secret query parameters with ***. */
 export function redact(text: string, secrets: readonly string[] = []): string {
   let out = text;
@@ -27,7 +30,7 @@ export function redact(text: string, secrets: readonly string[] = []): string {
       out = out.split(variant).join("***");
     }
   }
-  return out.replace(SECRET_PARAM, "$1=***");
+  return out.replace(URL_CREDENTIALS, "$1***@").replace(SECRET_PARAM, "$1=***");
 }
 
 export interface HttpClientOptions {

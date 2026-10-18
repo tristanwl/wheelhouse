@@ -34,17 +34,27 @@ every other site's home link.
 
 ## Pages
 
-- `/` — dashboard: status cards for sonarr/radarr/sabnzbd/plex (up/down,
-  queue size, health warnings, indexer counts for sonarr/radarr, configured
-  usenet server + connection count for sabnzbd) and a storage bar per root
-  folder (TV, Movies). Every status card links out to that service's own web
-  UI, built from `window.location.hostname:<port>` at render time — not a
-  hardcoded hostname — so the links work the same way you reached
-  Wheelhouse (by IP, mDNS name, Tailscale, whatever), rather than assuming
-  mDNS resolves from every client. Set client-side in a `useEffect` (falls
-  back to `localhost` for the initial server-rendered pass, to avoid a
+- `/` — dashboard: one status card per configured instance, grouped under
+  Media managers, Download clients and Media servers (so Radarr and Radarr 4K
+  each get a card), driven by `/api/status`. A card shows its state dot (ok,
+  degraded, needs setup, down), the role's details (queue size and indexer
+  counts for Sonarr/Radarr; status, speed, queue and usenet servers for
+  download clients; name, version and active sessions for media servers) and
+  its warnings. With nothing configured the section points at the README's
+  Configuration section. Warnings show severity and a relative age ("1h
+  ago"), those older than 24 hours are hidden, and every piece of text on a
+  card wraps (`break-words`, `min-w-0`) so a long path can't overflow it. The
+  pure logic (visibility, link building, card lines) is in `lib/status.ts`.
+  Every card links out to that service's own web UI. The server sends only
+  the configured port and path (`link`); the browser adds
+  `window.location.hostname`, not a hardcoded hostname, so the links work the
+  same way you reached Wheelhouse (by IP, mDNS name, Tailscale, whatever),
+  rather than assuming mDNS resolves from every client (and the configured
+  host may be a container-internal name). Set client-side in a `useEffect`
+  (falls back to `localhost` for the initial server-rendered pass, to avoid a
   hydration mismatch, then swaps in the real host once mounted — the swap is
-  effectively instant). Clicking a storage bar instead navigates to
+  effectively instant). Below the cards is a storage bar per root folder (TV,
+  Movies); clicking a storage bar instead navigates to
   `/library?path=<rootFolderPath>`, pre-filtered to that volume. A Downloads
   section below Storage shows SABnzbd's active queue live (filename,
   progress bar, speed, ETA) — polled every 5s, faster than the 15s status
@@ -415,17 +425,19 @@ the modal every 2s via SWR until the job reaches a terminal state.
 
 ## API routes (all server-side proxies — API keys never reach the browser)
 
-- `GET /api/status` — aggregates the default sonarr and radarr instances'
-  system status + health + queue + indexers, sabnzbd's queue + configured servers + warnings, and
-  Plex's identity/sessions, into one response. Each service fails
-  independently (`up: false` + error message) rather than taking the whole
-  route down. Plex degrades in stages: no `PLEX_URL` → `configured: false`;
-  unclaimed or no `PLEX_TOKEN` → basic version info only via the
-  unauthenticated `/identity` endpoint; claimed + tokened → also fetches
-  server name and active session count via `/` and `/status/sessions`.
-  Without `SONARR_*`/`RADARR_*` set, those two keys answer `configured:
-  false` and the dashboard says so. (One card per instance comes with the
-  instance-based status response, not yet.) Sonarr/Radarr's indexer summary (`{ total, enabled, issues }`) comes from
+- `GET /api/status` — `{ instances: [...] }`, one entry per enabled
+  instance with `id`, `providerId`, `role`, `name`, `state` (`ok`,
+  `degraded`, `needs-setup`, `down`), `version`, `error`, `link` and the
+  role's normalized `detail` (see the spec's "`/api/status` shape" for the
+  state rules). Instances are queried in parallel and each fails
+  independently (`state: "down"` + a redacted `error`, no `detail`) rather
+  than taking the route down; a misconfigured instance is `down` too. Plex
+  degrades in stages: unclaimed → `needs-setup`; no or rejected `PLEX_TOKEN`
+  → `ok` with basic version info from the unauthenticated `/identity`
+  endpoint and a `notice`; claimed + tokened → also server name and active
+  session count via `/` and `/status/sessions`. With nothing configured the
+  answer is `{ instances: [] }`.
+  Sonarr/Radarr's indexer summary (`{ total, enabled, issues }`) comes from
   `/api/v3/indexer` cross-referenced with `/api/v3/health` entries whose
   `source` starts with `Indexer` — there's no per-indexer live backoff/health
   endpoint in this API version (`/api/v3/indexerstatus` 404s on both

@@ -373,12 +373,38 @@ Replace the fixed `{ sonarr, radarr, sabnzbd, plex }` with:
     id: string; providerId: string; role: Role; name: string;
     state: "ok" | "degraded" | "down" | "needs-setup";
     version?: string; error?: string;
-    detail: MediaManagerStatus | DownloadClientStatus | MediaServerStatus;
+    link?: { port?: number; path: string };
+    detail?: MediaManagerStatus | DownloadClientStatus | MediaServerStatus;
 }> }
 ```
 
 The dashboard renders one card per instance, grouped by role. This is a
 breaking API change, which is fine pre-release; the only consumer is our UI.
+
+Refinements made in PR 6, where this section was silent:
+
+- `ok`: reachable and nothing to report. `degraded`: reachable but with
+  problems: an arr health entry of type `warning` or `error`, or a download
+  client error-severity warning from the last 24 hours. `needs-setup`: the
+  service itself isn't ready (an unclaimed Plex). A Plex that is fine but has
+  no working token stays `ok` and carries its `notice`. `down`: unreachable,
+  rejected credentials, or an invalid configuration; `error` says which
+  (redacted) and `detail` is absent.
+- Disabled instances are omitted, as are instances whose role has no card
+  (TMDB). Instances are queried in parallel and a failure in one never affects
+  another. Order is role groups (media managers, download clients, media
+  servers), then configuration order. Nothing configured gives
+  `{ instances: [] }`.
+- `link` is computed on the server from the configured URL: only the port
+  (absent for a URL that uses the scheme's default) and the path prefix, plus
+  the provider's web UI path (`/web` for Plex). The configured host and any
+  credentials are never returned, because the host may be a container-internal
+  name; the browser takes the host from `window.location.hostname`. It is
+  absent when there is no usable `http(s)` URL. Links are always built with
+  `http://`.
+- Warnings older than 24 hours are not shown on a card, and a warning without a
+  timestamp always is. The card shows each warning's severity and a relative
+  age.
 
 ### Torrent-specific issue for the converter
 
@@ -435,7 +461,7 @@ Each PR keeps the app working.
      "in library" flag. Explore adds to the first ready movie instance (it has
      no instance picker yet).
    - `/api/status` keeps its shape for the default `sonarr` and `radarr`
-     instances, plus a `configured` flag; instance-based cards are PR 6.
+     instances, plus a `configured` flag; instance-based cards came in PR 6.
    - The response cache is in `createHttpClient` (`cacheTtlMs` per call,
      `invalidate()` per client) and is used for the library lists with a 5 s
      TTL; adapters clear it on add, delete, rescan, episode-file delete and
@@ -445,7 +471,13 @@ Each PR keeps the app working.
      library (only the term lookup carries it), which is why "in library" for
      search comes from the term lookup and add only uses the tmdb lookup as a
      template.
-6. **`/api/status` + dashboard**: instance-based cards.
+6. ✅ **`/api/status` + dashboard**: instance-based cards, grouped by role,
+   with a friendly empty state; links built from the configured port and path
+   instead of hardcoded ones. Also fixes issue #20 (long warnings overflowing
+   the card, stale warnings never expiring). State semantics and `link` are
+   described under "`/api/status` shape". `redact` now masks `user:pass@` in
+   URLs, because a malformed configured URL could otherwise echo its password
+   in a `down` instance's error.
 7. **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
    seeding rows, hardlink check in the converter.
 8. **Jellyfin adapter**: proves the MediaServer interface with a second
