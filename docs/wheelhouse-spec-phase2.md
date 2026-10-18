@@ -1,11 +1,10 @@
 # Wheelhouse spec: stack decision and Phase 2
 
-Status: draft for review. Migration steps 1 to 3 are done (acceptance suite,
-Go skeleton, provider core in `server/internal/providers/core`), as are the
-providers of step 4. Step 5 is in progress: the provider registration, the
-access-level router, the feature registry, `/api/status`, `/api/downloads` and
-`/api/explore` are done, as are the codec and converter routes (step 7, pulled
-forward) and the library group; step 6 (the Vite UI in `web/`) is done. It replaces the "Next.js
+Status: migration steps 1 to 8 are done and shipped as release 0.2.0: the
+acceptance suite, the Go server (provider core, providers, routes, feature
+registry, codec and converter routes), the Vite UI in `web/`, and the cut-over
+(the Next.js app is deleted; the image is built from the Go server and the UI).
+Step 9, the Phase 2 features, is next. This document replaced the "Next.js
 versus a lighter stack" open question in [wheelhouse-spec.md](wheelhouse-spec.md)
 and defines the work needed to reach 1.0.0.
 
@@ -145,11 +144,16 @@ The behaviour is defined first, then the server is rebuilt against it.
 7. **Converter in Go:** ffmpeg arguments, hardware-encode detection, hardlink
    check, queue. (Done, pulled forward with step 5: `internal/codecs`,
    `internal/converter`, `app/routes_codecs.go`.)
-8. **Cut over:** remove Next, update the Dockerfile and release workflow, ship as
-   0.2.0.
+8. **Cut over** (done, 0.2.0): the Next app, its tests and configs are removed; the
+   fake services and fixtures moved to `acceptance/fakes` as the single source;
+   the Dockerfile builds the UI and the Go binary and runs on Alpine with ffmpeg and
+   the VA-API drivers (non-root, any `--user`, read-only root filesystem, built-in
+   health check, multi-arch ready); CI and the release workflow build and test that
+   image; `PORT` and every service variable are unchanged and `HOSTNAME` is no
+   longer read (`WHEELHOUSE_LISTEN` sets the bind address).
 9. **Phase 2 features,** then the security review, then 1.0.0.
 
-Each step is its own PR, and the Next app keeps working until step 8.
+Each step was its own PR, and the Next app kept working until step 8.
 
 ## Open questions
 

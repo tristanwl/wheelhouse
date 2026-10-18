@@ -1,13 +1,14 @@
 # Wheelhouse Go server
 
-The Go server that will replace the Next.js app, built alongside it per
-[docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md) (migration
-steps 2 to 5). The standard library only; the provider core and all providers
-are in place (see below) and the API routes are being ported.
+The Wheelhouse server: one static Go binary (standard library only) that serves
+the API and the embedded UI. It replaced the Next.js app in release 0.2.0
+([docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md), migration
+steps 2 to 8). Comments in the code that mention `lib/...` or `app/...` refer to
+that app, which is in git history (tag `0.1.1`).
 
-What it serves today:
+What it serves:
 
-- `GET /healthz` returns `{"status":"ok"}`.
+- `GET /healthz` returns `{"status":"ok","version":"<version>"}`.
 - `GET /api/features` gates Dashboard, Library, Explore and Codecs on the
   configured instances and on `ffmpeg` (probed once per process).
 - `GET /api/status` returns one entry per media manager, download client and
@@ -41,11 +42,16 @@ answers a generic 500 and never logs the panic value.
 
 | Variable   | Default   | Meaning                  |
 | ---------- | --------- | ------------------------ |
-| `PORT`     | `3000`    | TCP port                 |
-| `HOSTNAME` | `0.0.0.0` | Address to listen on     |
-| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH`. Tests and the acceptance suite set it; installs keep the default until issue #31 |
+| `PORT`     | `3000`    | TCP port (the image sets `3050`) |
+| `WHEELHOUSE_LISTEN` | `0.0.0.0:$PORT` | Address to listen on, `host:port` (`:3050`, `127.0.0.1:3050`, `[::]:3050`); overrides `PORT` |
+| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
 
-The services are configured with the same variables as the Next app (`SONARR_URL`,
+`HOSTNAME` is **not read**. Container runtimes set it to the container id (and
+to the machine's name with host networking), so using it as the bind address
+broke the listener; the old Next image forced `HOSTNAME=0.0.0.0` for the same
+reason. Settings are saved to `/config/settings.json`.
+
+The services are configured with the same variables as the 0.1.x Next app (`SONARR_URL`,
 `SONARR_API_KEY`, ..., `TMDB_API_KEY`; see the main README). A service URL must
 not contain `user:pass@`: such an instance is an invalid config.
 
@@ -69,8 +75,7 @@ tests build the whole app over fake services. Provider wiring lives in
 Library routes (`routes_library.go`, logic in `internal/library`): the two
 `DELETE /api/library/...` routes are `Admin` and require `?confirm=true`
 (issue #41), otherwise 400 and nothing is sent upstream; each confirmed delete
-logs an `audit` line. The Next UI does not send `confirm`; the Vite UI in `web/`
-sends it after its own confirm dialog.
+logs an `audit` line. The UI in `web/` sends `confirm` after its own confirm dialog.
 
 The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
 
@@ -80,8 +85,8 @@ The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
 `GET`/`PUT /api/codec-analysis/settings` (`/config/settings.json`),
 `GET /api/codec-analysis/encoders` (real throwaway encodes, cached),
 `GET`/`POST /api/codec-analysis/convert`, `GET /api/codec-analysis/convert/{jobId}`
-and `POST /api/codec-analysis/convert/{jobId}/cancel` are ported from
-`app/api/codec-analysis/**` (`internal/codecs`, `internal/converter`).
+and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
+`internal/codecs` and `internal/converter`.
 
 - ffmpeg and ffprobe run through `os/exec` with a context, never a shell; the
   arguments come from validated enums and an absolute, resolved path.
@@ -100,6 +105,25 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are ported from
   the real ffmpeg when the machine has one (with `libx264`) and skips otherwise.
 - HDR (`VideoDynamicRange` in `mediamanager.MediaInfo`) is deliberately not used
   yet (issue #32); the queue is in memory behind `converter.Queue` (issue #33).
+
+## Commands
+
+`wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
+this machine (at `WHEELHOUSE_LISTEN` or `PORT`) answers `/healthz`, for the
+image's `HEALTHCHECK`. `wheelhouse version` (or `--version`) prints the version,
+which `-ldflags "-X github.com/tristanwl/wheelhouse/server/internal/version.Version=0.2.0"`
+sets (the Dockerfile reads it from the root `package.json`; a plain `go build`
+says `dev`). The version is also in `/healthz` and the startup log line.
+
+## Container image
+
+The root `Dockerfile` builds the web UI, then this binary with the UI embedded,
+then an Alpine image with ffmpeg and the VA-API drivers; see the main README for
+running it and `docs/architecture.md` for the reasoning. The binary needs a
+writable `/config` (settings) and writes converted files next to the originals
+under the media roots; it uses `TMPDIR`/`/tmp` for nothing of its own, and the
+GPU drivers cache under `$HOME` (`/tmp` in the image), so a read-only root
+filesystem with a tmpfs `/tmp` works.
 
 ## Build, run, test
 
@@ -128,21 +152,21 @@ go vet ./... && go test -race ./... && golangci-lint run && govulncheck ./...
 
 ## Acceptance suite
 
-The black-box suite in [../acceptance](../acceptance/README.md) can target the
-binary:
+The black-box suite in [../acceptance](../acceptance/README.md) targets the
+binary (and the container image):
 
 ```sh
 make build
-cd .. && WHEELHOUSE_CMD=./server/wheelhouse npx vitest run \
-  --config acceptance/vitest.config.mts boot -t "page |reports only the Dashboard|unknown routes"
+cd .. && npm ci && npm run test:acceptance     # defaults to ./server/wheelhouse
 ```
 
-Most scenarios fail until the providers and routes are ported (steps 4 and 5).
+Its fakes and fixtures (`acceptance/fakes`) are the source of the fixture copies
+in the `testdata` directories of the Go fakes; a test next to each copy fails
+when they differ.
 
 ## Provider core
 
-`internal/providers/core` (package `core`) is the Go port of
-`lib/providers/core`: roles, provider definitions and registry, config
+`internal/providers/core` (package `core`): roles, provider definitions and registry, config
 validation, config sources, the runtime and the HTTP client. It is a library
 for the providers and routes; the app builds its runtime over it.
 
@@ -174,8 +198,8 @@ Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
   larger response is a `ProviderError`, and the stream is cut off at the limit.
 - Redirects are followed only within the same host name, never from https to
   http; a redirect to another host is a `ProviderError` and is not followed.
-- TLS verification is always on. There is no insecure option (the TypeScript
-  `allowInsecureTls` was deferred and never built); a self-signed certificate is
+- TLS verification is always on. There is no insecure option (the 0.1.x
+  TypeScript `allowInsecureTls` was deferred and never built); a self-signed certificate is
   reported as "TLS certificate could not be verified".
 - Errors are `*core.ProviderError{Message, Status}`, built from the label, the
   path without its query and the numeric status. They are redacted: configured
@@ -187,7 +211,7 @@ Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
   cached, `Invalidate()` clears it (a read in flight at that moment is not
   cached). Each caller gets its own copy of the response.
 
-`EnvConfigSource` reads the same variables as the Next app (`SONARR_URL`,
+`EnvConfigSource` reads the same variables as the 0.1.x Next app (`SONARR_URL`,
 `SONARR_API_KEY`, ..., `TMDB_BASE_URL`, and `RADARR_4K_URL` style extras).
 `Instance.Config` holds secrets and is excluded from JSON, `fmt` and `slog`.
 
@@ -197,20 +221,21 @@ every error string, JSON description and log line the core can produce for them.
 ## Layout
 
 ```
-cmd/wheelhouse        main: config, signals, listener
+cmd/wheelhouse        main: config, signals, listener, healthcheck and version commands
 internal/app          routes, middleware chain, graceful Serve
-internal/config       environment settings
-internal/features     feature gating (port of lib/features/registry.ts and server.ts)
-internal/status       GET /api/status logic (port of lib/status.ts and its route)
+internal/config       listen address (PORT, WHEELHOUSE_LISTEN)
+internal/features     feature gating
+internal/status       GET /api/status logic
 internal/downloads    GET /api/downloads logic
-internal/codecs       codec analysis and preferences (lib/codec.ts, lib/settings.ts)
+internal/codecs       codec analysis and preferences (/config/settings.json)
 internal/converter    ffmpeg queue, encoder detection, path containment, hardlink check
 internal/library      library, storage, search, add-meta, details, seasons bodies
 internal/explore      GET /api/explore and /api/explore/{id} logic
 internal/providers/all  the registry of every provider
 internal/middleware   request ID, security headers, access log, recovery
-internal/providers/core  provider core (port of lib/providers/core)
+internal/providers/core  provider core
 internal/ui           embedded UI
+internal/version      the release version
 ```
 
 Adding a dependency needs a reason in the PR; use the newest version
