@@ -1,13 +1,18 @@
-node_modules
-.next
+**/node_modules
 .git
 .github
+.claude
 .env
 .env.*
 !.env.example
 *.log
-*.tsbuildinfo
 docs
-# The Go server is built separately until the Dockerfile switches to it
-server
-web
+acceptance
+deploy
+# Local build output: the image builds its own.
+web/dist
+web/test-results
+server/wheelhouse
+server/internal/ui/dist/*
+!server/internal/ui/dist/.gitkeep
+!server/internal/ui/dist/.gitignore

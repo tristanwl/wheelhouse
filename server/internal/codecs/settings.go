@@ -58,7 +58,10 @@ func (s *Store) get() Preferences {
 }
 
 // Set saves the preferences. The file is written to a temporary name and
-// renamed over the old one, so a crash never leaves it half-written.
+// renamed over the old one, so a crash never leaves it half-written. When that
+// is not possible (settings.json is a bind-mounted file, or the directory is
+// read-only but the file is writable) it is written in place, as the Next app
+// always did.
 func (s *Store) Set(p Preferences) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -67,18 +70,23 @@ func (s *Store) Set(p Preferences) error {
 	if err != nil {
 		return err
 	}
+	if s.replace(data) == nil {
+		return nil
+	}
+	return os.WriteFile(s.path(), data, 0o644) //nolint:gosec // settings.json holds no secret
+}
+
+// replace writes data to a temporary file next to settings.json and renames it
+// into place.
+func (s *Store) replace(data []byte) error {
 	tmp, err := os.CreateTemp(s.dir, ".settings-*.tmp")
 	if err != nil {
 		return err
 	}
 	_, werr := tmp.Write(data)
 	cerr := tmp.Close()
-	if err := firstErr(werr, cerr); err != nil {
-		_ = os.Remove(tmp.Name())
-		return err
-	}
 	// settings.json holds no secret; make it readable like a normally created file.
-	if err := os.Chmod(tmp.Name(), 0o644); err != nil { //nolint:gosec // see above
+	if err := firstErr(werr, cerr, os.Chmod(tmp.Name(), 0o644)); err != nil { //nolint:gosec // see above
 		_ = os.Remove(tmp.Name())
 		return err
 	}

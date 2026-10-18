@@ -7,14 +7,14 @@ import { fileURLToPath } from "node:url";
  * it over HTTP, capture what it prints, and always kill exactly that process.
  *
  * Nothing here knows what the server is written in. WHEELHOUSE_CMD is any shell
- * command that, with PORT and HOSTNAME in its environment, serves Wheelhouse's
- * HTTP API on that port.
+ * command that, with PORT and WHEELHOUSE_LISTEN in its environment, serves
+ * Wheelhouse's HTTP API on that port.
  */
 
 export const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-/** Run from the built Next app unless told otherwise. */
-export const DEFAULT_CMD = "node .next/standalone/server.js";
+/** Run the Go binary built with `make -C server build` unless told otherwise. */
+export const DEFAULT_CMD = "./server/wheelhouse";
 
 export const SERVER_CMD = process.env.WHEELHOUSE_CMD || DEFAULT_CMD;
 
@@ -86,8 +86,9 @@ export async function startServer(options: StartOptions = {}): Promise<RunningSe
   }
   Object.assign(env, options.env ?? {}, {
     PORT: String(port),
-    HOSTNAME: "127.0.0.1",
-    NEXT_TELEMETRY_DISABLED: "1",
+    WHEELHOUSE_LISTEN: `127.0.0.1:${port}`,
+    // What a container runtime sets. The server must not take its bind address from it.
+    HOSTNAME: "0123456789ab",
   });
 
   let output = "";

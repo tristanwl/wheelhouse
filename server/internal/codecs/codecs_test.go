@@ -174,3 +174,28 @@ func TestStoreSetFailsWhenTheDirectoryIsNotWritable(t *testing.T) {
 		t.Fatal("expected an error")
 	}
 }
+
+// A read-only /config directory around a writable settings.json (or a
+// settings.json bind-mounted as a file) worked with the Next app, which wrote
+// in place; it must keep working.
+func TestStoreSetWritesInPlaceWhenTheDirectoryIsReadOnly(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	file := filepath.Join(dir, "settings.json")
+	if err := os.WriteFile(file, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+	s := NewStore(dir)
+	if err := s.Set(Preferences{HD: "hevc", UHD: "h264"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Get(); got != (Preferences{HD: "hevc", UHD: "h264"}) {
+		t.Errorf("saved: %+v", got)
+	}
+}
