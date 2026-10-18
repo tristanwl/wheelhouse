@@ -1,0 +1,28 @@
+{
+  "warnings": [
+    {
+      "type": "ERROR",
+      "text": "Saving /config/Downloads/incomplete/Example.Movie.2024.1080p.WEB-DL.x264-GROUP/__ADMIN__/SABnzbd_nzo_aaa111 failed",
+      "time": 1792297332,
+      "origin": "filesystem.py1127"
+    },
+    {
+      "type": "WARNING",
+      "text": "Refused connection from: 192.0.2.10 (ubu.example.lan)",
+      "time": 1792298000,
+      "origin": "interface.py262"
+    },
+    {
+      "type": "WARNING",
+      "text": "Server news.example.com uses too many connections",
+      "time": 1792299000,
+      "origin": "downloader.py800"
+    },
+    {
+      "type": "INFO",
+      "text": "Pausing for 5 minutes",
+      "time": 1792300000,
+      "origin": "downloader.py900"
+    }
+  ]
+}

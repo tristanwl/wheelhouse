@@ -1,0 +1,36 @@
+[
+  {
+    "PlayState": {
+      "CanSeek": false,
+      "IsPaused": false,
+      "IsMuted": false,
+      "RepeatMode": "RepeatNone",
+      "PlaybackOrder": "Default"
+    },
+    "AdditionalUsers": [],
+    "Capabilities": {
+      "PlayableMediaTypes": [],
+      "SupportedCommands": [],
+      "SupportsMediaControl": false,
+      "SupportsPersistentIdentifier": true
+    },
+    "RemoteEndPoint": "192.0.2.10",
+    "PlayableMediaTypes": [],
+    "Id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "UserId": "fedcba9876543210fedcba9876543210",
+    "UserName": "example-user",
+    "Client": "Wheelhouse",
+    "LastActivityDate": "2026-10-18T06:40:49.6540907Z",
+    "LastPlaybackCheckIn": "0001-01-01T00:00:00.0000000Z",
+    "DeviceName": "Example Device",
+    "DeviceId": "example-device-1",
+    "ApplicationVersion": "1.0",
+    "IsActive": true,
+    "SupportsMediaControl": false,
+    "SupportsRemoteControl": false,
+    "NowPlayingQueue": [],
+    "HasCustomDeviceName": false,
+    "ServerId": "0123456789abcdef0123456789abcdef",
+    "SupportedCommands": []
+  }
+]

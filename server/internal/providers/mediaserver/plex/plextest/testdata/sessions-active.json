@@ -1,0 +1,27 @@
+{
+  "MediaContainer": {
+    "size": 2,
+    "Metadata": [
+      {
+        "title": "Example Movie",
+        "type": "movie",
+        "User": {
+          "title": "example-user"
+        },
+        "Player": {
+          "state": "playing"
+        }
+      },
+      {
+        "title": "Example Episode",
+        "type": "episode",
+        "User": {
+          "title": "example-user-2"
+        },
+        "Player": {
+          "state": "paused"
+        }
+      }
+    ]
+  }
+}

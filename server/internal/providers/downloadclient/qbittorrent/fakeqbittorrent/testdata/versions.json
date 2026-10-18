@@ -1,0 +1,10 @@
+{
+  "v5": {
+    "version": "v5.2.4",
+    "webapiVersion": "2.15.1"
+  },
+  "v4": {
+    "version": "v4.6.7",
+    "webapiVersion": "2.9.3"
+  }
+}
