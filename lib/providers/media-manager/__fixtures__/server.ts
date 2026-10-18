@@ -164,7 +164,7 @@ export interface FakeRadarrState {
  * is mutable: adding or deleting a movie changes what the list returns.
  */
 export async function startFakeRadarr(
-  options: Partial<FakeArrOptions> & Partial<FakeRadarrState> = {}
+  options: Partial<FakeArrOptions> & Partial<FakeRadarrState> & { health?: Json[] } = {}
 ) {
   const state: FakeRadarrState = {
     movies: options.movies ?? copy(radarrMovies),
@@ -179,7 +179,7 @@ export async function startFakeRadarr(
         case "/api/v3/system/status":
           return { body: radarrStatus };
         case "/api/v3/health":
-          return { body: radarrHealth };
+          return { body: options.health ?? radarrHealth };
         case "/api/v3/queue":
           return { body: radarrQueue };
         case "/api/v3/rootfolder":
@@ -235,7 +235,7 @@ export interface FakeSonarrState {
 
 /** Same idea as startFakeRadarr, for Sonarr's v4 API. */
 export async function startFakeSonarr(
-  options: Partial<FakeArrOptions> & Partial<FakeSonarrState> = {}
+  options: Partial<FakeArrOptions> & Partial<FakeSonarrState> & { health?: Json[] } = {}
 ) {
   const state: FakeSonarrState = {
     series: options.series ?? copy(sonarrSeries),
@@ -253,7 +253,7 @@ export async function startFakeSonarr(
         case "/api/v3/system/status":
           return { body: sonarrStatus };
         case "/api/v3/health":
-          return { body: sonarrHealth };
+          return { body: options.health ?? sonarrHealth };
         case "/api/v3/queue":
           return { body: sonarrQueue };
         case "/api/v3/rootfolder":

@@ -5,6 +5,7 @@ import {
 } from "@/lib/providers/download-client/__fixtures__/sabnzbd/server";
 import { GET as getDownloads, type DownloadsResponse } from "./route";
 import { GET as getStatus } from "../status/route";
+import type { StatusResponse } from "@/lib/status";
 
 // These call the real route handlers, through the real env config source and
 // provider runtime, with a fake SABnzbd standing in for the service.
@@ -86,36 +87,43 @@ describe("/api/downloads and /api/status with SABnzbd configured from the enviro
     expect(body.instances[0].error).toContain("apiKey");
   });
 
-  it("feeds the dashboard's SABnzbd card in the shape it already expects", async () => {
+  async function sabInstance() {
+    const body = (await (await getStatus()).json()) as StatusResponse;
+    return body.instances.find((i) => i.id === "sabnzbd")!;
+  }
+
+  it("feeds the dashboard's SABnzbd card with the normalized status", async () => {
     await withSab("active");
-    const status = (await (await getStatus()).json()) as {
-      sabnzbd: Record<string, unknown>;
-    };
-    expect(status.sabnzbd).toMatchObject({
-      up: true,
-      paused: false,
-      status: "Downloading",
-      kbpersec: 51200,
-      queueCount: 3,
-      timeleft: "0:07:12",
+    expect(await sabInstance()).toMatchObject({
+      role: "downloadClient",
+      detail: {
+        paused: false,
+        statusText: "Downloading",
+        speedBytesPerSec: 51200 * 1024,
+        queueCount: 3,
+        etaSeconds: 432,
+        usenet: {
+          servers: [
+            { name: "news.example.com", connections: 20, ssl: true, enabled: true },
+            { name: "backup.example.net", connections: 8, ssl: false, enabled: false },
+          ],
+        },
+      },
     });
-    expect(status.sabnzbd.servers).toEqual([
-      { name: "news.example.com", connections: 20, ssl: true, enabled: true },
-      { name: "backup.example.net", connections: 8, ssl: false, enabled: false },
-    ]);
-    expect(status.sabnzbd.warnings).toHaveLength(3);
+    expect((await sabInstance()).detail).toHaveProperty("warnings", expect.any(Array));
   });
 
   it("an idle SABnzbd has no ETA to show", async () => {
     await withSab("idle");
-    const status = (await (await getStatus()).json()) as { sabnzbd: Record<string, unknown> };
-    expect(status.sabnzbd).toMatchObject({ up: true, status: "Idle", queueCount: 0 });
-    expect(status.sabnzbd.timeleft).toBeUndefined();
+    expect(await sabInstance()).toMatchObject({
+      detail: { statusText: "Idle", queueCount: 0, etaSeconds: null },
+    });
   });
 
   it("a missing SABnzbd config reports down instead of crashing the status route", async () => {
-    const status = (await (await getStatus()).json()) as { sabnzbd: Record<string, unknown> };
-    expect(status.sabnzbd.up).toBe(false);
-    expect(String(status.sabnzbd.error)).toContain("sabnzbd");
+    vi.stubEnv("SABNZBD_URL", "http://127.0.0.1:9");
+    const sab = await sabInstance();
+    expect(sab.state).toBe("down");
+    expect(String(sab.error)).toContain("apiKey");
   });
 });

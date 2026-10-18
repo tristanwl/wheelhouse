@@ -3,149 +3,83 @@ import {
   getRuntime,
   redact,
   type DownloadClient,
-  type HealthIssue,
-  type IndexerSummary,
   type MediaManager,
   type MediaServer,
+  type ResolvedInstance,
 } from "@/lib/providers";
-import { formatEta } from "@/lib/format";
+import {
+  STATUS_ROLES,
+  hasRecentError,
+  serviceLink,
+  type InstanceState,
+  type StatusInstance,
+  type StatusResponse,
+} from "@/lib/status";
 
 export const dynamic = "force-dynamic";
 
-interface ArrStatus {
-  up: boolean;
-  configured: boolean;
-  version?: string;
-  health: HealthIssue[];
-  queueCount: number;
-  indexers?: IndexerSummary;
-  error?: string;
-}
+// Where a provider's own web UI lives, under the configured URL.
+const WEB_UI_PATH: Record<string, string> = { plex: "/web" };
 
-// The dashboard still shows one card each for the default instances; cards
-// for any instance come with the instance-based status response.
-async function arrStatus(instanceId: "sonarr" | "radarr"): Promise<ArrStatus> {
-  const runtime = getRuntime();
-  const resolved = (await runtime.listInstances()).find((r) => r.instance.id === instanceId);
-  if (!resolved) return { up: false, configured: false, health: [], queueCount: 0 };
-  if (resolved.status !== "ready") {
-    return {
-      up: false,
-      configured: true,
-      health: [],
-      queueCount: 0,
-      error: resolved.error ?? resolved.status,
-    };
+const roleOrder = (role: string) => STATUS_ROLES.findIndex((r) => r.role === role);
+
+/** One instance's entry. Never throws: a failure becomes a "down" entry with the reason. */
+async function statusOf(resolved: ResolvedInstance): Promise<StatusInstance | undefined> {
+  const { instance, definition } = resolved;
+  const role = definition?.role;
+  if (role !== "mediaManager" && role !== "downloadClient" && role !== "mediaServer") {
+    return undefined;
   }
+  const base = {
+    id: instance.id,
+    providerId: instance.providerId,
+    name: instance.name,
+    role,
+  };
+  const link = serviceLink(
+    (instance.config as { url?: unknown } | null)?.url,
+    WEB_UI_PATH[instance.providerId]
+  );
+  const down = (error: string): StatusInstance => ({
+    ...base,
+    state: "down",
+    error,
+    ...(link ? { link } : {}),
+  });
+
+  if (resolved.status !== "ready") return down(resolved.error ?? resolved.status);
+
+  const withLink = { ...(link ? { link } : {}) };
   try {
-    const status = await (await runtime.getClient<MediaManager>(instanceId)).getStatus();
-    return {
-      up: true,
-      configured: true,
-      version: status.version,
-      health: status.health,
-      queueCount: status.queueCount,
-      indexers: status.indexers,
-    };
+    const runtime = getRuntime();
+    if (role === "mediaManager") {
+      const detail = await (await runtime.getClient<MediaManager>(instance.id)).getStatus();
+      const state: InstanceState = detail.health.some(
+        (h) => h.type === "warning" || h.type === "error"
+      )
+        ? "degraded"
+        : "ok";
+      return { ...base, role, state, version: detail.version, detail, ...withLink };
+    }
+    if (role === "downloadClient") {
+      const detail = await (await runtime.getClient<DownloadClient>(instance.id)).getStatus();
+      const state: InstanceState = hasRecentError(detail.warnings) ? "degraded" : "ok";
+      return { ...base, role, state, version: detail.version, detail, ...withLink };
+    }
+    const detail = await (await runtime.getClient<MediaServer>(instance.id)).getStatus();
+    const state: InstanceState = detail.state === "needs-setup" ? "needs-setup" : "ok";
+    return { ...base, role, state, version: detail.version, detail, ...withLink };
   } catch (err) {
-    return {
-      up: false,
-      configured: true,
-      health: [],
-      queueCount: 0,
-      error: err instanceof Error ? redact(err.message) : "unknown error",
-    };
-  }
-}
-
-interface SabServerStatus {
-  name: string;
-  connections: number;
-  ssl: boolean;
-  enabled: boolean;
-}
-
-interface SabStatus {
-  up: boolean;
-  paused?: boolean;
-  status?: string;
-  kbpersec?: number;
-  queueCount?: number;
-  timeleft?: string;
-  servers?: SabServerStatus[];
-  warnings?: string[];
-  error?: string;
-}
-
-async function sabStatus(): Promise<SabStatus> {
-  try {
-    const client = await getRuntime().getClient<DownloadClient>("sabnzbd");
-    const status = await client.getStatus();
-    return {
-      up: true,
-      paused: status.paused,
-      status: status.statusText,
-      kbpersec: status.speedBytesPerSec / 1024,
-      queueCount: status.queueCount,
-      timeleft: status.etaSeconds === null ? undefined : formatEta(status.etaSeconds),
-      servers: status.usenet?.servers,
-      warnings: status.warnings.map((w) => w.message),
-    };
-  } catch (err) {
-    return { up: false, error: err instanceof Error ? redact(err.message) : "unknown error" };
-  }
-}
-
-interface PlexStatus {
-  up: boolean;
-  configured: boolean;
-  /** Whether Wheelhouse can read session data (a working token). */
-  authenticated?: boolean;
-  /** The server itself isn't ready (an unclaimed Plex). */
-  needsSetup?: boolean;
-  /** Something for the user to know or do, in plain words. */
-  notice?: string;
-  version?: string;
-  friendlyName?: string;
-  activeSessions?: number;
-  error?: string;
-}
-
-async function plexStatus(): Promise<PlexStatus> {
-  const runtime = getRuntime();
-  const resolved = (await runtime.listInstances()).find((r) => r.instance.id === "plex");
-  if (!resolved) return { up: false, configured: false };
-  if (resolved.status !== "ready") {
-    return { up: false, configured: true, error: resolved.error ?? resolved.status };
-  }
-  try {
-    const status = await (await runtime.getClient<MediaServer>("plex")).getStatus();
-    return {
-      up: true,
-      configured: true,
-      authenticated: status.authenticated,
-      needsSetup: status.state === "needs-setup",
-      notice: status.notice,
-      version: status.version,
-      friendlyName: status.name,
-      activeSessions: status.activeSessions,
-    };
-  } catch (err) {
-    return {
-      up: false,
-      configured: true,
-      error: err instanceof Error ? redact(err.message) : "unknown error",
-    };
+    return down(err instanceof Error ? redact(err.message) : "unknown error");
   }
 }
 
 export async function GET() {
-  const [sonarr, radarr, sabnzbd, plex] = await Promise.all([
-    arrStatus("sonarr"),
-    arrStatus("radarr"),
-    sabStatus(),
-    plexStatus(),
-  ]);
-
-  return NextResponse.json({ sonarr, radarr, sabnzbd, plex });
+  const resolved = (await getRuntime().listInstances()).filter((r) => r.status !== "disabled");
+  const described = await Promise.all(resolved.map(statusOf));
+  const instances = described
+    .filter((i): i is StatusInstance => i !== undefined)
+    // Array.sort is stable, so configuration order holds within a role.
+    .sort((a, b) => roleOrder(a.role) - roleOrder(b.role));
+  return NextResponse.json({ instances } satisfies StatusResponse);
 }

@@ -30,3 +30,19 @@ export function formatEta(totalSeconds: number): string {
   const seconds = s % 60;
   return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
+
+/**
+ * How long ago a timestamp was, for things that happened recently: "just now",
+ * "5m ago", "3h ago", "2d ago". "-" when the timestamp isn't a date. (formatAge
+ * is the coarser one, for how old a library item is.)
+ */
+export function formatRelativeAge(iso: string, now: number = Date.now()): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return "-";
+  const minutes = Math.floor((now - then) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
