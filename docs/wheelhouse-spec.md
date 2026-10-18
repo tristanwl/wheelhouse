@@ -603,9 +603,9 @@ hand.
   (`sonarr`, `radarr`, `sabnzbd`, `plex`), a library of both kinds, downloads,
   storage, Explore and all four features. "As it does today" is checked
   against the documented shapes, not a recorded run of the old code.
-- [ ] Setting `QBITTORRENT_*` shows qBittorrent downloads, including seeding,
-  alongside or instead of SABnzbd. Not part of PR 9: depends on PR 7, and
-  the sweep above doesn't configure qBittorrent.
+- [x] Setting `QBITTORRENT_*` shows qBittorrent downloads, including seeding,
+  alongside or instead of SABnzbd. Auto: `app/api/downloads/route.qbittorrent.test.ts`
+  (PR 7); qBittorrent is also in the canary and no-hang tests below.
 - [x] Setting `JELLYFIN_*` instead of `PLEX_*` shows a Jellyfin card. Auto:
   `app/api/status/route.test.ts` (PR 8).
 - [x] Two Radarr instances both appear in status, storage, and library, and
@@ -620,7 +620,7 @@ hand.
   Manual: `next build` + `next start` with an empty environment, every page
   and API above answered 200. The rendering of the nav and the stubs in a
   browser was not looked at.
-- [x] No hang longer than the timeout when a service is down. Auto: five
+- [x] No hang longer than the timeout when a service is down. Auto: six
   services that accept the connection and never answer; status, downloads,
   library and storage return within the default 8 s timeout plus a margin,
   with each instance down ("timed out"). There is no timeout setting yet, so

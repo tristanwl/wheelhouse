@@ -24,6 +24,11 @@ import {
   GOOD_KEY as SAB_KEY,
   startFakeSabnzbd,
 } from "@/lib/providers/download-client/__fixtures__/sabnzbd/server";
+import {
+  GOOD_PASSWORD as QB_PASSWORD,
+  GOOD_USER as QB_USER,
+  startFakeQbittorrent,
+} from "@/lib/providers/download-client/__fixtures__/qbittorrent/server";
 import { createArrStack } from "@/lib/providers/media-manager/__fixtures__/env";
 import { GOOD_KEY as ARR_KEY } from "@/lib/providers/media-manager/__fixtures__/server";
 import {
@@ -59,6 +64,9 @@ const PROVIDER_VARIABLES = [
   "JELLYFIN_API_KEY",
   "SABNZBD_URL",
   "SABNZBD_API_KEY",
+  "QBITTORRENT_URL",
+  "QBITTORRENT_USERNAME",
+  "QBITTORRENT_PASSWORD",
   "TMDB_API_KEY",
 ];
 
@@ -174,6 +182,7 @@ async function configureEverything(scenario: Scenario): Promise<string[]> {
     radarr4k: good ? ARR_KEY : "canary-radarr4k-key-2b8c04",
     sonarr: good ? ARR_KEY : "canary-sonarr-key-e51d77",
     sab: good ? SAB_KEY : "canary-sabnzbd-key-90ac26",
+    qb: good ? QB_PASSWORD : "canary-qbittorrent-pass-6b21e9",
     plex: good ? PLEX_TOKEN : "canary-plex-token-4d6e18",
     jellyfin: good ? JELLYFIN_KEY : "canary-jellyfin-key-a07b53",
     tmdb: good ? TMDB_KEY : "canary-tmdb-key-c3f219",
@@ -189,6 +198,8 @@ async function configureEverything(scenario: Scenario): Promise<string[]> {
     vi.stubEnv("SONARR_API_KEY", keys.sonarr);
     vi.stubEnv("SABNZBD_URL", "ftp://canary-user-5e2:canary-pass-39d@example.com");
     vi.stubEnv("SABNZBD_API_KEY", keys.sab);
+    vi.stubEnv("QBITTORRENT_USERNAME", QB_USER);
+    vi.stubEnv("QBITTORRENT_PASSWORD", keys.qb);
     vi.stubEnv("PLEX_TOKEN", keys.plex);
     vi.stubEnv("JELLYFIN_API_KEY", keys.jellyfin);
     vi.stubEnv("TMDB_API_KEY", keys.tmdb);
@@ -206,6 +217,9 @@ async function configureEverything(scenario: Scenario): Promise<string[]> {
     vi.stubEnv("SONARR_API_KEY", keys.sonarr);
     vi.stubEnv("SABNZBD_URL", dead);
     vi.stubEnv("SABNZBD_API_KEY", keys.sab);
+    vi.stubEnv("QBITTORRENT_URL", dead);
+    vi.stubEnv("QBITTORRENT_USERNAME", QB_USER);
+    vi.stubEnv("QBITTORRENT_PASSWORD", keys.qb);
     vi.stubEnv("PLEX_URL", dead);
     vi.stubEnv("PLEX_TOKEN", keys.plex);
     vi.stubEnv("JELLYFIN_URL", dead);
@@ -222,6 +236,10 @@ async function configureEverything(scenario: Scenario): Promise<string[]> {
   const sab = track(await startFakeSabnzbd("active"));
   vi.stubEnv("SABNZBD_URL", sab.url);
   vi.stubEnv("SABNZBD_API_KEY", keys.sab);
+  const qb = track(await startFakeQbittorrent("v5"));
+  vi.stubEnv("QBITTORRENT_URL", qb.url);
+  vi.stubEnv("QBITTORRENT_USERNAME", QB_USER);
+  vi.stubEnv("QBITTORRENT_PASSWORD", keys.qb);
   const plex = track(await startFakePlex({ claimed: true, sessions: "active" }));
   vi.stubEnv("PLEX_URL", plex.url);
   vi.stubEnv("PLEX_TOKEN", keys.plex);
@@ -298,7 +316,8 @@ describe("No API key or token appears in any API response or log line", () => {
       expect(byName("explore popular").status).toBe(200);
       expect([...states.values()].map((i) => i.state)).not.toContain("down");
     } else {
-      for (const id of ["radarr", "sonarr", "sabnzbd"]) expect(states.get(id)?.state).toBe("down");
+      for (const id of ["radarr", "sonarr", "sabnzbd", "qbittorrent"])
+        expect(states.get(id)?.state).toBe("down");
     }
     if (scenario === "unreachable" || scenario === "invalid-config") {
       expect(statusBody.instances.every((i) => i.state === "down")).toBe(true);
@@ -323,6 +342,9 @@ describe("No hang longer than the timeout when a service is down", () => {
     vi.stubEnv("SONARR_API_KEY", ARR_KEY);
     vi.stubEnv("SABNZBD_URL", hung);
     vi.stubEnv("SABNZBD_API_KEY", SAB_KEY);
+    vi.stubEnv("QBITTORRENT_URL", hung);
+    vi.stubEnv("QBITTORRENT_USERNAME", QB_USER);
+    vi.stubEnv("QBITTORRENT_PASSWORD", QB_PASSWORD);
     vi.stubEnv("PLEX_URL", hung);
     vi.stubEnv("PLEX_TOKEN", PLEX_TOKEN);
     vi.stubEnv("JELLYFIN_URL", hung);
@@ -341,7 +363,7 @@ describe("No hang longer than the timeout when a service is down", () => {
     expect(elapsed).toBeLessThan(8000 + 2500);
 
     const statusBody = (await statusRes.json()) as StatusResponse;
-    expect(statusBody.instances.length).toBe(5);
+    expect(statusBody.instances.length).toBe(6);
     for (const instance of statusBody.instances) {
       expect(instance.state).toBe("down");
       expect(instance.error).toMatch(/timed out/);
