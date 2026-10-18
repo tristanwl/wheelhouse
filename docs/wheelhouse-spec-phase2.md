@@ -1,6 +1,8 @@
 # Wheelhouse spec: stack decision and Phase 2
 
-Status: draft for review. Nothing here is built yet. It replaces the "Next.js
+Status: draft for review. Migration steps 1 to 3 are done (acceptance suite,
+Go skeleton, provider core in `server/internal/providers/core`); everything
+after them is not built yet. It replaces the "Next.js
 versus a lighter stack" open question in [wheelhouse-spec.md](wheelhouse-spec.md)
 and defines the work needed to reach 1.0.0.
 
@@ -120,14 +122,16 @@ These are acceptance criteria for 1.0, each with a test.
 
 The behaviour is defined first, then the server is rebuilt against it.
 
-1. **Acceptance suite.** A black-box HTTP suite that starts the fake services
+1. **Acceptance suite** (done). A black-box HTTP suite that starts the fake services
    from the existing fixtures, points a Wheelhouse server at them and asserts
    every route and the secret-canary sweep. It runs against the current Next app
    and must pass there; it is the definition of done for the port.
-2. **Go skeleton:** `server/` module, CI, lint, `govulncheck`, build and the
+2. **Go skeleton** (done): `server/` module, CI, lint, `govulncheck`, build and the
    embedded UI placeholder, still alongside the Next app.
-3. **Provider core in Go:** HTTP client (timeout, redaction, cache), runtime,
-   config source. Ported tests.
+3. **Provider core in Go** (done): HTTP client (timeout, redaction, cache),
+   runtime, config source. Ported tests, plus new ones for oversized responses,
+   cross-host redirects and a secret-canary sweep. See
+   [server/README.md](../server/README.md).
 4. **Download clients,** then **media servers,** then **media managers,**
    each passing the shared contract tests and the real fixtures.
 5. **API routes and the feature registry,** passing the acceptance suite.

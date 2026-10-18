@@ -2,7 +2,8 @@
 
 The Go server that will replace the Next.js app, built alongside it per
 [docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md) (migration
-step 2). It is a skeleton: the standard library only, no providers yet.
+steps 2 and 3). The standard library only; the provider core is in place (see
+below) but there are no providers or provider routes yet.
 
 What it serves today:
 
@@ -64,7 +65,62 @@ cd .. && WHEELHOUSE_CMD=./server/wheelhouse npx vitest run \
   --config acceptance/vitest.config.mts boot -t "page |reports only the Dashboard|unknown routes"
 ```
 
-Most scenarios fail until the providers and routes are ported (steps 3 to 5).
+Most scenarios fail until the providers and routes are ported (steps 4 and 5).
+
+## Provider core
+
+`internal/providers/core` (package `core`) is the Go port of
+`lib/providers/core`: roles, provider definitions and registry, config
+validation, config sources, the runtime and the HTTP client. It is a library
+for the provider and route steps that follow; nothing calls it yet.
+
+```go
+reg, err := core.NewRegistry(core.Definition{
+    ID: "sonarr", Role: core.RoleMediaManager, DisplayName: "Sonarr",
+    Config: SonarrConfig{}, // zero value of the settings struct
+    Create: func(cfg any, pc core.ProviderContext) any { return newSonarr(cfg.(SonarrConfig), pc) },
+})
+rt := core.NewRuntime(reg, core.NewProcessEnvConfigSource())
+clients, err := rt.Clients(ctx, core.RoleMediaManager) // ready instances of a role
+```
+
+A provider's settings are a struct; tags drive validation, secret masking and the
+JSON Schema the admin UI renders (`Definition.Schema()`):
+
+```go
+type SonarrConfig struct {
+    URL    string `json:"url" label:"URL" config:"required,url"`
+    APIKey string `json:"apiKey" label:"API key" config:"required,secret"`
+}
+```
+
+Adapters make requests through `core.NewHTTPClient(core.HTTPOptions{BaseURL,
+Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
+
+- 8 s timeout per request (body included), `Request.Timeout` overrides it.
+- At most 64 MiB read from upstream (`MaxResponseBytes`, `Request.MaxBytes`); a
+  larger response is a `ProviderError`, and the stream is cut off at the limit.
+- Redirects are followed only within the same host name, never from https to
+  http; a redirect to another host is a `ProviderError` and is not followed.
+- TLS verification is always on. There is no insecure option (the TypeScript
+  `allowInsecureTls` was deferred and never built); a self-signed certificate is
+  reported as "TLS certificate could not be verified".
+- Errors are `*core.ProviderError{Message, Status}`, built from the label, the
+  path without its query and the numeric status. They are redacted: configured
+  secrets (plain, URL-encoded, base64, JSON-escaped), `apikey=` style
+  parameters and `user:pass@` URLs. Upstream bodies and reason phrases are never
+  echoed or logged. The optional `Logger` gets one debug line per failed request.
+- `Request.CacheTTL` caches a GET for that long, concurrent identical requests
+  share one upstream call (even if the first caller cancels), errors are not
+  cached, `Invalidate()` clears it (a read in flight at that moment is not
+  cached). Each caller gets its own copy of the response.
+
+`EnvConfigSource` reads the same variables as the Next app (`SONARR_URL`,
+`SONARR_API_KEY`, ..., `TMDB_BASE_URL`, and `RADARR_4K_URL` style extras).
+`Instance.Config` holds secrets and is excluded from JSON, `fmt` and `slog`.
+
+Tests use `httptest` fake upstreams. `canary_test.go` plants secrets and sweeps
+every error string, JSON description and log line the core can produce for them.
 
 ## Layout
 
@@ -74,6 +130,7 @@ internal/app          routes, middleware chain, graceful Serve
 internal/config       environment settings
 internal/features     feature gating (port of lib/features/registry.ts)
 internal/middleware   request ID, security headers, access log, recovery
+internal/providers/core  provider core (port of lib/providers/core)
 internal/ui           embedded UI
 ```
 
