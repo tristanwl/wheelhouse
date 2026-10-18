@@ -1,4 +1,4 @@
-import { mkdtempSync, linkSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, linkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -9,7 +9,8 @@ import { startServer, type ApiResponse, type RunningServer } from "./harness";
 // are safe to run anywhere: validation, refusal, and add/delete flows whose
 // effect is on the fake Radarr/Sonarr. The converter and the settings file
 // touch real files on the machine, so only their refusals are tested here
-// (the media roots are hard-coded to /movies and /tv, issue #31): a bad body,
+// (the media roots are /movies and /tv unless WHEELHOUSE_MEDIA_ROOTS says
+// otherwise, issue #31): a bad body,
 // an unknown job, and the hard-link confirmation, which answers before any
 // work is queued.
 
@@ -23,7 +24,13 @@ describe("mutating routes", () => {
   let server: RunningServer;
   beforeAll(async () => {
     stack = await startStack();
-    server = await startServer({ env: stack.env });
+    // The Go server only converts files inside its media roots (/movies and /tv
+    // by default, issue #31); the hard-link scenario below uses scratch files in
+    // the temp directory, so that is made a root for this server. The Next app
+    // ignores the variable.
+    server = await startServer({
+      env: { ...stack.env, WHEELHOUSE_MEDIA_ROOTS: realpathSync(tmpdir()) },
+    });
   });
   afterAll(async () => {
     await server?.stop();

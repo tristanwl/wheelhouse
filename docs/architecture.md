@@ -55,6 +55,22 @@ is unchanged. See [server/README.md](../server/README.md).
 - **Downloads.** `downloads.Compute` returns `instances` (one per enabled client,
   `up` false with the reason when it cannot answer) and normalized `items`, both
   in configured order.
+- **Codecs and the converter** (`internal/codecs`, `internal/converter`,
+  `app/routes_codecs.go`; migration step 7 pulled forward). `codecs.Analyze` is
+  `analyzeCodecs()` (classification, HD/UHD tiers, candidates and matches, sorted
+  by size) and `codecs.Store` keeps the preferences in `<config dir>/settings.json`
+  (written to a temp file and renamed). `converter.MemoryQueue` runs one ffmpeg
+  conversion at a time behind the `converter.Queue` interface (the in-memory
+  store is replaced by a persistent one in issue #33), `converter.Detector` runs
+  the throwaway VAAPI/NVENC encodes once per process. Files are touched only
+  after `ResolveInRoots` (absolute, no `..`, `EvalSymlinks`, regular file, inside
+  a media root), repeated when the job starts and again before the swap. The
+  swap keeps the original as `<file>.bak`, writes the output to a dotted temp
+  file next to it, and only a non-empty result is renamed into place. The media
+  roots (`/movies`, `/tv`, issue #31) are one value, `converter.DefaultMediaRoots`,
+  overridable with `WHEELHOUSE_MEDIA_ROOTS`. Differences from the Next app: a path
+  outside the roots or not an existing regular file is a 400 at queue time; the
+  routes the Next app has are all ported (cancel is `POST .../{jobId}/cancel`).
 - A configured URL with `user:pass@` is an invalid config (the Next app never
   worked with these either: `fetch` refuses them), so the instance shows as down
   instead of sending Basic auth upstream.

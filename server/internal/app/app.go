@@ -32,6 +32,11 @@ type Options struct {
 	Source core.ConfigSource
 	// Now is the clock for the 24 h warning rule. Defaults to time.Now.
 	Now func() time.Time
+	// Context bounds background work (running conversions are killed when it is
+	// cancelled). Defaults to context.Background.
+	Context context.Context
+	// Converter configures the codec routes; the zero value uses the defaults.
+	Converter ConverterOptions
 }
 
 // emptySource configures nothing.
@@ -44,6 +49,8 @@ type deps struct {
 	rt     *core.Runtime
 	ffmpeg func() bool
 	now    func() time.Time
+	ctx    context.Context
+	conv   ConverterOptions
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -86,11 +93,15 @@ func Routes(o Options) *Router {
 		}
 		o.Runtime = rt
 	}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now}
+	if o.Context == nil {
+		o.Context = context.Background()
+	}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, ctx: o.Context, conv: o.Converter}
 
 	r := NewRouter()
 	registerCore(r, d)
 	registerStack(r, d)
+	registerCodecs(r, d)
 
 	// Anything else under /api is a JSON 404, never the UI.
 	r.HandleFunc("/api", Public, apiNotFound)

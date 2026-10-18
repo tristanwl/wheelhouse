@@ -38,6 +38,16 @@ func TestEveryRouteHasAnAccessLevel(t *testing.T) {
 		"/api":               Public,
 		"/api/":              Public,
 		"/":                  Public,
+
+		// Codecs.
+		"GET /api/codec-analysis":                         Public,
+		"GET /api/codec-analysis/settings":                Public,
+		"PUT /api/codec-analysis/settings":                Public,
+		"GET /api/codec-analysis/encoders":                Public,
+		"GET /api/codec-analysis/convert":                 Public,
+		"POST /api/codec-analysis/convert":                Public,
+		"GET /api/codec-analysis/convert/{jobId}":         Public,
+		"POST /api/codec-analysis/convert/{jobId}/cancel": Public,
 	}
 	for p, l := range want {
 		if seen[p] != l {

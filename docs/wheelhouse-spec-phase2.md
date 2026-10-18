@@ -4,7 +4,8 @@ Status: draft for review. Migration steps 1 to 3 are done (acceptance suite,
 Go skeleton, provider core in `server/internal/providers/core`), as are the
 providers of step 4. Step 5 is in progress: the provider registration, the
 access-level router, the feature registry, `/api/status` and `/api/downloads`
-are done; the other routes are not built yet. It replaces the "Next.js
+are done, as are the codec and converter routes (step 7, pulled forward); the
+other routes are not built yet. It replaces the "Next.js
 versus a lighter stack" open question in [wheelhouse-spec.md](wheelhouse-spec.md)
 and defines the work needed to reach 1.0.0.
 
@@ -140,7 +141,8 @@ The behaviour is defined first, then the server is rebuilt against it.
    (In progress: foundation, features, status and downloads done.)
 6. **UI to Vite:** pages and components move to the SPA served by the Go server.
 7. **Converter in Go:** ffmpeg arguments, hardware-encode detection, hardlink
-   check, queue.
+   check, queue. (Done, pulled forward with step 5: `internal/codecs`,
+   `internal/converter`, `app/routes_codecs.go`.)
 8. **Cut over:** remove Next, update the Dockerfile and release workflow, ship as
    0.2.0.
 9. **Phase 2 features,** then the security review, then 1.0.0.

@@ -10,6 +10,11 @@ linters:
     - nilerr
     - noctx
     - unconvert
+  settings:
+    misspell:
+      # The API's confirmation code ("hardlinked") is not a misspelling.
+      ignore-rules:
+        - hardlinked
   exclusions:
     rules:
       # Tests build requests against handlers or a local listener; a context adds
@@ -28,3 +33,9 @@ linters:
         linters:
           - gosec
         text: G101
+      # Test fixtures: fake tools are executable scripts in temp dirs, and the
+      # tests run the tools they just wrote.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: G(115|204|301|302|304|306)
