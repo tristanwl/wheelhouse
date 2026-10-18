@@ -24,10 +24,42 @@ media server).
 
 A Go server that will replace the Next app is being built alongside it in
 `server/`, following [wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md)
-(migration step 2: skeleton, middleware, embedded UI placeholder). It serves
-only `/healthz`, `/api/features` and a placeholder page so far; nothing here
-describes it until the cut-over, and the Next app is unchanged. See
-[server/README.md](../server/README.md).
+(migration steps 2 and 3: skeleton, middleware, embedded UI placeholder, and
+the provider core). It serves only `/healthz`, `/api/features` and a placeholder
+page so far; nothing here describes it until the cut-over, and the Next app is
+unchanged. See [server/README.md](../server/README.md).
+
+### Go provider core (`server/internal/providers/core`)
+
+The Go port of `lib/providers/core/`, with the same behaviour and ported tests,
+and no routes or providers yet (migration steps 4 and 5). It is not wired into
+anything; the Next app's provider layer above is still the one that runs.
+
+- **Definitions and registry.** A `Definition` has an id, a `Role`, a display
+  name, a `Config` struct (zero value) and a `Create` factory. `NewRegistry`
+  rejects duplicate ids and malformed definitions; lookup by id and by role.
+- **Config without zod.** A provider's settings are a struct with `json`,
+  `label` and `config:"required,secret,url"` tags. The core validates raw
+  settings against it (unknown keys ignored, empty strings rejected, optional
+  `Validate()` hook) and builds a JSON Schema description of it for the admin UI
+  (`Definition.Schema()`, with `writeOnly` and `x-secret` on credentials).
+  Validation errors name the field and the rule, never the value.
+- **Config sources.** `ConfigSource.Instances(ctx)`; `EnvConfigSource` has the
+  same variables and rules as the TypeScript `ENV_MAPPINGS`, including extra
+  Sonarr and Radarr instances (`RADARR_4K_URL` gives `radarr-4k`).
+- **Runtime.** `ListInstances`, `Clients(role)` and `Client(id)` with the same
+  four statuses (ready, disabled, unknown-provider, invalid-config). Clients are
+  cached per instance and rebuilt when the validated config, provider or name
+  changes. Safe for concurrent use.
+- **HTTP client.** `NewHTTPClient` gives the same guarantees as
+  `createHttpClient`: 8 s context timeout (overridable per request), path-prefix
+  safe `JoinURL`, `Wheelhouse/<version>` user agent, redaction of every form of
+  a configured secret plus `apikey=`-style parameters and `user:pass@` URLs,
+  `ProviderError` with a status, GET cache with TTL, in-flight de-duplication
+  and `Invalidate()`. It adds what the TypeScript version lacks: a cap on bytes
+  read from upstream, no redirects to another host (and none from https to
+  http), and TLS verification that cannot be switched off. Upstream bodies and
+  reason phrases never reach an error or a log line.
 
 ## Conventions
 
