@@ -18,3 +18,13 @@ linters:
         linters:
           - noctx
           - bodyclose
+      # Tests plant obviously fake canary secrets on purpose.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: G101
+      # The table of environment variable names (SONARR_API_KEY, ...) is not a credential.
+      - path: internal/providers/core/envsource\.go
+        linters:
+          - gosec
+        text: G101

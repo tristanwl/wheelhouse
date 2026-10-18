@@ -1,0 +1,236 @@
+package core
+
+import (
+	"fmt"
+	"math"
+	"net/url"
+	"reflect"
+	"strings"
+)
+
+// A provider describes its settings as a plain struct. Each exported field
+// needs a `json` tag (the setting's name) and may carry:
+//
+//	label:"API key"                      the label an admin form shows
+//	config:"required,secret,url"         options, comma separated
+//
+// Options: "required" (must be present), "secret" (masked in the UI, stripped
+// from errors) and "url" (an http or https URL with a host). Supported field
+// types are string, bool and int. The optional method
+//
+//	Validate() error
+//
+// on the struct runs after every field passed, for rules that span fields.
+//
+//	type SonarrConfig struct {
+//		URL    string `json:"url" label:"URL" config:"required,url"`
+//		APIKey string `json:"apiKey" label:"API key" config:"required,secret"`
+//	}
+//
+// Like the zod schemas this replaces, unknown keys in the raw config are
+// ignored, and a string setting that is present must not be empty.
+
+// FieldType is the JSON Schema type of a setting.
+type FieldType string
+
+// The supported setting types.
+const (
+	FieldString  FieldType = "string"
+	FieldBoolean FieldType = "boolean"
+	FieldInteger FieldType = "integer"
+)
+
+// Field describes one setting of a provider.
+type Field struct {
+	Name     string    `json:"name"`
+	Label    string    `json:"label"`
+	Type     FieldType `json:"type"`
+	Required bool      `json:"required"`
+	Secret   bool      `json:"secret"`
+	// Format is "url" or empty.
+	Format string `json:"format,omitempty"`
+
+	index int // position in the struct
+}
+
+// FieldError is one problem with one setting. Message never contains the value.
+type FieldError struct {
+	Field   string
+	Message string
+}
+
+// ValidationError lists everything wrong with a config. It is built from static
+// text and field names only, so it is safe to show and to log.
+type ValidationError struct {
+	Errors []FieldError
+}
+
+func (e *ValidationError) Error() string {
+	parts := make([]string, len(e.Errors))
+	for i, fe := range e.Errors {
+		parts[i] = fe.Field + ": " + fe.Message
+	}
+	return strings.Join(parts, "; ")
+}
+
+// configSpec is the parsed shape of a provider's config struct.
+type configSpec struct {
+	typ    reflect.Type
+	fields []Field
+}
+
+func newConfigSpec(proto any) (*configSpec, error) {
+	t := reflect.TypeOf(proto)
+	if t == nil || t.Kind() != reflect.Struct {
+		return nil, fmt.Errorf("config must be a struct value, got %T", proto)
+	}
+	spec := &configSpec{typ: t}
+	seen := map[string]bool{}
+	for i := range t.NumField() {
+		sf := t.Field(i)
+		if !sf.IsExported() {
+			continue
+		}
+		name, _, _ := strings.Cut(sf.Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			return nil, fmt.Errorf("config field %s needs a json tag", sf.Name)
+		}
+		if seen[name] {
+			return nil, fmt.Errorf("config field %q is declared twice", name)
+		}
+		seen[name] = true
+		f := Field{Name: name, Label: sf.Tag.Get("label"), index: i}
+		if f.Label == "" {
+			f.Label = name
+		}
+		switch sf.Type.Kind() {
+		case reflect.String:
+			f.Type = FieldString
+		case reflect.Bool:
+			f.Type = FieldBoolean
+		case reflect.Int:
+			f.Type = FieldInteger
+		default:
+			return nil, fmt.Errorf("config field %q has unsupported type %s", name, sf.Type)
+		}
+		if opts := sf.Tag.Get("config"); opts != "" {
+			for opt := range strings.SplitSeq(opts, ",") {
+				switch opt {
+				case "required":
+					f.Required = true
+				case "secret":
+					f.Secret = true
+				case "url":
+					if f.Type != FieldString {
+						return nil, fmt.Errorf("config field %q: url needs a string", name)
+					}
+					f.Format = "url"
+				default:
+					return nil, fmt.Errorf("config field %q has unknown option %q", name, opt)
+				}
+			}
+		}
+		spec.fields = append(spec.fields, f)
+	}
+	if len(spec.fields) == 0 {
+		return nil, fmt.Errorf("config %s has no fields", t)
+	}
+	return spec, nil
+}
+
+type validator interface{ Validate() error }
+
+// decode checks the raw settings and returns the typed config struct (a value,
+// not a pointer). Errors are built from field names and fixed text only.
+func (s *configSpec) decode(raw map[string]any) (any, error) {
+	out := reflect.New(s.typ).Elem()
+	var problems []FieldError
+	fail := func(name, msg string) { problems = append(problems, FieldError{name, msg}) }
+
+	for _, f := range s.fields {
+		v, present := raw[f.Name]
+		if !present || v == nil {
+			if f.Required {
+				fail(f.Name, "is required")
+			}
+			continue
+		}
+		dst := out.Field(f.index)
+		switch f.Type {
+		case FieldString:
+			str, ok := v.(string)
+			switch {
+			case !ok:
+				fail(f.Name, "must be a string")
+			case str == "":
+				fail(f.Name, "must not be empty")
+			case f.Format == "url" && !validHTTPURL(str):
+				fail(f.Name, "must be an http or https URL")
+			default:
+				dst.SetString(str)
+			}
+		case FieldBoolean:
+			if b, ok := v.(bool); ok {
+				dst.SetBool(b)
+			} else {
+				fail(f.Name, "must be true or false")
+			}
+		case FieldInteger:
+			if n, ok := toInt(v); ok {
+				dst.SetInt(int64(n))
+			} else {
+				fail(f.Name, "must be a whole number")
+			}
+		}
+	}
+	if len(problems) == 0 {
+		if v, ok := out.Interface().(validator); ok {
+			if err := v.Validate(); err != nil {
+				fail("config", err.Error())
+			}
+		}
+	}
+	if len(problems) > 0 {
+		return nil, &ValidationError{Errors: problems}
+	}
+	return out.Interface(), nil
+}
+
+func toInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		if n == math.Trunc(n) && math.Abs(n) < 1<<53 {
+			return int(n), true
+		}
+	}
+	return 0, false
+}
+
+// validHTTPURL accepts absolute http and https URLs with a host. (Stricter than
+// zod's z.url(), which accepts any scheme.)
+func validHTTPURL(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	return (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
+}
+
+// secretValues returns the values of the secret settings present in raw, for
+// redacting any error text built from that config.
+func (s *configSpec) secretValues(raw map[string]any) []string {
+	var out []string
+	for _, f := range s.fields {
+		if !f.Secret {
+			continue
+		}
+		if str, ok := raw[f.Name].(string); ok {
+			out = append(out, str)
+		}
+	}
+	return out
+}
