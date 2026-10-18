@@ -214,10 +214,12 @@ interface DownloadClientCaps {
 
 interface DownloadClientStatus {
   paused: boolean;
+  statusText?: string;          // the client's own word: SABnzbd's "Idle" / "Downloading"
   speedBytesPerSec: number;     // current download speed
   queueCount: number;
+  etaSeconds: number | null;    // whole-queue time left; null when unknown
   version?: string;
-  warnings: string[];
+  warnings: { message: string; severity: "warning" | "error"; at?: string }[];
   usenet?: { servers: { name: string; connections: number; ssl: boolean; enabled: boolean }[] };
   torrent?: { seeding: number; uploadBytesPerSec: number };
 }
@@ -402,8 +404,11 @@ Each PR keeps the app working.
 2. ✅ **Provider core**: types, registry, runtime, `providerFetch`,
    `EnvConfigSource`, `zod`. Nothing uses it yet, so no behavior change; the
    registry is empty until the adapters in PRs 3-5 register themselves.
-3. **SABnzbd → DownloadClient**: adapter, `/api/downloads` aggregation, byte
-   normalization, fixtures + contract tests.
+3. ✅ **SABnzbd → DownloadClient**: adapter, `/api/downloads` aggregation, byte
+   normalization, fixtures + contract tests. Warnings carry time and severity
+   (so the dashboard can age them), and a wrong API key is reported as such:
+   SABnzbd 4.x answers it with HTTP 403 and a plain-text body, not a 200 with an
+   error field.
 4. **Plex → MediaServer**: adapter, `state` mapping, contract tests.
 5. **Sonarr/Radarr → MediaManager instances**: `[service]` → `[instanceId]`,
    iterate instances in status/storage/explore, fix storage double-count, and

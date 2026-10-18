@@ -58,7 +58,7 @@ Set via environment variables (see [.env.example](.env.example)):
 |---|---|---|
 | `SONARR_URL`, `SONARR_API_KEY` | yes | |
 | `RADARR_URL`, `RADARR_API_KEY` | yes | |
-| `SABNZBD_URL`, `SABNZBD_API_KEY` | yes | |
+| `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
 | `PLEX_URL`, `PLEX_TOKEN` | no | Status card only |
 | `TMDB_API_KEY` | no | Enables Explore; free key from themoviedb.org |
 

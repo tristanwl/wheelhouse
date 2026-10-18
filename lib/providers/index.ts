@@ -1,6 +1,7 @@
 import { EnvConfigSource } from "./core/config-source";
 import { createRegistry } from "./core/registry";
 import { createProviderRuntime, type ProviderRuntime } from "./core/runtime";
+import { sabnzbdProvider } from "./download-client/sabnzbd";
 
 export * from "./core/types";
 export { createHttpClient, joinUrl, ProviderError, redact } from "./core/http";
@@ -11,8 +12,10 @@ export { EnvConfigSource } from "./core/config-source";
 export { createProviderRuntime } from "./core/runtime";
 export type { InstanceStatus, ProviderRuntime, ResolvedInstance } from "./core/runtime";
 
-// Adapters are added here as they are ported (SABnzbd, Plex, Sonarr/Radarr, ...).
-export const registry = createRegistry([]);
+export * from "./download-client/types";
+
+// Adapters are added here as they are ported (Plex and Sonarr/Radarr are next).
+export const registry = createRegistry([sabnzbdProvider]);
 
 // One runtime per server process; globalThis keeps it across Next.js dev reloads.
 const g = globalThis as unknown as { __wheelhouseProviderRuntime?: ProviderRuntime };
