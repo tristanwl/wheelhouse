@@ -505,3 +505,26 @@ func TestSubPathURLs(t *testing.T) {
 		t.Errorf("requests = %+v", fake.Requests())
 	}
 }
+
+func TestQueueCountIsTheTotalNotThePageLength(t *testing.T) {
+	// Only the first page of 25 is fetched, but the count is of the whole queue.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v3/queue":
+			_, _ = w.Write([]byte(`{"page":1,"pageSize":25,"totalRecords":40,"records":[{"id":1,"title":"T","size":10,"sizeleft":5,"status":"downloading"}]}`))
+		case "/api/v3/system/status":
+			_, _ = w.Write([]byte(`{"version":"4.0.0.1"}`))
+		default:
+			_, _ = w.Write([]byte(`[]`))
+		}
+	}))
+	defer srv.Close()
+	c := sonarr.New(sonarr.Config{URL: srv.URL, APIKey: "k"}, label, mm.ArrOptions{})
+	st, err := c.Status(ctx)
+	if err != nil || st.QueueCount != 40 || st.Version != "4.0.0.1" {
+		t.Errorf("status = %+v, err = %v", st, err)
+	}
+	if st.Health == nil || st.Indexers.Issues == nil {
+		t.Errorf("lists must be empty, not nil: %+v", st)
+	}
+}

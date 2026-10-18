@@ -245,3 +245,22 @@ func TestStatusEndpointShape(t *testing.T) {
 		}
 	}
 }
+
+type staticSource []core.Instance
+
+func (s staticSource) Instances(context.Context) ([]core.Instance, error) { return s, nil }
+
+func TestDisabledInstancesAreNotListed(t *testing.T) {
+	fake := mmtest.StartRadarr(t)
+	cfg := map[string]any{"url": fake.URL, "apiKey": mmtest.GoodKey}
+	reg, _ := core.NewRegistry(sonarr.Definition(), radarr.Definition())
+	rt := core.NewRuntime(reg, staticSource{
+		{ID: "radarr", ProviderID: "radarr", Name: "Radarr", Enabled: true, Config: cfg},
+		{ID: "radarr-off", ProviderID: "radarr", Name: "Radarr off", Enabled: false, Config: cfg},
+		{ID: "mystery", ProviderID: "no-such-provider", Name: "Mystery", Enabled: true, Config: cfg},
+	})
+	entries, err := mm.ListManagers(ctx, rt, "")
+	if err != nil || !reflect.DeepEqual(ids(entries), []string{"radarr"}) {
+		t.Errorf("entries = %v, err = %v", ids(entries), err)
+	}
+}
