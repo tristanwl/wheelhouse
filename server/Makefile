@@ -1,6 +1,11 @@
-.PHONY: build fmt fmt-check vet test lint vuln check run clean
+.PHONY: build ui fmt fmt-check vet test lint vuln check run clean
 
 BIN := wheelhouse
+
+# Builds the Vite UI (web/) and copies it where `build` embeds it. Needs Node and
+# `npm ci` in web/ first; without it the binary serves the placeholder page.
+ui:
+	cd ../web && npm run build && npm run embed
 
 # A static, CGO-free, path-independent binary.
 build:

@@ -1,0 +1,5 @@
+# Build output copied from web/dist by `npm run embed` (web/README.md). Never committed;
+# only .gitkeep stays so that `//go:embed all:dist` matches on a clean checkout.
+*
+!.gitignore
+!.gitkeep

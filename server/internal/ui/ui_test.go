@@ -14,8 +14,8 @@ func get(h http.Handler, method, target string) *httptest.ResponseRecorder {
 	return rec
 }
 
-func TestEmbeddedPlaceholder(t *testing.T) {
-	h := Handler()
+func TestPlaceholder(t *testing.T) {
+	h := Placeholder()
 	for _, p := range []string{"/", "/index.html", "/library", "/explore/some/deep/route"} {
 		rec := get(h, "GET", p)
 		if p == "/index.html" {
@@ -38,19 +38,19 @@ func TestEmbeddedPlaceholder(t *testing.T) {
 }
 
 func TestPlaceholderHasNoInlineScriptOrStyle(t *testing.T) {
-	body := get(Handler(), "GET", "/").Body.String()
+	body := get(Placeholder(), "GET", "/").Body.String()
 	for _, bad := range []string{"<script", "<style", "style=", "onclick=", "javascript:"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("placeholder contains %q, which the CSP would block", bad)
 		}
 	}
-	if rec := get(Handler(), "GET", "/placeholder.css"); rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Type"), "text/css") {
+	if rec := get(Placeholder(), "GET", "/placeholder.css"); rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Type"), "text/css") {
 		t.Errorf("placeholder.css: %d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
 
 func TestMissingAssetIs404NotIndex(t *testing.T) {
-	rec := get(Handler(), "GET", "/assets/app.js")
+	rec := get(Placeholder(), "GET", "/assets/app.js")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}
@@ -60,14 +60,14 @@ func TestMissingAssetIs404NotIndex(t *testing.T) {
 }
 
 func TestPathTraversalStaysInsideTheUI(t *testing.T) {
-	rec := get(Handler(), "GET", "/../../go.mod")
+	rec := get(Placeholder(), "GET", "/../../go.mod")
 	if strings.Contains(rec.Body.String(), "module ") {
 		t.Fatal("served a file outside dist")
 	}
 }
 
 func TestOnlyGetAndHead(t *testing.T) {
-	h := Handler()
+	h := Placeholder()
 	if rec := get(h, "POST", "/"); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("POST: %d", rec.Code)
 	}

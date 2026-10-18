@@ -70,6 +70,39 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 }
 
+// The page shows posters from TMDB (Explore, Radarr) and TheTVDB (Sonarr). Those
+// two hosts are the only thing the CSP lets in from outside, and only as images.
+func TestCSPAllowsExactlyTheImageHosts(t *testing.T) {
+	directives := map[string][]string{}
+	for _, part := range strings.Split(ContentSecurityPolicy, ";") {
+		fields := strings.Fields(part)
+		if len(fields) > 0 {
+			directives[fields[0]] = fields[1:]
+		}
+	}
+	wantImg := []string{"'self'", "data:", "https://image.tmdb.org", "https://artworks.thetvdb.com"}
+	if got := directives["img-src"]; strings.Join(got, " ") != strings.Join(wantImg, " ") {
+		t.Errorf("img-src = %v, want %v", got, wantImg)
+	}
+	// Every other fetching directive stays same-origin: no script, style, font,
+	// connection or frame may come from outside.
+	for _, name := range []string{"default-src", "script-src", "style-src", "font-src", "connect-src"} {
+		if got := directives[name]; len(got) != 1 || got[0] != "'self'" {
+			t.Errorf("%s = %v, want only 'self'", name, got)
+		}
+	}
+	if _, ok := directives["frame-src"]; ok {
+		t.Error("frame-src is set; the UI embeds nothing (the trailer is a link out)")
+	}
+	for name, values := range directives {
+		for _, v := range values {
+			if strings.Contains(v, "*") || v == "https:" || v == "http:" {
+				t.Errorf("%s has a broad source %q", name, v)
+			}
+		}
+	}
+}
+
 func TestSecurityHeadersOnErrorResponses(t *testing.T) {
 	boom := func(http.ResponseWriter, *http.Request) { panic("boom") }
 	h := Chain(http.HandlerFunc(boom), SecurityHeaders(), Recover(logger(&bytes.Buffer{})))

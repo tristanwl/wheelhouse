@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/tristanwl/wheelhouse/server/internal/ui"
 )
 
 func testHandler(ffmpeg bool, buf *bytes.Buffer) http.Handler {
@@ -19,7 +21,8 @@ func testHandler(ffmpeg bool, buf *bytes.Buffer) http.Handler {
 	if buf != nil {
 		log = slog.New(slog.NewTextHandler(buf, nil))
 	}
-	return Handler(Options{Logger: log, Ffmpeg: func() bool { return ffmpeg }})
+	// The placeholder, not the embedded build: these tests must pass with or without `npm run embed`.
+	return Handler(Options{Logger: log, Ffmpeg: func() bool { return ffmpeg }, UI: ui.Placeholder()})
 }
 
 func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
