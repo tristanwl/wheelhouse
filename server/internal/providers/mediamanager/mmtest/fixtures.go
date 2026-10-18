@@ -10,7 +10,7 @@ import (
 )
 
 // The fixtures are sanitized real responses from Sonarr v4 and Radarr v5, copied
-// byte for byte from lib/providers/media-manager/__fixtures__ (a test checks
+// byte for byte from acceptance/fakes/media-manager (a test checks
 // they still match). The fakes serve copies of them.
 //
 //go:embed testdata

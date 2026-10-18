@@ -1,6 +1,6 @@
 // Package fakesabnzbd is a stand-in for SABnzbd's /api endpoint, replaying
 // sanitized real responses (testdata/ holds byte-for-byte copies of
-// lib/providers/download-client/__fixtures__/sabnzbd, captured from SABnzbd
+// acceptance/fakes/sabnzbd, captured from SABnzbd
 // 4.5). It behaves like SABnzbd 4.5: a wrong key is a 403 with a plain-text
 // body. For tests only; nothing in the server binary imports it.
 package fakesabnzbd

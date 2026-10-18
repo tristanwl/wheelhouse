@@ -12,7 +12,7 @@ export interface FakeTmdbServerOptions {
 }
 
 /**
- * The same data as installFakeTmdb, served over real HTTP, for black-box tests
+ * TMDB data (fake-tmdb.ts) served over real HTTP, for black-box tests
  * (the app is pointed at it with TMDB_BASE_URL = `${url}/3`). A missing or
  * wrong key is a 401 with a JSON body, as at TMDB.
  */

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { fixtureMovies, fourKMovies } from "../lib/providers/media-manager/__fixtures__/server";
+import { fixtureMovies, fourKMovies } from "./fakes/media-manager/server";
 import { startStack, type Stack } from "./fakes";
 import { startServer, type RunningServer } from "./harness";
 import { ALL_GET_CASES, PAGES } from "./routes";

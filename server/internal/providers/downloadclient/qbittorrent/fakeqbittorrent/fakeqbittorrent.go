@@ -4,7 +4,7 @@
 // with 200 "Ok."/"Fails."; v5 with 204 and 401.
 //
 // testdata/ holds byte-for-byte copies of
-// lib/providers/download-client/__fixtures__/qbittorrent: sanitized responses
+// acceptance/fakes/qbittorrent: sanitized responses
 // captured from real qBittorrent v5.2.4 and v4.6.7 containers, with no network
 // and no real content. The v5 torrent list is assembled from the real objects
 // seen for each state (identities replaced). No real run produced

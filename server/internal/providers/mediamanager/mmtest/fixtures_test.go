@@ -8,14 +8,13 @@ import (
 	"testing"
 )
 
-// The embedded fixtures are copies of the TypeScript ones. They must stay
-// byte-identical to lib/providers/media-manager/__fixtures__ while that
-// directory exists (the Next app keeps using it until the cut-over).
-func TestFixturesMatchTheTypeScriptOnes(t *testing.T) {
-	root := filepath.Join("..", "..", "..", "..", "..", "lib", "providers", "media-manager", "__fixtures__")
+// The embedded fixtures are copies of the acceptance suite's. They must stay
+// byte-identical to acceptance/fakes/media-manager, the source of truth.
+func TestFixturesMatchTheAcceptanceOnes(t *testing.T) {
+	root := filepath.Join("..", "..", "..", "..", "..", "acceptance", "fakes", "media-manager")
 	dir, err := os.OpenRoot(root)
 	if err != nil {
-		t.Skip("the TypeScript fixtures are not next to the Go module")
+		t.Fatalf("the acceptance fixtures are missing: %v", err)
 	}
 	defer func() { _ = dir.Close() }()
 	n := 0
@@ -31,7 +30,7 @@ func TestFixturesMatchTheTypeScriptOnes(t *testing.T) {
 		}
 		got, _ := fixtureFS.ReadFile(p)
 		if !bytes.Equal(got, want) {
-			t.Errorf("%s differs from the TypeScript fixture", rel)
+			t.Errorf("%s differs from the acceptance fixture", rel)
 		}
 		n++
 		return nil

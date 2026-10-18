@@ -1,12 +1,12 @@
 import {
   GOOD_KEY as SAB_KEY,
   startFakeSabnzbd,
-} from "../lib/providers/download-client/__fixtures__/sabnzbd/server";
+} from "./sabnzbd/server";
 import {
   GOOD_PASSWORD as QB_PASSWORD,
   GOOD_USER as QB_USER,
   startFakeQbittorrent,
-} from "../lib/providers/download-client/__fixtures__/qbittorrent/server";
+} from "./qbittorrent/server";
 import {
   GOOD_KEY as ARR_KEY,
   fourKMovies,
@@ -14,20 +14,20 @@ import {
   startFakeSonarr,
   type FakeRadarr,
   type FakeSonarr,
-} from "../lib/providers/media-manager/__fixtures__/server";
+} from "./media-manager/server";
 import {
   GOOD_KEY as JELLYFIN_KEY,
   startFakeJellyfin,
-} from "../lib/providers/media-server/__fixtures__/jellyfin/server";
+} from "./jellyfin/server";
 import {
   GOOD_TOKEN as PLEX_TOKEN,
   startFakePlex,
-} from "../lib/providers/media-server/__fixtures__/plex/server";
+} from "./plex/server";
 import {
   GOOD_KEY as TMDB_KEY,
   startFakeTmdbServer,
-} from "../lib/providers/metadata/__fixtures__/tmdb-server";
-import { Cleanup, closedUrl, startHangingServer } from "./harness";
+} from "./tmdb/server";
+import { Cleanup, closedUrl, startHangingServer } from "../harness";
 
 /** The credentials each fake accepts. */
 export const GOOD = {
