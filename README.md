@@ -8,16 +8,16 @@
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange)
 
 A self-hosted dashboard and companion for your *arr media stack: live status
-for Sonarr, Radarr, SABnzbd, Plex and Jellyfin; storage usage per volume; library
+for Sonarr, Radarr, SABnzbd, qBittorrent, Plex and Jellyfin; storage usage per volume; library
 browsing and deletion (including per-season TV deletes); movie discovery via
 TMDB; and a codec analysis view that finds files worth converting to your
 preferred codec per resolution tier and can run the conversion with ffmpeg,
 using hardware encoding when your GPU supports it.
 
-> **Status: early.** Wheelhouse works today with Sonarr, Radarr, SABnzbd and
+> **Status: early.** Wheelhouse works today with Sonarr, Radarr, SABnzbd, qBittorrent and
 > Plex, configured by environment variables. There is **no authentication
 > yet** — run it only on a trusted network. Swappable providers (Jellyfin,
-> qBittorrent, ...), a setup wizard, an admin page and local-user auth are
+> ...), a setup wizard, an admin page and local-user auth are
 > planned; see [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md).
 
 Wheelhouse is a companion for the *arr stack, not a replacement for it, and
@@ -60,6 +60,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; same |
 | `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | no | Extra instance, e.g. `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*`. See below |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
+| `QBITTORRENT_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD` | no | Download client (v4 and v5); shows torrents, including seeding, next to or instead of SABnzbd. The URL's host and port must be what qBittorrent's web UI expects (a remapped Docker port makes it answer 401) |
 | `PLEX_URL`, `PLEX_TOKEN` | no | Media server status card only |
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY` | no | Media server status card only; key from Dashboard → API Keys in Jellyfin. Can run alongside Plex |
 | `TMDB_API_KEY` | no | Enables Explore; free key from themoviedb.org |

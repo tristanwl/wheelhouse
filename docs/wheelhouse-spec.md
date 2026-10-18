@@ -491,8 +491,65 @@ Each PR keeps the app working.
    described under "`/api/status` shape". `redact` now masks `user:pass@` in
    URLs, because a malformed configured URL could otherwise echo its password
    in a `down` instance's error.
-7. **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
-   seeding rows, hardlink check in the converter.
+7. ✅ **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
+   seeding rows, hardlink check in the converter. Deviations and decisions:
+   - Config is `QBITTORRENT_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD`
+     (instance `qbittorrent`); extra instances wait for Phase 2.
+   - Fixtures come from real containers (qBittorrent v5.2.4 and v4.6.7, official
+     `qbittorrentofficial/qbittorrent-nox` images), with no network and no real
+     content. The real responses differ from what the spec assumed, and the
+     adapter accepts both generations:
+
+     | | v4.6.7 | v5.2.4 |
+     |---|---|---|
+     | login success | 200, body `Ok.` | 204, empty body |
+     | wrong password | 200, body `Fails.` | 401 `Unauthorized` |
+     | protected call without a session | 403 | 403 |
+     | too many failed logins | 403, ban message | 403, ban message |
+     | session cookie | `SID` | `QBT_SID_<port>` |
+     | stopped torrent | `pausedDL`/`pausedUP` | `stoppedDL`/`stoppedUP` |
+
+     The adapter keeps whatever cookie login sets, whatever its name, and signs
+     in again once on a 403 (or 401) from a protected call; parallel calls share
+     one login. A 401 on login can also mean qBittorrent rejected the request's
+     host or port (its host-header validation), for instance behind a remapped
+     Docker port; the message says to check the username and password, and the
+     README mentions the URL.
+   - `paused` means: at least one torrent is unfinished and every unfinished one
+     is stopped. qBittorrent has no queue-wide pause, so an empty or
+     seed-only client is never "paused".
+   - `queueCount` is the number of torrents with progress below 100 %
+     (including magnets still fetching metadata and ones being rechecked).
+     Seeding torrents are counted in `torrent.seeding` instead (states
+     `uploading`, `forcedUP`, `stalledUP`). `speedBytesPerSec` is the
+     download speed, `torrent.uploadBytesPerSec` the upload speed, and
+     `etaSeconds` is the unfinished bytes divided by the download speed
+     (null when nothing is downloading). `statusText` is Paused, Downloading,
+     Seeding or Idle.
+   - `listItems()` returns every torrent except those finished and stopped
+     (`pausedUP`/`stoppedUP`, mapped to `completed`). Everything else is listed:
+     downloading, queued, stalled, checking, moving, error, seeding. A state the
+     adapter doesn't know is shown as `downloading` with qBittorrent's own word
+     in `stateDetail`. `allocating` and `missingFiles` (detail "Files missing")
+     are additions to the table.
+   - A magnet that is still fetching metadata reports size 0 and total size -1;
+     the adapter reports 0 bytes and shows "0%".
+   - The real client could not produce `downloading`, `uploading`, `forcedDL`,
+     `forcedMetaDL`, `error` or `missingFiles` without peers or a failing disk
+     (a torrent whose file is deleted simply goes back to downloading), so
+     those mappings are covered by hand-written cases, not fixtures.
+   - Dashboard: each row has a usenet/torrent badge; rows sort failed,
+     post-processing/checking, downloading, stalled, queued, paused, seeding;
+     at most 50 rows are drawn, with a "+N more" line; seeding rows show ratio
+     and upload speed. The speed shown on a row is the client's total download
+     speed, on downloading rows only. The qBittorrent card shows its seeding
+     count and upload speed and has no server lines.
+   - Converter: before queuing, the convert route `stat`s the file; with
+     `nlink > 1` it answers 409 `{ error, code: "hardlinked", linkCount }`
+     unless the body has `acknowledgeHardlink: true`, and `ConvertModal` asks the
+     user, then retries with the flag. A file that already has an active job is
+     not asked again. `listSeedingPaths()` stays deferred; nothing asks the
+     client whether a path is seeding.
 8. ✅ **Jellyfin adapter**: proves the MediaServer interface with a second
    implementation. Fixtures come from a real Jellyfin 12.2.0 (official Docker
    image), sanitized. The interface did not change; `activeSessions` now

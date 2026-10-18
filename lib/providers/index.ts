@@ -1,6 +1,7 @@
 import { EnvConfigSource } from "./core/config-source";
 import { createRegistry } from "./core/registry";
 import { createProviderRuntime, type ProviderRuntime } from "./core/runtime";
+import { qbittorrentProvider } from "./download-client/qbittorrent";
 import { sabnzbdProvider } from "./download-client/sabnzbd";
 import { listManagers } from "./media-manager/instances";
 import type { ManagerKind } from "./media-manager/types";
@@ -34,6 +35,7 @@ export const registry = createRegistry([
   sonarrProvider,
   radarrProvider,
   sabnzbdProvider,
+  qbittorrentProvider,
   plexProvider,
   jellyfinProvider,
 ]);

@@ -56,8 +56,9 @@ every other site's home link.
   effectively instant). Below the cards is a storage bar per root folder (TV,
   Movies); clicking a storage bar instead navigates to
   `/library?path=<rootFolderPath>`, pre-filtered to that volume. A Downloads
-  section below Storage shows SABnzbd's active queue live (filename,
-  progress bar, speed, ETA) — polled every 5s, faster than the 15s status
+  section below Storage shows the download clients' queues live (protocol
+  badge, name, state, progress bar, speed, ETA; ratio and upload speed for
+  seeding torrents) — polled every 5s, faster than the 15s status
   poll, since this is the one thing on the dashboard actually worth watching
   in near-real-time.
 - `/library` — a searchable, sortable table of every series (sonarr) + movie
@@ -451,11 +452,30 @@ the modal every 2s via SWR until the job reaches a terminal state.
   "Refused connection..." entries — those are the web UI's host whitelist
   rejecting client access, unrelated to server/download health, and would
   read as a false alarm on the card.
-- `GET /api/downloads` — SABnzbd's queue slots reshaped for the dashboard:
-  `{ up, paused, kbpersec, items: [{ id, filename, status, postProcessing,
-  percentage, sizeMb, sizeLeftMb, timeleft }] }`. Deliberately separate from
-  `/api/status` so it can be polled faster (5s vs 15s) without dragging the
-  rest of the dashboard along.
+- `GET /api/downloads` — every configured download client's items in the
+  normalized `DownloadItem` shape (bytes, `progress` 0..1, `state`,
+  `protocol`), each tagged with its `instanceId`:
+  `{ instances: [{ instanceId, name, protocol, up, paused?,
+  speedBytesPerSec?, error? }], items }`. A client that fails (wrong login,
+  down, half-configured) is reported in `instances` with its redacted error
+  and doesn't affect the others. Deliberately separate from `/api/status` so
+  it can be polled faster (5s vs 15s) without dragging the rest of the
+  dashboard along.
+
+  The dashboard sorts the rows by state (failed, post-processing or
+  checking, downloading, stalled, queued, paused, seeding), draws at most 50
+  and adds a "+N more" line, and puts a usenet/torrent badge on each. The pure
+  helpers are in `lib/download-rows.ts`.
+
+  qBittorrent (`lib/providers/download-client/qbittorrent.ts`) logs in with
+  a cookie session (`POST /api/v2/auth/login`), keeps whatever cookie that
+  sets, and signs in again once if a call comes back 403. Its torrent states
+  map to the normalized ones as the spec's table says (v4's `paused*` and v5's
+  `stopped*` names both work). Every torrent is listed except finished,
+  stopped ones, so seeding torrents appear with their ratio and upload speed.
+  `paused` is true only when every unfinished torrent is stopped (qBittorrent
+  has no queue-wide pause); `queueCount` counts torrents below 100 %. The spec
+  documents the details and how v4 and v5 differ.
 
   A download doesn't disappear from here once the network transfer finishes
   — it keeps showing (amber, pulsing bar) through SABnzbd's post-processing
@@ -568,6 +588,15 @@ the modal every 2s via SWR until the job reaches a terminal state.
   the first's `.bak`) and how the UI reattaches after closing the modal.
   `GET` lists all jobs (queued/running/recently finished) from the
   in-memory queue.
+
+  Before queuing, the route `stat`s the file (`lib/hardlink.ts`). If it has
+  more than one hard link it may also be the copy a torrent client is seeding,
+  so the route answers `409 { error, code: "hardlinked", linkCount }` and
+  starts nothing, unless the body carries `acknowledgeHardlink: true`.
+  `ConvertModal` shows a plain-language warning on that 409 (the conversion
+  replaces the library file with a new one, so the seeding copy stays and disk
+  use roughly doubles) and retries with the flag when the user chooses
+  "Convert anyway". A path that already has an active job skips the check.
 - `GET /api/codec-analysis/convert/[jobId]` — one job's live status:
   `{ id, instanceId, itemId, filePath, title, originalSize, backend,
   targetFamily, status, progressPercent, error?, newSize?, backupPath?,
@@ -583,7 +612,9 @@ and the `/api/v3` prefix and turns an HTTP 401 into an "API key incorrect"
 error; `instances.ts` lists the configured instances of a kind for the routes.
 `lib/providers/download-client/sabnzbd.ts` is the
 SABnzbd adapter (query-param API style; a wrong key is an HTTP 403 with a
-plain-text body); `lib/providers/media-server/plex.ts` is the Plex adapter
+plain-text body); `lib/providers/download-client/qbittorrent.ts` is the
+qBittorrent adapter (cookie session; a wrong login is a 401 on v5 and a 200
+"Fails." on v4); `lib/providers/media-server/plex.ts` is the Plex adapter
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
 `/identity`); `lib/providers/media-server/jellyfin.ts` is the Jellyfin adapter
 (`Authorization: MediaBrowser Token="<key>"` for anything beyond
@@ -599,6 +630,7 @@ service that isn't configured is reported as such instead of breaking the app:
 SONARR_URL, SONARR_API_KEY
 RADARR_URL, RADARR_API_KEY
 SABNZBD_URL, SABNZBD_API_KEY
+QBITTORRENT_URL, QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD
 PLEX_URL, PLEX_TOKEN
 JELLYFIN_URL, JELLYFIN_API_KEY
 TMDB_API_KEY

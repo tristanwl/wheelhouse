@@ -69,6 +69,8 @@ export function ConvertModal({
   const [jobId, setJobId] = useState<string | null>(existingJobId ?? null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // The server found other hard links to this file; waiting for the user to confirm.
+  const [hardlinked, setHardlinked] = useState(false);
   const [backend, setBackend] = useState<Backend>("software");
   const [backendTouched, setBackendTouched] = useState(false);
 
@@ -114,7 +116,7 @@ export function ConvertModal({
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [job?.log]);
 
-  async function start() {
+  async function start(acknowledgeHardlink = false) {
     setStarting(true);
     setStartError(null);
     try {
@@ -129,10 +131,16 @@ export function ConvertModal({
           originalSize,
           backend,
           targetFamily,
+          ...(acknowledgeHardlink ? { acknowledgeHardlink: true } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
+      if (res.status === 409 && body.code === "hardlinked") {
+        setHardlinked(true);
+        return;
+      }
       if (!res.ok) throw new Error(body.error ?? `start failed: ${res.status}`);
+      setHardlinked(false);
       setJobId(body.id);
     } catch (err) {
       setStartError(err instanceof Error ? err.message : "Failed to start conversion.");
@@ -225,6 +233,21 @@ export function ConvertModal({
             </div>
 
             {startError && <p className="mb-3 text-xs text-red-400">{startError}</p>}
+            {hardlinked && (
+              <div
+                role="alert"
+                className="mb-4 rounded-md border border-amber-700 bg-amber-950/40 p-3 text-xs text-amber-200"
+              >
+                <p className="mb-1 font-medium">This file is also stored somewhere else</p>
+                <p>
+                  Another file on this disk shares this one&apos;s data, most likely the copy your
+                  torrent client is seeding. Converting replaces the library file with a new one, so
+                  the seeding copy stays as it is and the disk use for this title roughly doubles.
+                  If you were relying on that link to keep seeding without extra space, the seeding
+                  copy will now take its own space too.
+                </p>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={onClose}
@@ -234,11 +257,11 @@ export function ConvertModal({
                 Cancel
               </button>
               <button
-                onClick={start}
+                onClick={() => start(hardlinked)}
                 disabled={starting}
                 className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-60"
               >
-                {starting ? "Starting…" : "Convert"}
+                {starting ? "Starting…" : hardlinked ? "Convert anyway" : "Convert"}
               </button>
             </div>
           </>

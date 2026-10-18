@@ -32,6 +32,16 @@ export const ENV_MAPPINGS: readonly EnvMapping[] = [
     vars: { url: "SABNZBD_URL", apiKey: "SABNZBD_API_KEY" },
   },
   {
+    providerId: "qbittorrent",
+    instanceId: "qbittorrent",
+    name: "qBittorrent",
+    vars: {
+      url: "QBITTORRENT_URL",
+      username: "QBITTORRENT_USERNAME",
+      password: "QBITTORRENT_PASSWORD",
+    },
+  },
+  {
     providerId: "plex",
     instanceId: "plex",
     name: "Plex",

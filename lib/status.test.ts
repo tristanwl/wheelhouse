@@ -145,6 +145,34 @@ describe("describeInstance", () => {
     ]);
   });
 
+  it("describes a torrent client by its seeding, with no usenet server lines", () => {
+    const detail = {
+      paused: false,
+      statusText: "Seeding",
+      speedBytesPerSec: 0,
+      queueCount: 0,
+      etaSeconds: null,
+      version: "5.2.4",
+      warnings: [],
+    };
+    const card = (torrent: { seeding: number; uploadBytesPerSec: number }): StatusInstance => ({
+      id: "qbittorrent",
+      providerId: "qbittorrent",
+      name: "qBittorrent",
+      role: "downloadClient",
+      state: "ok",
+      detail: { ...detail, torrent },
+    });
+    expect(describeInstance(card({ seeding: 3, uploadBytesPerSec: 51200 })).lines).toEqual([
+      "status: Seeding",
+      "v5.2.4",
+      "seeding: 3 (↑ 50.0 KB/s)",
+    ]);
+    expect(describeInstance(card({ seeding: 0, uploadBytesPerSec: 0 })).lines).toContain(
+      "seeding: 0"
+    );
+  });
+
   it("describes a media server, with its notice as a warning", () => {
     const instance: StatusInstance = {
       id: "plex",
