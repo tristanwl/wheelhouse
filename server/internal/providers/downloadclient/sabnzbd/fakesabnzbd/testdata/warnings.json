@@ -8,7 +8,7 @@
     },
     {
       "type": "WARNING",
-      "text": "Refused connection from: 192.0.2.10 (ubu.example.lan)",
+      "text": "Refused connection from: 192.0.2.10 (host.example.lan)",
       "time": 1792298000,
       "origin": "interface.py262"
     },
