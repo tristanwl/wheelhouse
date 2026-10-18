@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getMovies } from "@/lib/arr-client";
+import { collectFromManagers, getMediaManagers } from "@/lib/providers";
 import { backdropUrl, getMovieDetail, pickTrailerKey, posterUrl } from "@/lib/tmdb-client";
 
 export interface ExploreDetail {
@@ -24,10 +24,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const [detail, libraryMovies] = await Promise.all([getMovieDetail(id), getMovies()]);
+    const [detail, library] = await Promise.all([
+      getMovieDetail(id),
+      getMediaManagers("movies").then((entries) =>
+        collectFromManagers(entries, (client) => client.getMovies())
+      ),
+    ]);
     const result: ExploreDetail = {
       id: detail.id,
-      alreadyAdded: libraryMovies.some((m) => m.tmdbId === detail.id),
+      alreadyAdded: library.results.some((r) => r.value.some((m) => m.tmdbId === detail.id)),
       title: detail.title,
       overview: detail.overview,
       year: detail.release_date ? Number(detail.release_date.slice(0, 4)) : null,

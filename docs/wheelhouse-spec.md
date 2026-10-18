@@ -133,8 +133,8 @@ the Phase 2 "Test connection" button and the setup wizard call.
 
 Instance ids are in place from day one so multi-instance never needs a
 breaking migration. The env source produces ids `sonarr`, `radarr`, `sabnzbd`,
-`plex`, `tmdb`, which keeps `/api/library/[service]` working unchanged until
-the route param is renamed to `[instanceId]`.
+`plex`, `tmdb`, which kept `/api/library/[service]` URLs working unchanged
+when the route param was renamed to `[instanceId]` (PR 5).
 
 ### Shared HTTP helper (`providerFetch`)
 
@@ -419,9 +419,32 @@ Each PR keeps the app working.
    SABnzbd 4.x answers it with HTTP 403 and a plain-text body, not a 200 with an
    error field.
 4. ✅ **Plex → MediaServer**: adapter, `state` mapping, contract tests.
-5. **Sonarr/Radarr → MediaManager instances**: `[service]` → `[instanceId]`,
+5. ✅ **Sonarr/Radarr → MediaManager instances**: `[service]` → `[instanceId]`,
    iterate instances in status/storage/explore, fix storage double-count, and
-   add the response cache (see "Response caching").
+   add the response cache (see "Response caching"). Deviations and decisions:
+   - Extra instances use an interim env convention, `RADARR_<ID>_URL` and
+     `RADARR_<ID>_API_KEY` (same for Sonarr): `RADARR_4K_URL` is the instance
+     `radarr-4k`, "Radarr 4K". Underscores in the ID become `-` in the id and a
+     space in the name. Phase 2's database config replaces it.
+   - Routes use a `kind` (`movies` | `series`) query parameter where they used
+     `service`, and `instanceId` where they address one instance (add, delete,
+     details, seasons, convert jobs). Library, storage and search results carry
+     `instanceId`; library and storage also list every instance with `up` and
+     its error, so a broken one is visible. Search returns one hit per
+     instance, so a movie in two Radarrs appears twice, each with its own
+     "in library" flag. Explore adds to the first ready movie instance (it has
+     no instance picker yet).
+   - `/api/status` keeps its shape for the default `sonarr` and `radarr`
+     instances, plus a `configured` flag; instance-based cards are PR 6.
+   - The response cache is in `createHttpClient` (`cacheTtlMs` per call,
+     `invalidate()` per client) and is used for the library lists with a 5 s
+     TTL; adapters clear it on add, delete, rescan, episode-file delete and
+     series update. Cached bodies are replayed as fresh `Response`s, so callers
+     never share objects.
+   - Radarr's `movie/lookup/tmdb` leaves `id` off even for a movie that is in the
+     library (only the term lookup carries it), which is why "in library" for
+     search comes from the term lookup and add only uses the tmdb lookup as a
+     template.
 6. **`/api/status` + dashboard**: instance-based cards.
 7. **qBittorrent adapter**: fixtures, state mapping, UI protocol badge and
    seeding rows, hardlink check in the converter.

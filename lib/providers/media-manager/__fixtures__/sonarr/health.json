@@ -1,0 +1,14 @@
+[
+  {
+    "source": "UpdateCheck",
+    "type": "warning",
+    "message": "Example health message for UpdateCheck",
+    "wikiUrl": "https://wiki.servarr.com/sonarr/system#new-update-is-available"
+  },
+  {
+    "source": "IndexerLongTermStatusCheck",
+    "type": "warning",
+    "message": "Example health message for IndexerLongTermStatusCheck",
+    "wikiUrl": "https://wiki.servarr.com/sonarr/system#indexers-are-unavailable-due-to-failures"
+  }
+]

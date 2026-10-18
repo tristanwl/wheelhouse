@@ -3,10 +3,10 @@
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { ModalCloseButton } from "./ModalCloseButton";
-import type { ItemDetails } from "@/app/api/library/[service]/[id]/details/route";
+import type { ItemDetails } from "@/app/api/library/[instanceId]/[id]/details/route";
 
 interface DetailModalProps {
-  service: "sonarr" | "radarr";
+  instanceId: string;
   id: number;
   fallbackTitle: string;
   onClose: () => void;
@@ -19,8 +19,8 @@ function formatRuntime(minutes: number | null): string | null {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export function DetailModal({ service, id, fallbackTitle, onClose }: DetailModalProps) {
-  const { data, error } = useSWR<ItemDetails>(`/api/library/${service}/${id}/details`, fetcher);
+export function DetailModal({ instanceId, id, fallbackTitle, onClose }: DetailModalProps) {
+  const { data, error } = useSWR<ItemDetails>(`/api/library/${instanceId}/${id}/details`, fetcher);
 
   const runtime = data ? formatRuntime(data.runtime) : null;
 

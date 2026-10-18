@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { addMovie, addSeries, lookupMovieByTmdbId, lookupSeriesByTvdbId } from "@/lib/arr-client";
+import { resolveManager } from "@/lib/manager-route";
 
 interface AddRequestBody {
-  service: "sonarr" | "radarr";
-  id: number; // tvdbId (sonarr) or tmdbId (radarr)
+  instanceId: string;
+  id: number; // tvdbId (series) or tmdbId (movies)
   qualityProfileId: number;
   rootFolderPath: string;
   monitored: boolean;
   searchNow: boolean;
-  minimumAvailability?: string; // radarr only
+  minimumAvailability?: string; // movies only
 }
 
 export async function POST(req: Request) {
@@ -19,10 +19,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid request body" }, { status: 400 });
   }
 
-  const { service, id, qualityProfileId, rootFolderPath, monitored, searchNow } = body;
+  const { instanceId, id, qualityProfileId, rootFolderPath, monitored, searchNow } = body;
 
-  if (service !== "sonarr" && service !== "radarr") {
-    return NextResponse.json({ error: "service must be sonarr or radarr" }, { status: 400 });
+  if (typeof instanceId !== "string" || !instanceId) {
+    return NextResponse.json({ error: "instanceId is required" }, { status: 400 });
   }
   if (!id || !qualityProfileId || !rootFolderPath) {
     return NextResponse.json(
@@ -30,42 +30,41 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
+  const resolved = await resolveManager(instanceId);
+  if ("response" in resolved) return resolved.response;
+  const { client } = resolved;
 
   try {
-    if (service === "sonarr") {
-      const [base] = await lookupSeriesByTvdbId(id);
-      if (!base) {
-        return NextResponse.json({ error: "series not found" }, { status: 404 });
-      }
-      const payload = {
-        ...base,
-        id: undefined,
-        qualityProfileId,
-        languageProfileId: 1,
-        rootFolderPath,
-        monitored,
-        seasonFolder: true,
-        monitorNewItems: "all",
-        addOptions: { searchForMissingEpisodes: searchNow },
-      };
-      const created = await addSeries(payload);
-      return NextResponse.json({ ok: true, id: created.id, title: created.title });
-    }
-
-    const base = await lookupMovieByTmdbId(id);
+    const base = await client.lookupByExternalId(id);
     if (!base) {
-      return NextResponse.json({ error: "movie not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: client.kind === "series" ? "series not found" : "movie not found" },
+        { status: 404 }
+      );
     }
-    const payload = {
-      ...base,
-      id: undefined,
-      qualityProfileId,
-      rootFolderPath,
-      monitored,
-      minimumAvailability: body.minimumAvailability ?? "released",
-      addOptions: { searchForMovie: searchNow },
-    };
-    const created = await addMovie(payload);
+    const payload =
+      client.kind === "series"
+        ? {
+            ...base,
+            id: undefined,
+            qualityProfileId,
+            languageProfileId: 1,
+            rootFolderPath,
+            monitored,
+            seasonFolder: true,
+            monitorNewItems: "all",
+            addOptions: { searchForMissingEpisodes: searchNow },
+          }
+        : {
+            ...base,
+            id: undefined,
+            qualityProfileId,
+            rootFolderPath,
+            monitored,
+            minimumAvailability: body.minimumAvailability ?? "released",
+            addOptions: { searchForMovie: searchNow },
+          };
+    const created = await client.add(payload);
     return NextResponse.json({ ok: true, id: created.id, title: created.title });
   } catch (err) {
     return NextResponse.json(

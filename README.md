@@ -56,11 +56,30 @@ Set via environment variables (see [.env.example](.env.example)):
 
 | Variable | Required | Notes |
 |---|---|---|
-| `SONARR_URL`, `SONARR_API_KEY` | yes | |
-| `RADARR_URL`, `RADARR_API_KEY` | yes | |
+| `SONARR_URL`, `SONARR_API_KEY` | no | TV library; without it the pages say no Sonarr is configured |
+| `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; same |
+| `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | no | Extra instance, e.g. `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*`. See below |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
 | `PLEX_URL`, `PLEX_TOKEN` | no | Status card only |
 | `TMDB_API_KEY` | no | Enables Explore; free key from themoviedb.org |
+
+### More than one Sonarr or Radarr
+
+Add an instance by setting a URL and API key with an ID of your choice in the
+name, for example:
+
+```sh
+RADARR_4K_URL=http://radarr-4k:7878
+RADARR_4K_API_KEY=...
+```
+
+This creates the instance `radarr-4k`, shown as "Radarr 4K" (the ID is
+lowercased for the id; underscores in it become `-`, and spaces in the name).
+Library, storage, Explore's "In library" badge, search and the codec analysis
+cover every instance, and a misconfigured or unreachable one is reported
+without affecting the others. Setting only one of the two variables is
+reported as a configuration error. This environment convention is interim;
+Phase 2 moves instance configuration to the database.
 
 The Codecs "Convert" feature reads and writes your media files directly, so
 mount them at the same in-container paths Sonarr/Radarr use. Conversions

@@ -43,6 +43,7 @@ export default function ExploreCategoryPage() {
   );
 
   const [meta, setMeta] = useState<AddMeta | null>(null);
+  const [metaError, setMetaError] = useState<string | null>(null);
   const [monitored, setMonitored] = useState(true);
   const [searchNow, setSearchNow] = useState(true);
   const [minimumAvailability, setMinimumAvailability] = useState("released");
@@ -54,9 +55,9 @@ export default function ExploreCategoryPage() {
   const [viewingId, setViewingId] = useState<number | null>(null);
 
   useEffect(() => {
-    fetcher<AddMeta>("/api/add-meta?service=radarr")
+    fetcher<AddMeta>("/api/add-meta?kind=movies")
       .then(setMeta)
-      .catch(() => {});
+      .catch((err) => setMetaError(err instanceof Error ? err.message : "Failed to load options."));
   }, []);
 
   if (!label) {
@@ -79,7 +80,7 @@ export default function ExploreCategoryPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          service: "radarr",
+          instanceId: meta.instanceId,
           id: pendingAdd.id,
           qualityProfileId,
           rootFolderPath: meta.rootFolderPath,
@@ -150,6 +151,7 @@ export default function ExploreCategoryPage() {
         </label>
       </div>
 
+      {metaError && <p className="text-sm text-red-400">{metaError}</p>}
       {(error || pageError) && (
         <p className="text-sm text-red-400">Failed to load: {pageError ?? "request failed"}</p>
       )}
@@ -219,6 +221,7 @@ export default function ExploreCategoryPage() {
         <TmdbDetailModal
           id={viewingHit.id}
           fallbackTitle={viewingHit.title}
+          instanceId={meta?.instanceId ?? null}
           qualityProfiles={meta?.qualityProfiles ?? []}
           rootFolderPath={meta?.rootFolderPath ?? null}
           monitored={monitored}

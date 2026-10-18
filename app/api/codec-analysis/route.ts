@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
-import { getEpisodeFiles, getEpisodes, getMovies, getSeries, type Episode } from "@/lib/arr-client";
 import { analyzeCodecs, type CodecAnalysis, type CodecFileInfo } from "@/lib/codec";
+import {
+  collectFromManagers,
+  getMediaManagers,
+  noManagerMessage,
+  type Episode,
+  type ManagerEntry,
+  type ManagerProblem,
+  type MovieManager,
+  type SeriesManager,
+} from "@/lib/providers";
 import { getCodecPreferences } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
@@ -9,10 +18,14 @@ export interface CodecAnalysisResponse extends CodecAnalysis {
   // Library items with no file yet, or a file Radarr/Sonarr hasn't scanned
   // mediaInfo for yet — excluded from the analysis rather than guessed at.
   skippedCount: number;
+  /** Instances that couldn't be read; the others are still analyzed. */
+  problems?: ManagerProblem[];
 }
 
-async function movieFiles(): Promise<{ files: CodecFileInfo[]; skipped: number }> {
-  const movies = await getMovies();
+type Scan = { files: CodecFileInfo[]; skipped: number };
+
+async function movieFiles(client: MovieManager, entry: ManagerEntry): Promise<Scan> {
+  const movies = await client.getMovies();
   const files: CodecFileInfo[] = [];
   let skipped = 0;
   for (const m of movies) {
@@ -27,7 +40,7 @@ async function movieFiles(): Promise<{ files: CodecFileInfo[]; skipped: number }
       resolution: m.movieFile.mediaInfo?.resolution ?? null,
       bitDepth: m.movieFile.mediaInfo?.videoBitDepth ?? null,
       size: m.movieFile.size,
-      service: "radarr",
+      instanceId: entry.instanceId,
       itemId: m.id,
       filePath: m.movieFile.path,
     });
@@ -68,11 +81,14 @@ function episodeLabel(seriesTitle: string, seasonNumber: number, episodes: Episo
 // per-series (`/api/v3/episodefile?seriesId=`, `/api/v3/episode?seriesId=`)
 // — so this fans out two calls per series in parallel (still fast: ~1s
 // end-to-end against the live library, confirmed).
-async function tvFiles(): Promise<{ files: CodecFileInfo[]; skipped: number }> {
-  const series = await getSeries();
+async function tvFiles(client: SeriesManager, entry: ManagerEntry): Promise<Scan> {
+  const series = await client.getSeries();
   const perSeries = await Promise.all(
     series.map(async (s) => {
-      const [files, episodes] = await Promise.all([getEpisodeFiles(s.id), getEpisodes(s.id)]);
+      const [files, episodes] = await Promise.all([
+        client.getEpisodeFiles(s.id),
+        client.getEpisodes(s.id),
+      ]);
       return { series: s, files, episodes };
     })
   );
@@ -93,7 +109,7 @@ async function tvFiles(): Promise<{ files: CodecFileInfo[]; skipped: number }> {
         resolution: f.mediaInfo?.resolution ?? null,
         bitDepth: f.mediaInfo?.videoBitDepth ?? null,
         size: f.size,
-        service: "sonarr",
+        instanceId: entry.instanceId,
         itemId: s.id,
         filePath: f.path,
       });
@@ -104,16 +120,28 @@ async function tvFiles(): Promise<{ files: CodecFileInfo[]; skipped: number }> {
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const service = searchParams.get("service") === "sonarr" ? "sonarr" : "radarr";
+  const kind = searchParams.get("kind") === "series" ? "series" : "movies";
+
+  const entries = await getMediaManagers(kind);
+  if (entries.length === 0) {
+    return NextResponse.json({ error: noManagerMessage(kind) }, { status: 404 });
+  }
 
   try {
-    const [{ files, skipped }, preferences] = await Promise.all([
-      service === "sonarr" ? tvFiles() : movieFiles(),
+    const [{ results, problems }, preferences] = await Promise.all([
+      collectFromManagers(entries, (client, entry) =>
+        client.kind === "series" ? tvFiles(client, entry) : movieFiles(client, entry)
+      ),
       getCodecPreferences(),
     ]);
+    if (results.length === 0 && problems.length > 0) {
+      return NextResponse.json({ error: problems[0].error, problems }, { status: 502 });
+    }
+    const files = results.flatMap((r) => r.value.files);
     const response: CodecAnalysisResponse = {
       ...analyzeCodecs(files, preferences),
-      skippedCount: skipped,
+      skippedCount: results.reduce((sum, r) => sum + r.value.skipped, 0),
+      ...(problems.length > 0 ? { problems } : {}),
     };
     return NextResponse.json(response);
   } catch (err) {

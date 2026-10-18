@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { access, readdir, rename, rm, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { rescanMovie, rescanSeries } from "./arr-client";
+import { getRuntime, type MediaManager } from "./providers";
 import { ffmpegArgsFor, type Backend } from "./hw-encode";
 import type { PreferableFamily } from "./settings";
 
@@ -12,7 +12,7 @@ const ACTIVE_STATUSES: ConversionStatus[] = ["queued", "probing", "running"];
 
 export interface ConversionJob {
   id: string;
-  service: "radarr" | "sonarr";
+  instanceId: string;
   itemId: number;
   filePath: string;
   title: string;
@@ -85,7 +85,7 @@ export function findActiveJobForPath(filePath: string): ConversionJob | undefine
 // clobber the first job's backup with the first job's (already converted)
 // output, losing the true original.
 export function enqueueConversion(input: {
-  service: "radarr" | "sonarr";
+  instanceId: string;
   itemId: number;
   filePath: string;
   title: string;
@@ -244,8 +244,10 @@ async function runJob(job: InternalJob) {
     await rename(tempPath, job.filePath);
     appendLog(job, `Swapped in converted file; original kept at ${backupPath}\n`);
 
-    if (job.service === "radarr") await rescanMovie(job.itemId).catch(() => {});
-    else await rescanSeries(job.itemId).catch(() => {});
+    await getRuntime()
+      .getClient<MediaManager>(job.instanceId)
+      .then((client) => client.rescan(job.itemId))
+      .catch(() => {});
 
     job.status = "success";
     job.progressPercent = 100;

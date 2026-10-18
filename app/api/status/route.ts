@@ -1,25 +1,20 @@
 import { NextResponse } from "next/server";
 import {
-  getHealth,
-  getIndexers,
-  getQueueSummary,
-  getSystemStatus,
+  getRuntime,
+  redact,
+  type DownloadClient,
   type HealthIssue,
-} from "@/lib/arr-client";
-import { getRuntime, redact, type DownloadClient, type MediaServer } from "@/lib/providers";
+  type IndexerSummary,
+  type MediaManager,
+  type MediaServer,
+} from "@/lib/providers";
 import { formatEta } from "@/lib/format";
-import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
-interface IndexerSummary {
-  total: number;
-  enabled: number;
-  issues: string[];
-}
-
 interface ArrStatus {
   up: boolean;
+  configured: boolean;
   version?: string;
   health: HealthIssue[];
   queueCount: number;
@@ -27,31 +22,38 @@ interface ArrStatus {
   error?: string;
 }
 
-async function arrStatus(service: "sonarr" | "radarr"): Promise<ArrStatus> {
+// The dashboard still shows one card each for the default instances; cards
+// for any instance come with the instance-based status response.
+async function arrStatus(instanceId: "sonarr" | "radarr"): Promise<ArrStatus> {
+  const runtime = getRuntime();
+  const resolved = (await runtime.listInstances()).find((r) => r.instance.id === instanceId);
+  if (!resolved) return { up: false, configured: false, health: [], queueCount: 0 };
+  if (resolved.status !== "ready") {
+    return {
+      up: false,
+      configured: true,
+      health: [],
+      queueCount: 0,
+      error: resolved.error ?? resolved.status,
+    };
+  }
   try {
-    const [status, health, queue, indexers] = await Promise.all([
-      getSystemStatus(service),
-      getHealth(service),
-      getQueueSummary(service),
-      getIndexers(service),
-    ]);
+    const status = await (await runtime.getClient<MediaManager>(instanceId)).getStatus();
     return {
       up: true,
+      configured: true,
       version: status.version,
-      health,
-      queueCount: queue.totalRecords,
-      indexers: {
-        total: indexers.length,
-        enabled: indexers.filter((i) => i.enableRss).length,
-        issues: health.filter((h) => h.source.startsWith("Indexer")).map((h) => h.message),
-      },
+      health: status.health,
+      queueCount: status.queueCount,
+      indexers: status.indexers,
     };
   } catch (err) {
     return {
       up: false,
+      configured: true,
       health: [],
       queueCount: 0,
-      error: err instanceof Error ? err.message : "unknown error",
+      error: err instanceof Error ? redact(err.message) : "unknown error",
     };
   }
 }

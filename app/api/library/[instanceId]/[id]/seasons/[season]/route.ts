@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { deleteEpisodeFile, getEpisodeFiles, getSeriesById, updateSeries } from "@/lib/arr-client";
+import { resolveManager } from "@/lib/manager-route";
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ service: string; id: string; season: string }> }
+  { params }: { params: Promise<{ instanceId: string; id: string; season: string }> }
 ) {
-  const { service, id: idParam, season } = await params;
-  if (service !== "sonarr") {
-    return NextResponse.json({ error: "seasons are only available for sonarr" }, { status: 400 });
+  const { instanceId, id: idParam, season } = await params;
+  const resolved = await resolveManager(instanceId);
+  if ("response" in resolved) return resolved.response;
+  const { client } = resolved;
+  if (client.kind !== "series") {
+    return NextResponse.json({ error: "seasons are only available for series" }, { status: 400 });
   }
   const id = Number(idParam);
   const seasonNumber = Number(season);
@@ -16,15 +19,15 @@ export async function DELETE(
   }
 
   try {
-    const files = await getEpisodeFiles(id);
+    const files = await client.getEpisodeFiles(id);
     const toDelete = files.filter((f) => f.seasonNumber === seasonNumber);
-    await Promise.all(toDelete.map((f) => deleteEpisodeFile(f.id)));
+    await Promise.all(toDelete.map((f) => client.deleteEpisodeFile(f.id)));
 
-    const series = await getSeriesById(id);
+    const series = await client.getSeriesById(id);
     series.seasons = series.seasons.map((s) =>
       s.seasonNumber === seasonNumber ? { ...s, monitored: false } : s
     );
-    await updateSeries(series);
+    await client.updateSeries(series);
 
     return NextResponse.json({ ok: true, filesDeleted: toDelete.length });
   } catch (err) {

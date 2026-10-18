@@ -10,7 +10,7 @@ import type { Backend, EncoderOption } from "@/lib/hw-encode";
 import type { PreferableFamily } from "@/lib/settings";
 
 interface ConvertModalProps {
-  service: "radarr" | "sonarr";
+  instanceId: string;
   itemId: number;
   filePath: string;
   title: string;
@@ -55,7 +55,7 @@ function backendLabel(backend: Backend): string {
 }
 
 export function ConvertModal({
-  service,
+  instanceId,
   itemId,
   filePath,
   title,
@@ -122,7 +122,7 @@ export function ConvertModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          service,
+          instanceId,
           itemId,
           filePath,
           title,

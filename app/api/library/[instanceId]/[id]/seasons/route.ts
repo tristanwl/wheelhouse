@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSeriesById } from "@/lib/arr-client";
+import { resolveManager } from "@/lib/manager-route";
 
 export interface SeasonSummary {
   seasonNumber: number;
@@ -12,11 +12,14 @@ export interface SeasonSummary {
 
 export async function GET(
   _req: Request,
-  { params }: { params: Promise<{ service: string; id: string }> }
+  { params }: { params: Promise<{ instanceId: string; id: string }> }
 ) {
-  const { service, id: idParam } = await params;
-  if (service !== "sonarr") {
-    return NextResponse.json({ error: "seasons are only available for sonarr" }, { status: 400 });
+  const { instanceId, id: idParam } = await params;
+  const resolved = await resolveManager(instanceId);
+  if ("response" in resolved) return resolved.response;
+  const { client } = resolved;
+  if (client.kind !== "series") {
+    return NextResponse.json({ error: "seasons are only available for series" }, { status: 400 });
   }
   const id = Number(idParam);
   if (!Number.isInteger(id)) {
@@ -24,7 +27,7 @@ export async function GET(
   }
 
   try {
-    const series = await getSeriesById(id);
+    const series = await client.getSeriesById(id);
     const seasons: SeasonSummary[] = series.seasons
       .map((s) => ({
         seasonNumber: s.seasonNumber,

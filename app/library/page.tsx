@@ -8,11 +8,7 @@ import { formatAge, formatBytes } from "@/lib/format";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { SeriesModal } from "@/components/SeriesModal";
 import { DetailModal } from "@/components/DetailModal";
-import type { LibraryItem } from "@/app/api/library/route";
-
-interface LibraryResponse {
-  items: LibraryItem[];
-}
+import type { LibraryItem, LibraryResponse } from "@/app/api/library/route";
 
 type SortKey = "title" | "size" | "age";
 type SortDir = "asc" | "desc";
@@ -98,7 +94,7 @@ function LibraryContent() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const res = await fetch(`/api/library/${pending.service}/${pending.id}`, {
+      const res = await fetch(`/api/library/${pending.instanceId}/${pending.id}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -108,8 +104,9 @@ function LibraryContent() {
       await mutate(
         (current) =>
           current && {
+            ...current,
             items: current.items.filter(
-              (i) => !(i.service === pending.service && i.id === pending.id)
+              (i) => !(i.instanceId === pending.instanceId && i.id === pending.id)
             ),
           },
         { revalidate: true }
@@ -153,6 +150,19 @@ function LibraryContent() {
 
       {error && <p className="text-sm text-red-400">Failed to load library.</p>}
       {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
+      {data?.instances.length === 0 && (
+        <p className="text-sm text-slate-500">
+          No Sonarr or Radarr instance is configured. Set SONARR_URL / SONARR_API_KEY or RADARR_URL
+          / RADARR_API_KEY.
+        </p>
+      )}
+      {data?.instances
+        .filter((i) => !i.up)
+        .map((i) => (
+          <p key={i.instanceId} className="text-sm text-red-400">
+            {i.name}: {i.error ?? "unreachable"}
+          </p>
+        ))}
 
       {items.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-slate-800">
@@ -165,7 +175,7 @@ function LibraryContent() {
                 >
                   Title{sortIndicator("title")}
                 </th>
-                <th className="px-4 py-2">Service</th>
+                <th className="px-4 py-2">Instance</th>
                 <th
                   className="cursor-pointer select-none px-4 py-2 hover:text-slate-300"
                   onClick={() => toggleSort("size")}
@@ -185,7 +195,7 @@ function LibraryContent() {
             <tbody>
               {items.map((item) => (
                 <tr
-                  key={`${item.service}-${item.id}`}
+                  key={`${item.instanceId}-${item.id}`}
                   className="border-t border-slate-800 hover:bg-slate-900/60"
                 >
                   <td className="px-4 py-2">
@@ -199,12 +209,12 @@ function LibraryContent() {
                   <td className="px-4 py-2">
                     <span
                       className={`rounded px-1.5 py-0.5 text-xs ${
-                        item.service === "sonarr"
+                        item.kind === "series"
                           ? "bg-sky-900 text-sky-300"
                           : "bg-violet-900 text-violet-300"
                       }`}
                     >
-                      {item.service}
+                      {item.instanceName}
                     </span>
                   </td>
                   <td className="px-4 py-2">{formatBytes(item.sizeOnDisk)}</td>
@@ -213,7 +223,7 @@ function LibraryContent() {
                   </td>
                   <td className="px-4 py-2 text-slate-400">{item.monitored ? "yes" : "no"}</td>
                   <td className="px-4 py-2 text-right">
-                    {item.service === "sonarr" ? (
+                    {item.kind === "series" ? (
                       <button
                         onClick={() => setManagingSeries(item)}
                         className="rounded-md px-2 py-1 text-xs font-medium text-red-400 hover:bg-red-950"
@@ -242,7 +252,7 @@ function LibraryContent() {
       {pending && (
         <ConfirmModal
           title={`Delete "${pending.title}"?`}
-          body={`This removes it from ${pending.service} and deletes ${formatBytes(
+          body={`This removes it from ${pending.instanceName} and deletes ${formatBytes(
             pending.sizeOnDisk
           )} of files from disk. This can't be undone.${deleteError ? ` (${deleteError})` : ""}`}
           busy={deleting}
@@ -253,6 +263,8 @@ function LibraryContent() {
 
       {managingSeries && (
         <SeriesModal
+          instanceId={managingSeries.instanceId}
+          instanceName={managingSeries.instanceName}
           seriesId={managingSeries.id}
           title={managingSeries.title}
           onClose={() => setManagingSeries(null)}
@@ -260,8 +272,10 @@ function LibraryContent() {
             mutate(
               (current) =>
                 current && {
+                  ...current,
                   items: current.items.filter(
-                    (i) => !(i.service === "sonarr" && i.id === managingSeries.id)
+                    (i) =>
+                      !(i.instanceId === managingSeries.instanceId && i.id === managingSeries.id)
                   ),
                 },
               { revalidate: true }
@@ -275,7 +289,7 @@ function LibraryContent() {
 
       {viewingDetails && (
         <DetailModal
-          service={viewingDetails.service}
+          instanceId={viewingDetails.instanceId}
           id={viewingDetails.id}
           fallbackTitle={viewingDetails.title}
           onClose={() => setViewingDetails(null)}

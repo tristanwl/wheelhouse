@@ -12,6 +12,7 @@ import type { QualityProfile } from "@/lib/quality";
 interface ExploreSectionProps {
   category: "theaters" | "bluray" | "popular";
   label: string;
+  instanceId: string | null;
   qualityProfiles: QualityProfile[];
   rootFolderPath: string | null;
   monitored: boolean;
@@ -24,6 +25,7 @@ const SCROLL_AMOUNT = 600;
 export function ExploreSection({
   category,
   label,
+  instanceId,
   qualityProfiles,
   rootFolderPath,
   monitored,
@@ -49,7 +51,7 @@ export function ExploreSection({
   }
 
   async function confirmAdd(qualityProfileId: number) {
-    if (!pendingAdd || !rootFolderPath) return;
+    if (!pendingAdd || !rootFolderPath || !instanceId) return;
     setAdding(true);
     setAddError(null);
     try {
@@ -57,7 +59,7 @@ export function ExploreSection({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          service: "radarr",
+          instanceId,
           id: pendingAdd.id,
           qualityProfileId,
           rootFolderPath,
@@ -167,6 +169,7 @@ export function ExploreSection({
         <TmdbDetailModal
           id={viewingHit.id}
           fallbackTitle={viewingHit.title}
+          instanceId={instanceId}
           qualityProfiles={qualityProfiles}
           rootFolderPath={rootFolderPath}
           monitored={monitored}
