@@ -4,3 +4,5 @@ package-lock.json
 *.md
 public
 next-env.d.ts
+web
+server/internal/ui/dist

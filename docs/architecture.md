@@ -30,6 +30,17 @@ it serves `/healthz`, `/api/features`, `/api/status`, `/api/downloads`, `/api/ex
 placeholder page; nothing here describes it until the cut-over, and the Next app
 is unchanged. See [server/README.md](../server/README.md).
 
+The new UI is a Vite single-page app in `web/` (migration step 6): the same
+pages and components as `app/` and `components/`, ported to React Router, with
+the same URLs, SWR polling intervals and Tailwind look. `npm run build` there
+emits `web/dist`, `npm run embed` copies it into `server/internal/ui/dist`, and
+the Go binary embeds and serves it (falling back to a placeholder page when no
+build is embedded). Its CSP allows no inline script or style, and images only
+from `image.tmdb.org` and `artworks.thetvdb.com`; a trailer opens on YouTube
+in a new tab instead of an embedded frame. Library deletes send `?confirm=true`
+after the UI's own confirm dialog. The Next UI stays until the cut-over (step 8).
+See [web/README.md](../web/README.md).
+
 ### Go routes and wiring (`server/internal/app`, `providers/all`)
 
 - **One registry.** `providers/all` builds the registry from every provider's

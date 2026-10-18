@@ -1,5 +1,10 @@
-// Package ui serves the single-page UI embedded in the binary. Today that is a
-// placeholder; the Vite build output replaces dist/ in a later step.
+// Package ui serves the single-page UI embedded in the binary.
+//
+// The UI is built from web/ (Vite) and copied into dist/ by `npm run embed`
+// there (or `make ui` here); dist/ is not committed, only its .gitkeep, so a
+// clean checkout still compiles. When dist/ holds no index.html the binary
+// serves the committed placeholder page instead, so `go build`, `go vet` and
+// `go test` work with or without a built UI.
 package ui
 
 import (
@@ -10,16 +15,41 @@ import (
 	"strings"
 )
 
-//go:embed dist
-var embedded embed.FS
+//go:embed all:dist
+var builtFS embed.FS
 
-// Handler serves the embedded UI.
+//go:embed placeholder
+var placeholderFS embed.FS
+
+// Handler serves the built UI when dist/ has one, and the placeholder otherwise.
 func Handler() http.Handler {
-	sub, err := fs.Sub(embedded, "dist")
+	if built, ok := Built(); ok {
+		return NewHandler(built)
+	}
+	return Placeholder()
+}
+
+// Built is the embedded build output, and whether there is one (an index.html).
+func Built() (fs.FS, bool) {
+	sub, err := fs.Sub(builtFS, "dist")
 	if err != nil {
 		panic(err) // dist is embedded at build time, so this cannot happen
 	}
+	return sub, hasIndex(sub)
+}
+
+// Placeholder serves the committed stand-in page.
+func Placeholder() http.Handler {
+	sub, err := fs.Sub(placeholderFS, "placeholder")
+	if err != nil {
+		panic(err) // placeholder is embedded at build time, so this cannot happen
+	}
 	return NewHandler(sub)
+}
+
+func hasIndex(fsys fs.FS) bool {
+	info, err := fs.Stat(fsys, "index.html")
+	return err == nil && !info.IsDir()
 }
 
 // NewHandler serves files from fsys, falling back to index.html for paths that
@@ -39,8 +69,12 @@ func NewHandler(fsys fs.FS) http.Handler {
 			name = "index.html"
 		}
 		if info, err := fs.Stat(fsys, name); err == nil && !info.IsDir() {
-			if name == "index.html" {
+			switch {
+			case name == "index.html":
 				w.Header().Set("Cache-Control", "no-cache")
+			case strings.HasPrefix(name, "assets/"):
+				// Vite names these by content hash, so a changed file has a new URL.
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			}
 			files.ServeHTTP(w, r)
 			return

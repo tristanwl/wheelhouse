@@ -39,6 +39,15 @@ The Go server that will replace the Next app is built alongside it in `server/`
 job runs (gofmt, vet, `go test -race`, golangci-lint, govulncheck, build). Nothing
 in the Next app depends on it until the cut-over.
 
+The UI that replaces the Next pages is the Vite SPA in `web/` (own `package.json`,
+see `web/README.md`). From `web/`: `npm ci`, then `npm run typecheck && npm run lint
+&& npm run format:check && npm test && npm run build`; `npm run embed` copies the
+build into `server/internal/ui/dist` (never committed) for `go build`, and
+`npm run test:smoke` drives the embedded build in Chromium (CI's `web` job). A UI
+change must keep the CSP (no inline script/style) and send `?confirm=true` on
+library deletes only after its confirm dialog. Until the cut-over, a UI change goes
+in both `app/`+`components/` and `web/src`.
+
 ## How it is built
 
 Next.js 15 (App Router) + React 19, SWR for polling, Tailwind. No database.

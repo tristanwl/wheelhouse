@@ -24,12 +24,15 @@ What it serves today:
   400. TMDB not configured, rejected, down or slow is a 502 with a redacted
   message; a Radarr that cannot answer just does not count as "in library".
 - Any other `/api/...` path is a JSON 404.
-- Everything else is the embedded UI: a placeholder page (`internal/ui/dist`),
-  with a fallback to `index.html` for paths that are not files. Replaced by the
-  Vite build in a later step.
+- Everything else is the embedded UI, with a fallback to `index.html` for paths
+  that are not files. It is the Vite build of `web/` when one was copied into
+  `internal/ui/dist` (`make ui`, or `npm run build && npm run embed` in `web/`;
+  not committed), and otherwise the committed placeholder page
+  (`internal/ui/placeholder`), so a clean checkout still builds and tests.
 
 Middleware on every response (`internal/middleware`): a request ID
-(`X-Request-Id`), security headers (a CSP with no inline script or style,
+(`X-Request-Id`), security headers (a CSP with no inline script or style, images only from `self`,
+`data:`, `image.tmdb.org` and `artworks.thetvdb.com`,
 `nosniff`, `Referrer-Policy: no-referrer`, `frame-ancestors 'none'`), an access
 log that never records query strings, headers or bodies, and panic recovery that
 answers a generic 500 and never logs the panic value.
@@ -66,8 +69,8 @@ tests build the whole app over fake services. Provider wiring lives in
 Library routes (`routes_library.go`, logic in `internal/library`): the two
 `DELETE /api/library/...` routes are `Admin` and require `?confirm=true`
 (issue #41), otherwise 400 and nothing is sent upstream; each confirmed delete
-logs an `audit` line. The Next UI does not send `confirm` yet, so the later UI
-port must add it after its own confirm dialog.
+logs an `audit` line. The Next UI does not send `confirm`; the Vite UI in `web/`
+sends it after its own confirm dialog.
 
 The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
 

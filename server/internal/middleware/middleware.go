@@ -65,10 +65,15 @@ func WithRequestID() Middleware {
 	}
 }
 
-// ContentSecurityPolicy allows only same-origin resources. There is no
-// 'unsafe-inline' and no 'unsafe-eval': scripts and styles must be files.
+// ContentSecurityPolicy allows only same-origin resources, plus images from two
+// hosts: the posters and backdrops the UI shows. TMDB's image CDN serves Explore
+// and the Radarr posters; Sonarr's poster URLs point at TheTVDB's artwork host.
+// Nothing else is allowed (no wildcard, no bare scheme), and the UI loads no
+// script, style, font, frame or fetch from outside. There is no 'unsafe-inline'
+// and no 'unsafe-eval': scripts and styles must be files.
 const ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 'self'; " +
-	"img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; " +
+	"img-src 'self' data: https://image.tmdb.org https://artworks.thetvdb.com; " +
+	"font-src 'self'; connect-src 'self'; object-src 'none'; " +
 	"base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 
 // SecurityHeaders sets the headers every response carries, errors included.
