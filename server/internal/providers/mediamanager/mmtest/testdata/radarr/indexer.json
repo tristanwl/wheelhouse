@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "name": "Example Indexer 1",
+    "enableRss": true,
+    "enableAutomaticSearch": true,
+    "enableInteractiveSearch": true,
+    "protocol": "usenet",
+    "priority": 25,
+    "implementation": "Newznab",
+    "implementationName": "Newznab",
+    "tags": []
+  },
+  {
+    "id": 2,
+    "name": "Example Indexer 2",
+    "enableRss": true,
+    "enableAutomaticSearch": true,
+    "enableInteractiveSearch": true,
+    "protocol": "usenet",
+    "priority": 25,
+    "implementation": "Newznab",
+    "implementationName": "Newznab",
+    "tags": []
+  }
+]
