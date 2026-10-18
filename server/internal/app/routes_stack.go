@@ -6,13 +6,14 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/downloads"
 	"github.com/tristanwl/wheelhouse/server/internal/features"
 	"github.com/tristanwl/wheelhouse/server/internal/status"
+	"github.com/tristanwl/wheelhouse/server/internal/version"
 )
 
 // registerCore registers the routes that need no provider.
 func registerCore(r *Router, _ deps) {
 	// Public: the allow-list for authentication, once there is any.
 	r.HandleFunc("GET /healthz", Public, func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": version.Version})
 	})
 }
 

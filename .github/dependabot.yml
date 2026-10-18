@@ -8,7 +8,18 @@ updates:
     directory: /
     schedule:
       interval: weekly
+  # The Vite UI.
   - package-ecosystem: npm
     directory: /web
+    schedule:
+      interval: weekly
+  # The tooling for the acceptance suite (root package.json).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+  # The base images in the Dockerfile (tag and digest).
+  - package-ecosystem: docker
+    directory: /
     schedule:
       interval: weekly

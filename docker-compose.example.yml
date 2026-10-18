@@ -2,7 +2,7 @@
 # create .env from .env.example, and adjust the media paths.
 services:
   wheelhouse:
-    image: tristanwl/wheelhouse:0.1.1
+    image: tristanwl/wheelhouse:0.2.0
     # Or build from source instead (then run `docker compose up -d --build`):
     # build: .
     container_name: wheelhouse
@@ -11,12 +11,21 @@ services:
       - "3050:3050"
     env_file:
       - .env
-    # The container runs as UID/GID 1000 by default. To match the owner of your
-    # media and ./config instead (needed for Convert to write files with the
-    # right ownership), set it here. Create ./config yourself first
-    # (`mkdir config`): if Docker creates it, it is owned by root and the
+    # The container runs as UID/GID 1000 by default; any numeric user works. To
+    # match the owner of your media and ./config instead (needed for Convert to
+    # write files with the right ownership), set it here. ./config must be
+    # writable by that user: create it yourself first (`mkdir config`, and chown
+    # it to the user). If Docker creates it, it is owned by root and the
     # container cannot save settings.
     # user: "1000:1000"
+    # Optional hardening: nothing is written outside /config, the media mounts
+    # and /tmp (GPU driver caches).
+    # read_only: true
+    # cap_drop: [ALL]
+    # security_opt:
+    #   - no-new-privileges:true
+    # tmpfs:
+    #   - /tmp
     volumes:
       # Settings (codec preferences) live here so they survive rebuilds.
       - ./config:/config

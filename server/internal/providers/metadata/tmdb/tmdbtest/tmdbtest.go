@@ -1,7 +1,7 @@
 // Package tmdbtest is a stand-in for TMDB served over real HTTP, for tests and
 // for black-box runs (point the app at it with TMDB_BASE_URL = URL + "/3"). A
 // missing or wrong key is a 401 with a JSON body, as at TMDB. It serves the same
-// data as lib/providers/metadata/__fixtures__/fake-tmdb.ts and tmdb-server.ts.
+// data as acceptance/fakes/tmdb (fake-tmdb.ts and server.ts).
 package tmdbtest
 
 import (

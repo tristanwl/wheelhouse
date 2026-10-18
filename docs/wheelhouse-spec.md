@@ -5,6 +5,17 @@ can start. Decisions already made: GPL-3.0, torrents supported from day one,
 auth = local users + optional local-network bypass (Phase 2), name =
 Wheelhouse.
 
+> **Note (release 0.2.0).** This spec describes the Phase 0 and 1 work, which was
+> done on the Next.js app with a TypeScript provider layer (`lib/providers/...`,
+> `defineProvider`, zod schemas, the `__fixtures__` directories). Since 0.2.0 that
+> layer has been replaced by the equivalent Go one in `server/internal/providers`
+> and the fixtures live in `acceptance/fakes` (see
+> [wheelhouse-spec-phase2.md](wheelhouse-spec-phase2.md), migration step 8). The
+> text below is kept as written for the decisions and their reasons; file paths
+> and TypeScript names in it refer to the code of release 0.1.x, which is in the
+> repository history (tag `0.1.1`). The behavior, the provider roles and the
+> environment variables carry over unchanged.
+
 ## Goals
 
 1. Providers are swappable. Plex↔Jellyfin, SABnzbd↔qBittorrent, and multiple

@@ -1,7 +1,5 @@
 node_modules/
 .claude/
-.next/
 .env
 .env.local
 *.log
-*.tsbuildinfo

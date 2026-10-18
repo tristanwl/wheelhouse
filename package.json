@@ -1,42 +1,19 @@
 {
   "name": "wheelhouse",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
+  "description": "Tooling for the Wheelhouse repository: the black-box acceptance suite (acceptance/) and the single source of the release version. The server is in server/, the UI in web/.",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start -p 3050",
-    "lint": "next lint",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
     "test:acceptance": "vitest run --config acceptance/vitest.config.mts",
-    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
-  "dependencies": {
-    "next": "15.5.27",
-    "react": "19.1.10",
-    "react-dom": "19.1.10",
-    "swr": "2.5.1",
-    "zod": "4.6.7"
-  },
   "devDependencies": {
     "@types/node": "24.19.2",
-    "@types/react": "19.3.0",
-    "@types/react-dom": "19.3.0",
-    "autoprefixer": "10.4.19",
-    "eslint": "8.57.1",
-    "eslint-config-next": "15.5.27",
-    "postcss": "8.5.23",
-    "prettier": "3.3.3",
-    "tailwindcss": "3.4.4",
-    "typescript": "5.5.3",
-    "vite": "8.3.4",
+    "prettier": "3.9.10",
+    "typescript": "7.0.2",
     "vitest": "5.0.5"
-  },
-  "overrides": {
-    "postcss": "$postcss"
   },
   "engines": {
     "node": ">=22.12.0"

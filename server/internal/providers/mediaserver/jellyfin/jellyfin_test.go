@@ -431,13 +431,10 @@ func TestEnvironmentMappingFeedsThisProvider(t *testing.T) {
 	}
 }
 
-// The fake's fixtures must stay byte for byte the real captures the Next app's
-// tests use.
-func TestFixturesMatchTheTypeScriptCopies(t *testing.T) {
-	dir := filepath.Join("..", "..", "..", "..", "..", "lib", "providers", "media-server", "__fixtures__", "jellyfin")
-	if _, err := os.Stat(dir); err != nil {
-		t.Skip("TypeScript fixtures not in this checkout")
-	}
+// The fake's fixtures must stay byte for byte the real captures in
+// acceptance/fakes, which are the source of truth.
+func TestFixturesMatchTheAcceptanceCopies(t *testing.T) {
+	dir := filepath.Join("..", "..", "..", "..", "..", "acceptance", "fakes", "jellyfin")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -451,7 +448,7 @@ func TestFixturesMatchTheTypeScriptCopies(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := jellyfintest.Fixture(e.Name()); !bytes.Equal(got, want) {
-			t.Errorf("%s differs from the TypeScript copy", e.Name())
+			t.Errorf("%s differs from the acceptance copy", e.Name())
 		}
 	}
 }

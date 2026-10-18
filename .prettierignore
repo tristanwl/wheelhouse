@@ -1,8 +1,7 @@
-.next
 node_modules
 package-lock.json
 *.md
-public
-next-env.d.ts
 web
-server/internal/ui/dist
+server
+acceptance/fakes/**/*.json
+acceptance/fakes/**/*.html

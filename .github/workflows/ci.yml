@@ -9,38 +9,60 @@ on:
 permissions:
   contents: read
 
+# Job names are what branch protection requires (`check` at least), so keep them
+# stable: check, acceptance, server, web, docker. Every action is pinned by commit SHA.
 jobs:
+  # The repository tooling in the root package (the acceptance suite's code):
+  # type check, formatting, audit, and the shell scripts.
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run lint
       - run: npm run format:check
-      - run: npm test
-      - run: npm run build
+      - run: npm audit
+      - name: shellcheck
+        run: shellcheck acceptance/*.sh
 
-  # Black-box HTTP suite (acceptance/README.md) against the built standalone
-  # server. A separate job so it runs alongside `check` and adds no wall time.
+  # Black-box HTTP suite (acceptance/README.md) against the real binary: the UI
+  # is built and embedded first, as in the image. Runs alongside the other jobs.
   acceptance:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache: true
+          cache-dependency-path: |
+            server/go.sum
+            server/go.mod
       - run: npm ci
-      - run: npm run build
+      - name: build the UI and the server
+        run: |
+          npm --prefix web ci
+          npm --prefix web run build
+          npm --prefix web run embed
+          make -C server build
       - run: npm run test:acceptance
 
-  # The Go server in server/ (docs/wheelhouse-spec-phase2.md, migration step 2).
-  # Actions here are pinned by commit SHA; the older jobs still use tags.
+  # The Go server in server/.
   server:
     runs-on: ubuntu-latest
     defaults:
@@ -70,8 +92,8 @@ jobs:
       - name: build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
 
-  # The Vite UI in web/ (docs/wheelhouse-spec-phase2.md, migration step 6): its own
-  # checks, then the build embedded in the Go binary and driven in a real browser.
+  # The Vite UI in web/: its own checks, then the build embedded in the Go binary
+  # and driven in a real browser.
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -112,3 +134,41 @@ jobs:
         run: npm run test:smoke
         env:
           WHEELHOUSE_SMOKE_REQUIRED: "1"
+
+  # The image, built as the release builds it (but not pushed), then run the way
+  # it is deployed: read-only, no capabilities, arbitrary user, and driven by the
+  # acceptance suite.
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: wheelhouse:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: the image carries the version from package.json
+        run: |
+          want="wheelhouse $(node -p "require('./package.json').version")"
+          got="$(docker run --rm wheelhouse:ci version)"
+          [ "$got" = "$want" ] || { echo "::error::image says '$got', package.json says '$want'"; exit 1; }
+      - name: container smoke test
+        run: acceptance/docker-smoke.sh wheelhouse:ci
+      - run: npm ci
+      - name: acceptance suite against the container
+        run: npm run test:acceptance
+        env:
+          WHEELHOUSE_CMD: acceptance/docker-server.sh wheelhouse:ci
+      - name: remove leftover containers
+        if: always()
+        run: docker ps -aq --filter name=wheelhouse-acceptance | xargs -r docker rm -f

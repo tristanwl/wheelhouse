@@ -8,110 +8,121 @@ Read [docs/architecture.md](docs/architecture.md) for how things work and
 [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md) for decisions, positioning
 and the roadmap. [CONTRIBUTING.md](CONTRIBUTING.md) covers the human workflow.
 
-## Commands
+## Layout and commands
 
-Node 22.12+ (24 recommended, see `.nvmrc`).
-
-```sh
-npm ci
-npm run dev            # http://localhost:3000, point it at services via .env.local
-npm test               # vitest; npm run test:watch while iterating
-```
-
-Before opening a PR, run what CI runs (all five must pass):
+A Go server (`server/`, standard library only, Go 1.27+) with a Vite + React UI
+(`web/`, own `package.json`) embedded in the binary, shipped as one Docker image
+with ffmpeg. The root `package.json` is only tooling for the black-box
+acceptance suite (`acceptance/`) and the **single source of the release
+version**. Node 22.12+ (24 recommended, see `.nvmrc`).
 
 ```sh
-npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
+make -C server run                         # API on :3000; configure with the usual env vars
+cd web && npm ci && npm run dev            # UI on :5173, proxies /api to :3000
 ```
 
-`npm run format` fixes formatting. The built app must also boot with **no**
-environment variables (every page and API answers 200; only the Dashboard is
-enabled): `npm run build`, then run `.next/standalone/server.js`.
+Before opening a PR, run what CI runs for what you touched (jobs `check`,
+`acceptance`, `server`, `web`, `docker`):
 
-`npm run test:acceptance` (after a build) runs the black-box HTTP suite in
-`acceptance/` against the built server; CI runs it as its own job. It is the
-definition of done for the Go port, so a new route must be added to
-`acceptance/routes.ts` (see `acceptance/README.md`).
+```sh
+make -C server check                       # gofmt, vet, go test -race, golangci-lint, govulncheck, build
+cd web && npm ci && npm run typecheck && npm run lint && npm run format:check \
+  && npm test && npm audit && npm run build && npm run embed    # then: npm run test:smoke (Chromium)
+npm ci && npm run typecheck && npm run format:check && npm audit  # root tooling
+make -C server build && npm run test:acceptance                   # needs the UI embedded for a real run
+docker build -t wheelhouse:dev . && acceptance/docker-smoke.sh wheelhouse:dev
+```
 
-The Go server that will replace the Next app is built alongside it in `server/`
-(Go 1.27+, standard library only so far; see `server/README.md` and
-`docs/wheelhouse-spec-phase2.md`). From `server/`: `make check` runs what its CI
-job runs (gofmt, vet, `go test -race`, golangci-lint, govulncheck, build). Nothing
-in the Next app depends on it until the cut-over.
+`npm run embed` (in `web/`) copies the UI build into `server/internal/ui/dist`
+(never committed) for `go build`; without it the binary serves a placeholder
+page, so `go build` and `go test` work from a clean checkout. See
+`server/README.md`, `web/README.md` and `acceptance/README.md`.
 
-The UI that replaces the Next pages is the Vite SPA in `web/` (own `package.json`,
-see `web/README.md`). From `web/`: `npm ci`, then `npm run typecheck && npm run lint
-&& npm run format:check && npm test && npm run build`; `npm run embed` copies the
-build into `server/internal/ui/dist` (never committed) for `go build`, and
-`npm run test:smoke` drives the embedded build in Chromium (CI's `web` job). A UI
-change must keep the CSP (no inline script/style) and send `?confirm=true` on
-library deletes only after its confirm dialog. Until the cut-over, a UI change goes
-in both `app/`+`components/` and `web/src`.
+The built server must also boot with **no** environment variables (every page and
+API answers 200; only the Dashboard is enabled); the acceptance suite's boot
+scenario and `acceptance/docker-smoke.sh` check it. The acceptance suite is the
+definition of "the API works": a new route must be added to `acceptance/routes.ts`
+(and to the Go router test, which lists every route with its access level).
+
+A UI change must keep the CSP (no inline script/style) and send `?confirm=true`
+on library deletes only after its confirm dialog.
 
 ## How it is built
 
-Next.js 15 (App Router) + React 19, SWR for polling, Tailwind. No database.
-
-Everything that talks to another service goes through the provider layer in
-`lib/providers/`:
+No database. Everything that talks to another service goes through the provider
+layer in `server/internal/providers/`:
 
 - **Roles:** `downloadClient`, `mediaManager`, `mediaServer`, `metadata`. Each
-  role has a `types.ts` (the normalized model), a reusable `contract.ts` suite
-  every adapter must pass, and one file per provider.
-- **A provider** is a `defineProvider({ id, role, configSchema (zod),
-  secretKeys, capabilities, create })`. It is registered in
-  `lib/providers/index.ts`. Config comes from a `ConfigSource`: environment
-  variables today (`lib/providers/core/config-source.ts`), a database later.
-- **Routes** never import a service client directly: they ask the runtime
-  (`getRuntime()`) for the ready instances of a role and iterate them, so every
-  route works with several instances (Radarr and Radarr 4K) and with none.
+  role has a package with the normalized model and a reusable `contract.go`
+  suite every adapter must pass, and one package per provider.
+- **A provider** is a `core.Definition` (id, role, a `Config` struct whose tags
+  say required/secret/url, a `Create` factory) returned by its `Definition()` and
+  listed in `providers/all`. Config comes from a `core.ConfigSource`: environment
+  variables today (`core/envsource.go`), a database later.
+- **Routes** (`internal/app`) never build a service client: they ask the runtime
+  for the ready instances of a role and iterate them, so every route works with
+  several instances (Radarr and Radarr 4K) and with none. Every route is
+  registered with an access level (`Public`, `Authenticated`, `Admin`) through
+  `app.Router`; `router_test.go` lists them all.
 - **Features** (Dashboard, Library, Explore, Codecs) are gated by
-  `lib/features/registry.ts`, which decides from the configured instances what
-  the nav shows and which pages show a "not configured" stub.
-- Pure helpers the browser also uses live in `lib/status.ts`,
-  `lib/download-rows.ts` and `lib/format.ts` (no server-only imports there).
+  `internal/features`, which decides from the configured instances what the nav
+  shows and which pages show a "not configured" stub.
+- The UI's pure helpers live in `web/src/lib` (`status.ts`, `download-rows.ts`,
+  `format.ts`).
 
 ## Rules that matter
 
-- **Secrets never leave the server.** Use `createHttpClient({ secrets })` for
-  upstream calls and `redact()` for anything echoed. API keys, tokens and URL
-  credentials must not appear in any response body, header, error message or
-  log line. `tests/phase1-acceptance.test.ts` plants canary secrets and scans
-  every GET route; when you add a route or provider, make sure it is covered,
-  and never weaken that test.
+- **Secrets never leave the server.** Make upstream calls with
+  `core.NewHTTPClient` (give it the `Secrets`) and echo only `core.Redact`ed text.
+  API keys, tokens and URL credentials must not appear in any response body,
+  header, error message or log line. `providers/core/canary_test.go`, each
+  provider's `canary_test.go` and `acceptance/secrets.test.ts` plant canary
+  secrets and sweep every error string, route and log; when you add a route or
+  provider, make sure it is covered, and never weaken them.
 - **Adapters normalize.** Sizes in bytes, progress 0..1, durations in seconds,
-  states from the shared enums. An unreachable service throws a `ProviderError`
+  states from the shared enums. An unreachable service returns a `ProviderError`
   (the caller reports it as down); a wrong key is a clear "API key incorrect".
   User-facing notices never name configuration keys or env vars.
 - **Fixtures come from real responses**, sanitized. Each service answers
   errors differently (SABnzbd: HTTP 403 plain text; Plex: 401 with an HTML page;
   qBittorrent v4 and v5 differ on login), so don't invent shapes: run the real
-  service (Docker is fine), capture, then anonymize.
+  service (Docker is fine), capture, then anonymize. The fixtures and the fake
+  servers that replay them are in `acceptance/fakes/`, the single source: the Go
+  fakes keep byte-identical copies in their `testdata/`, and a test in each fails
+  when they drift.
 - **This is a public repo.** No real hostnames, IPs, library titles, hashes,
   usernames or keys in code, fixtures, docs or tests. Use `example.com`, RFC 5737
   addresses (`192.0.2.x`) and placeholder titles ("Example Movie 1").
-- **Destructive actions need an in-app confirm.** Conversion keeps a `.bak` and
-  warns when a file is hardlinked (it may be seeding). Don't add a delete or
-  rewrite without both.
-- **Next.js 15:** dynamic route `params` are Promises (`await params`); client
-  pages read them with `useParams()`.
-- **Test helpers:** passing `undefined` to a parameter with a default silently
-  uses the default. Use an explicit `null` for "none" in helpers.
+- **Destructive actions need an in-app confirm.** Library deletes need
+  `?confirm=true` on the server and the UI's confirm dialog. Conversion keeps a
+  `.bak` and warns when a file is hardlinked (it may be seeding). Don't add a
+  delete or rewrite without both.
+- **Environment variables are an interface.** Operators' env files and unit files
+  are not versioned with the image: keep every existing name and meaning. The
+  listen address comes from `PORT` and `WHEELHOUSE_LISTEN`, never from `HOSTNAME`
+  (container runtimes set it).
+- **The image must keep working as any `--user`, read-only, with all capabilities
+  dropped.** Write only under `/config` and the media directories; anything else
+  goes under `/tmp`. `acceptance/docker-smoke.sh` checks this.
+- **Dependencies:** the Go server uses the standard library only; adding a module
+  needs a reason in the PR. Use the newest versions of everything, pin GitHub
+  Actions by commit SHA and the Docker base images by digest.
 
 ## Adding a provider
 
-1. Types in the role's `types.ts` if the model needs anything new (prefer
-   fitting the existing one; extend the contract suite if you change it).
-2. `lib/providers/<role>/<name>.ts` with `defineProvider`, and register it in
-   `lib/providers/index.ts`.
-3. Env mapping in `ENV_MAPPINGS` (`config-source.ts`), plus README config table
-   and `.env.example`.
-4. Fixtures + a fake server in `__fixtures__/<name>/`, adapter tests, and run
-   the role's contract suite against it.
-5. An integration test that calls the real route handlers through
-   `EnvConfigSource` and the runtime with your fake configured.
-6. Add it to the canary sweep and update `docs/wheelhouse-spec.md` /
-   `docs/architecture.md`.
+1. Types in the role's package if the model needs anything new (prefer fitting
+   the existing one; extend the role's `contract.go` suite if you change it).
+2. `server/internal/providers/<role>/<name>/` with a `Definition()`, and add it to
+   `providers/all/all.go`.
+3. The env mapping in `core/envsource.go` (`envMappings`), plus the README config
+   table, `.env.example` and the table in `acceptance/README.md`.
+4. Fixtures and a fake server in `acceptance/fakes/<name>/`, a Go fake with
+   `testdata/` copies and a drift test, adapter tests, and the role's contract
+   suite run against it.
+5. An integration test that calls the real routes through the env config source
+   and the runtime with your fake configured, and the fake in
+   `acceptance/fakes/index.ts` (`startStack`).
+6. Add it to the canary sweeps and update `docs/architecture.md`.
 
 ## Commits, PRs and releases
 
@@ -122,10 +133,12 @@ Everything that talks to another service goes through the provider layer in
   descriptions or issues.
 - Merge with a merge commit, not a squash, so separate commits stay separate.
 - Only a maintainer cuts releases. The tag (or GitHub release) is the bare
-  version with no `v` prefix (`0.1.0`) and **must equal `package.json`'s
+  version with no `v` prefix (`0.2.0`) and **must equal the root `package.json`'s
   `version`**: bump it in a PR first. `.github/workflows/release.yml` runs the
-  checks, pushes `tristanwl/wheelhouse:<version>` to Docker Hub and creates or
-  updates the GitHub release. Every `0.x` is a pre-release, and there is no
-  `latest` tag until authentication ships.
-- Claude Code keeps isolated worktrees in `.claude/`; it is ignored by git,
-  tsc, ESLint and Vitest. Never commit it.
+  CI checks, builds the Dockerfile (the binary reports that version), pushes
+  `tristanwl/wheelhouse:<version>` to Docker Hub and creates or updates the
+  GitHub release. Every `0.x` is a pre-release, and there is no `latest` tag
+  until authentication ships. Branch protection requires the CI job named
+  `check`, so don't rename the jobs.
+- Claude Code keeps isolated worktrees in `.claude/`; it is ignored by git. Never
+  commit it.

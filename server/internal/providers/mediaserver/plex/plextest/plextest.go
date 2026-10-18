@@ -1,7 +1,7 @@
 // Package plextest is a stand-in for Plex that behaves like the real one:
 // tokens are checked and a missing or wrong one gets a 401 with an HTML page.
 // It serves the sanitized real responses in testdata (byte for byte the same
-// files as lib/providers/media-server/__fixtures__/plex; a test keeps them in
+// files as acceptance/fakes/plex; a test keeps them in
 // sync). It is the Go port of that directory's server.ts.
 package plextest
 

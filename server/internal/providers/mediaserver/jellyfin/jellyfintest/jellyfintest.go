@@ -2,7 +2,7 @@
 // one: keys are checked (only in the Authorization header, as in 12.x) and a
 // missing or wrong one gets an empty 401. The fixtures in testdata were
 // captured from a real Jellyfin 12.2.0 (official Docker image), sanitized, and
-// are byte for byte the files in lib/providers/media-server/__fixtures__/jellyfin
+// are byte for byte the files in acceptance/fakes/jellyfin
 // (a test keeps them in sync). info-public-setup.json is /System/Info/Public
 // before the setup wizard ran; sessions-idle.json is one connected client that
 // is not playing anything; sessions-playing.json is one client playing a film.

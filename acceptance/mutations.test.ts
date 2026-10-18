@@ -26,8 +26,7 @@ describe("mutating routes", () => {
     stack = await startStack();
     // The Go server only converts files inside its media roots (/movies and /tv
     // by default, issue #31); the hard-link scenario below uses scratch files in
-    // the temp directory, so that is made a root for this server. The Next app
-    // ignores the variable.
+    // the temp directory, so that is made a root for this server.
     server = await startServer({
       env: { ...stack.env, WHEELHOUSE_MEDIA_ROOTS: realpathSync(tmpdir()) },
     });

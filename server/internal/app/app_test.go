@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/ui"
+	"github.com/tristanwl/wheelhouse/server/internal/version"
 )
 
 func testHandler(ffmpeg bool, buf *bytes.Buffer) http.Handler {
@@ -33,7 +34,7 @@ func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
 
 func TestHealthz(t *testing.T) {
 	rec := do(testHandler(false, nil), "GET", "/healthz")
-	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"status":"ok"}` {
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"status":"ok","version":"`+version.Version+`"}` {
 		t.Fatalf("%d %q", rec.Code, rec.Body.String())
 	}
 }
