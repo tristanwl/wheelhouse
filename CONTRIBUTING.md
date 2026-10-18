@@ -21,7 +21,7 @@ cp .env.example .env.local   # point at your Sonarr/Radarr/SABnzbd/etc.
 npm run dev
 ```
 
-Node 20+. Before opening a PR, run the same checks CI does:
+Node 22.12+ (24 recommended). Before opening a PR, run the same checks CI does:
 
 ```sh
 npm run typecheck && npm run lint && npm run format:check && npm test && npm run build

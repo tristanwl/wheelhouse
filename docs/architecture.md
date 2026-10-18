@@ -15,7 +15,7 @@ planned — see [wheelhouse-spec.md](./wheelhouse-spec.md).
 
 ## Stack
 
-Next.js 14 (App Router, TypeScript), Tailwind CSS, SWR for client-side
+Next.js 15 (App Router, React 19, TypeScript), Tailwind CSS, SWR for client-side
 polling. Single container, no database — it's a thin read/aggregate/proxy
 layer over Sonarr, Radarr, and SABnzbd's existing APIs. Routes live in
 `app/`, shared UI in `components/`, and the per-service API clients in `lib/`.

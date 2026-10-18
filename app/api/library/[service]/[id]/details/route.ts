@@ -26,14 +26,18 @@ function pickImage(images: { coverType: string; remoteUrl?: string }[] | undefin
   return images?.find((i) => i.coverType === type)?.remoteUrl ?? null;
 }
 
-export async function GET(_req: Request, { params }: { params: { service: string; id: string } }) {
-  const id = Number(params.id);
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ service: string; id: string }> }
+) {
+  const { service, id: idParam } = await params;
+  const id = Number(idParam);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
   try {
-    if (params.service === "sonarr") {
+    if (service === "sonarr") {
       const s = await getSeriesDetail(id);
       const details: ItemDetails = {
         title: s.title,
@@ -54,7 +58,7 @@ export async function GET(_req: Request, { params }: { params: { service: string
       return NextResponse.json(details);
     }
 
-    if (params.service === "radarr") {
+    if (service === "radarr") {
       const m = await getMovieDetail(id);
       const ratings: ItemRating[] = Object.entries(m.ratings ?? {})
         .filter(([, r]) => r && typeof r.value === "number")
