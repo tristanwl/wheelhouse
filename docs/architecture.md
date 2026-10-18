@@ -426,6 +426,9 @@ the modal every 2s via SWR until the job reaches a terminal state.
 
 ## API routes (all server-side proxies — API keys never reach the browser)
 
+- `GET /api/features` — the feature registry's answer (see "Feature
+  registry"): which pages are available and what the others still need. No
+  hosts, keys or instance names.
 - `GET /api/status` — `{ instances: [...] }`, one entry per enabled
   instance with `id`, `providerId`, `role`, `name`, `state` (`ok`,
   `degraded`, `needs-setup`, `down`), `version`, `error`, `link` and the
@@ -618,8 +621,32 @@ qBittorrent adapter (cookie session; a wrong login is a 401 on v5 and a 200
 (`Accept: application/json`, `X-Plex-Token` header for anything beyond
 `/identity`); `lib/providers/media-server/jellyfin.ts` is the Jellyfin adapter
 (`Authorization: MediaBrowser Token="<key>"` for anything beyond
-`/System/Info/Public`; Jellyfin 12 rejects `X-Emby-Token`); `lib/tmdb-client.ts` talks to TMDB directly (`api_key` query
-param, not a header — that one's TMDB's own convention, not ours).
+`/System/Info/Public`; Jellyfin 12 rejects `X-Emby-Token`);
+`lib/providers/metadata/tmdb.ts` is the TMDB provider (role `metadata`, no
+shared interface: Explore's categories are TMDB-specific). It sends the key as
+the `api_key` query parameter, which is TMDB's own convention, so errors never
+echo request URLs and the key is redacted from them. `lib/tmdb-client.ts` holds
+Explore's list and detail calls on top of that client, which it gets from the
+runtime (`getTmdbClient()`); there is no `lib/env.ts` any more.
+
+## Feature registry
+
+`lib/features/registry.ts` is a pure module (no server-only imports, no zod)
+that declares what each page needs: Dashboard nothing; Library any media
+manager; Explore a metadata provider and a media manager of kind `movies`;
+Codecs any media manager and ffmpeg. `getAvailableFeatures(instances, env)`
+returns each feature with `available` and the unmet requirements. Only
+**ready** instances count (valid config), so a half-configured Radarr doesn't
+unlock anything. ffmpeg is probed once (`lib/features/ffmpeg.ts`) and cached.
+
+`GET /api/features` turns that into `{ features: [{ id, label, route,
+available, missing: ["a Radarr instance", ...] }] }`. The header nav
+(`components/FeatureNav.tsx`) shows Dashboard plus the available features, the
+global add/search box (`components/AddSearchGate.tsx`) appears only when the
+library feature is available, and `app/{library,explore,codecs}/layout.tsx`
+wrap their pages in `components/FeatureGate.tsx`, which renders a stub saying
+what is missing, with a link to the README's Configuration section, for a
+direct visit to an unavailable page.
 
 ## Config
 
@@ -650,7 +677,7 @@ rescanning clears that instance's cache; errors are never cached).
 `Preferences.xml` (`PlexOnlineToken` attribute) once that's done, under the
 server's `Plex Media Server` application-support directory. `TMDB_API_KEY`
 is a free API key from themoviedb.org (account settings → API) — only used
-by `/explore`; the rest of the app works fine without it.
+by `/explore`, which stays hidden without it; the rest of the app works fine.
 
 `JELLYFIN_API_KEY` is created in Jellyfin under Dashboard → API Keys.
 

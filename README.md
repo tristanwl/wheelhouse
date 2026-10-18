@@ -56,14 +56,30 @@ Set via environment variables (see [.env.example](.env.example)):
 
 | Variable | Required | Notes |
 |---|---|---|
-| `SONARR_URL`, `SONARR_API_KEY` | no | TV library; without it the pages say no Sonarr is configured |
-| `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; same |
+| `SONARR_URL`, `SONARR_API_KEY` | no | TV library; without it (and Radarr) Library and Codecs are hidden |
+| `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; also needed for Explore |
 | `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | no | Extra instance, e.g. `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*`. See below |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
 | `QBITTORRENT_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD` | no | Download client (v4 and v5); shows torrents, including seeding, next to or instead of SABnzbd. The URL's host and port must be what qBittorrent's web UI expects (a remapped Docker port makes it answer 401) |
 | `PLEX_URL`, `PLEX_TOKEN` | no | Media server status card only |
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY` | no | Media server status card only; key from Dashboard → API Keys in Jellyfin. Can run alongside Plex |
-| `TMDB_API_KEY` | no | Enables Explore; free key from themoviedb.org |
+| `TMDB_API_KEY` | no | Enables Explore (with Radarr); free key from themoviedb.org |
+
+### What unlocks what
+
+The navigation only shows pages that can work with what you configured, and a
+page you open directly says what it is missing.
+
+| Page | Needs |
+|---|---|
+| Dashboard | nothing; it shows whatever is configured |
+| Library | Sonarr or Radarr |
+| Explore | `TMDB_API_KEY` and Radarr |
+| Codecs | Sonarr or Radarr, and `ffmpeg` on the server (included in the container image) |
+
+The search/add box in the header also needs Sonarr or Radarr. A service with a
+missing or invalid setting doesn't count until it is fixed; the Dashboard shows
+what is wrong.
 
 ### More than one Sonarr or Radarr
 
