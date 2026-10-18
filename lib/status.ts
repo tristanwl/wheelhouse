@@ -138,6 +138,9 @@ export function describeInstance(instance: StatusInstance): {
           d.queueCount ? `${d.queueCount} in queue` : "",
           d.etaSeconds ? `${formatEta(d.etaSeconds)} left` : "",
           d.version ? `v${d.version}` : "",
+          d.torrent
+            ? `seeding: ${d.torrent.seeding}${d.torrent.uploadBytesPerSec ? ` (↑ ${formatBytes(d.torrent.uploadBytesPerSec)}/s)` : ""}`
+            : "",
           ...(d.usenet?.servers ?? []).map(
             (s) =>
               `${s.enabled ? "server" : "server disabled"}: ${s.name} (${s.connections} conn${s.ssl ? ", ssl" : ""})`

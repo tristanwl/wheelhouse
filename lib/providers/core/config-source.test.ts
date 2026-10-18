@@ -54,6 +54,28 @@ describe("EnvConfigSource", () => {
     expect(instances[0].config).toEqual({ url: "http://sonarr:8989" });
   });
 
+  it("maps QBITTORRENT_* to the qbittorrent instance, and reports a half-configured one", async () => {
+    const full = await new EnvConfigSource({
+      QBITTORRENT_URL: "http://qbittorrent:8080",
+      QBITTORRENT_USERNAME: "admin",
+      QBITTORRENT_PASSWORD: "pw",
+    }).getInstances();
+    expect(full).toEqual([
+      {
+        id: "qbittorrent",
+        providerId: "qbittorrent",
+        name: "qBittorrent",
+        enabled: true,
+        config: { url: "http://qbittorrent:8080", username: "admin", password: "pw" },
+      },
+    ]);
+
+    const half = await new EnvConfigSource({
+      QBITTORRENT_URL: "http://qbittorrent:8080",
+    }).getInstances();
+    expect(half[0].config).toEqual({ url: "http://qbittorrent:8080" });
+  });
+
   it("treats empty variables as unset", async () => {
     const instances = await new EnvConfigSource({
       SONARR_URL: "",

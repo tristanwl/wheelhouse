@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { formatBytes, formatEta } from "@/lib/format";
+import {
+  capDownloads,
+  describeDownloadRow,
+  downloadTone,
+  sortDownloads,
+  type RowTone,
+} from "@/lib/download-rows";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
 import type { DownloadsResponse } from "@/app/api/downloads/route";
@@ -17,6 +23,19 @@ import { describeDownloadState } from "@/lib/providers/download-client/types";
 // the links work the same way you got here (IP, mDNS name, Tailscale, etc.)
 // rather than assuming any particular hostname resolves for every client.
 const DEFAULT_HOST = "localhost";
+
+const TONE_TEXT: Record<RowTone, string> = {
+  bad: "text-red-400",
+  warn: "text-amber-400",
+  good: "text-emerald-400",
+  neutral: "text-slate-400",
+};
+const TONE_BAR: Record<RowTone, string> = {
+  bad: "bg-red-500",
+  warn: "bg-amber-500",
+  good: "bg-emerald-500",
+  neutral: "bg-sky-500",
+};
 
 export default function DashboardPage() {
   const [host, setHost] = useState(DEFAULT_HOST);
@@ -32,6 +51,10 @@ export default function DashboardPage() {
   const { data: downloads } = useSWR<DownloadsResponse>("/api/downloads", fetcher, {
     refreshInterval: 5000,
   });
+
+  const { shown: shownDownloads, hidden: hiddenDownloads } = capDownloads(
+    sortDownloads(downloads?.items ?? [])
+  );
 
   return (
     <div className="space-y-8">
@@ -145,44 +168,44 @@ export default function DashboardPage() {
                   {downloads.instances.length > 1 ? `${i.name}: queue paused` : "Queue paused"}
                 </p>
               ))}
-            {downloads.items.map((item) => {
-              const processing = item.state === "postprocessing";
+            {shownDownloads.map((item) => {
+              const tone = downloadTone(item.state);
               const speed = downloads.instances.find(
                 (i) => i.instanceId === item.instanceId
               )?.speedBytesPerSec;
+              const text = describeDownloadRow(item, speed);
               return (
                 <div
                   key={`${item.instanceId}:${item.id}`}
                   className="rounded-lg border border-slate-800 bg-slate-900 p-3"
                 >
                   <div className="mb-1 flex items-center justify-between gap-4 text-sm">
-                    <span className="truncate">{item.name}</span>
-                    <span
-                      className={`shrink-0 text-xs ${processing ? "text-amber-400" : "text-slate-400"}`}
-                    >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">
+                        {item.protocol}
+                      </span>
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                    <span className={`shrink-0 text-xs ${TONE_TEXT[tone]}`}>
                       {describeDownloadState(item)}
                     </span>
                   </div>
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                     <div
-                      className={`h-full ${processing ? "animate-pulse bg-amber-500" : "bg-sky-500"}`}
+                      className={`h-full ${TONE_BAR[tone]} ${item.state === "postprocessing" ? "animate-pulse" : ""}`}
                       style={{ width: `${Math.min(item.progress * 100, 100)}%` }}
                     />
                   </div>
-                  <div className="mt-1 flex justify-between text-xs text-slate-500">
-                    <span>
-                      {processing
-                        ? formatBytes(item.sizeBytes)
-                        : `${Math.round(item.progress * 100)}% of ${formatBytes(item.sizeBytes)}`}
-                    </span>
-                    <span>
-                      {!processing && speed ? `${formatBytes(speed)}/s · ` : ""}
-                      {item.etaSeconds ? `${formatEta(item.etaSeconds)} left` : ""}
-                    </span>
+                  <div className="mt-1 flex justify-between gap-4 text-xs text-slate-500">
+                    <span>{text.left}</span>
+                    <span>{text.right}</span>
                   </div>
                 </div>
               );
             })}
+            {hiddenDownloads > 0 && (
+              <p className="text-xs text-slate-500">+{hiddenDownloads} more</p>
+            )}
           </div>
         )}
       </section>
