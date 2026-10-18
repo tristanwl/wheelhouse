@@ -101,9 +101,7 @@ export function AddSearch() {
           <button
             onClick={() => setService("sonarr")}
             className={`rounded-l-md px-3 py-1.5 ${
-              service === "sonarr"
-                ? "bg-sky-900 text-sky-200"
-                : "text-slate-400 hover:bg-slate-800"
+              service === "sonarr" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
             }`}
           >
             TV Show
@@ -198,12 +196,9 @@ export function AddSearch() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">
-                        {hit.title}{" "}
-                        <span className="text-slate-500">{hit.year}</span>
+                        {hit.title} <span className="text-slate-500">{hit.year}</span>
                       </p>
-                      {hit.subtitle && (
-                        <p className="text-xs text-slate-500">{hit.subtitle}</p>
-                      )}
+                      {hit.subtitle && <p className="text-xs text-slate-500">{hit.subtitle}</p>}
                     </div>
                     {added ? (
                       <span className="shrink-0 rounded-full bg-emerald-900 px-2 py-0.5 text-xs text-emerald-300">
@@ -219,9 +214,7 @@ export function AddSearch() {
                       </button>
                     )}
                   </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-slate-400">
-                    {hit.overview}
-                  </p>
+                  <p className="mt-1 line-clamp-2 text-xs text-slate-400">{hit.overview}</p>
                 </div>
               </div>
             );

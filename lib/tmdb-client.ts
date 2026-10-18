@@ -91,10 +91,7 @@ export async function getPopular(count = 20, page = 1): Promise<TmdbListResult> 
 // physical-media release date in its per-region release_dates data — the
 // closest real equivalent. Sorted newest-first and capped at today so
 // announced-but-unreleased physical dates don't show up as "recent".
-export async function getRecentPhysicalReleases(
-  count = 20,
-  page = 1
-): Promise<TmdbListResult> {
+export async function getRecentPhysicalReleases(count = 20, page = 1): Promise<TmdbListResult> {
   const today = new Date().toISOString().slice(0, 10);
   return tmdbList(
     "/discover/movie",

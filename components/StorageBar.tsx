@@ -7,12 +7,7 @@ interface StorageBarProps {
   libraryUsedBytes: number;
 }
 
-export function StorageBar({
-  label,
-  path,
-  freeBytes,
-  libraryUsedBytes,
-}: StorageBarProps) {
+export function StorageBar({ label, path, freeBytes, libraryUsedBytes }: StorageBarProps) {
   const accountedFor = freeBytes + libraryUsedBytes;
   const usedPct = accountedFor > 0 ? (libraryUsedBytes / accountedFor) * 100 : 0;
   const lowSpace = freeBytes < 50 * 1024 * 1024 * 1024; // < 50GB
@@ -33,9 +28,7 @@ export function StorageBar({
           style={{ width: `${Math.min(usedPct, 100)}%` }}
         />
       </div>
-      <p className="mt-1 text-xs text-slate-500">
-        {formatBytes(libraryUsedBytes)} in library
-      </p>
+      <p className="mt-1 text-xs text-slate-500">{formatBytes(libraryUsedBytes)} in library</p>
     </div>
   );
 }

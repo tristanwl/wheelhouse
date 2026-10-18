@@ -13,11 +13,7 @@ function configFor(service: ArrService): ArrConfig {
     : { baseUrl: env.radarrUrl, apiKey: env.radarrApiKey };
 }
 
-async function arrFetch<T>(
-  service: ArrService,
-  path: string,
-  init?: RequestInit
-): Promise<T> {
+async function arrFetch<T>(service: ArrService, path: string, init?: RequestInit): Promise<T> {
   const { baseUrl, apiKey } = configFor(service);
   const res = await fetch(`${baseUrl}${path}`, {
     ...init,
@@ -25,9 +21,7 @@ async function arrFetch<T>(
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new Error(
-      `${service} ${path} failed: ${res.status} ${res.statusText}`
-    );
+    throw new Error(`${service} ${path} failed: ${res.status} ${res.statusText}`);
   }
   // Some endpoints (e.g. Radarr's DELETE) return 200 with an empty body
   // rather than 204 — checking status alone isn't reliable, so check the
@@ -228,10 +222,7 @@ export function lookupMovies(term: string) {
 }
 
 export function lookupMovieByTmdbId(tmdbId: number) {
-  return arrFetch<LookupResult>(
-    "radarr",
-    `/api/v3/movie/lookup/tmdb?tmdbId=${tmdbId}`
-  );
+  return arrFetch<LookupResult>("radarr", `/api/v3/movie/lookup/tmdb?tmdbId=${tmdbId}`);
 }
 
 export function addSeries(payload: Record<string, unknown>) {
@@ -258,9 +249,7 @@ export function getHealth(service: ArrService) {
   return arrFetch<HealthIssue[]>(service, "/api/v3/health");
 }
 
-export async function getQueueSummary(
-  service: ArrService
-): Promise<QueueSummary> {
+export async function getQueueSummary(service: ArrService): Promise<QueueSummary> {
   const data = await arrFetch<{ totalRecords: number; records: QueueRecord[] }>(
     service,
     "/api/v3/queue?page=1&pageSize=25"
@@ -313,10 +302,7 @@ export function getMovieDetail(id: number) {
 }
 
 export function getEpisodeFiles(seriesId: number) {
-  return arrFetch<EpisodeFile[]>(
-    "sonarr",
-    `/api/v3/episodefile?seriesId=${seriesId}`
-  );
+  return arrFetch<EpisodeFile[]>("sonarr", `/api/v3/episodefile?seriesId=${seriesId}`);
 }
 
 export function getEpisodes(seriesId: number) {

@@ -37,9 +37,10 @@ export default function CodecsPage() {
     candidate: ConversionCandidate;
     jobId?: string;
   } | null>(null);
-  const { data, error, mutate } = useSWR<
-    CodecAnalysisResponse & { error?: string }
-  >(`/api/codec-analysis?service=${service}`, fetcher);
+  const { data, error, mutate } = useSWR<CodecAnalysisResponse & { error?: string }>(
+    `/api/codec-analysis?service=${service}`,
+    fetcher
+  );
 
   const { data: prefs, mutate: mutatePrefs } = useSWR<CodecPreferences>(
     "/api/codec-analysis/settings",
@@ -69,9 +70,7 @@ export default function CodecsPage() {
     { refreshInterval: 2000 }
   );
   const jobsByPath = new Map(
-    (jobsData?.jobs ?? [])
-      .filter((j) => ACTIVE_STATUSES.has(j.status))
-      .map((j) => [j.filePath, j])
+    (jobsData?.jobs ?? []).filter((j) => ACTIVE_STATUSES.has(j.status)).map((j) => [j.filePath, j])
   );
 
   // A job can finish while the modal isn't open to notice via onConverted —
@@ -106,8 +105,8 @@ export default function CodecsPage() {
         <div>
           <h1 className="text-lg font-medium">Codec Analysis</h1>
           <p className="text-sm text-slate-500">
-            What&apos;s actually worth converting, not everything that
-            isn&apos;t your preferred codec.
+            What&apos;s actually worth converting, not everything that isn&apos;t your preferred
+            codec.
           </p>
         </div>
         <div className="flex rounded-md border border-slate-700 text-sm">
@@ -124,9 +123,7 @@ export default function CodecsPage() {
           <button
             onClick={() => setService("sonarr")}
             className={`rounded-r-md px-3 py-1.5 ${
-              service === "sonarr"
-                ? "bg-sky-900 text-sky-200"
-                : "text-slate-400 hover:bg-slate-800"
+              service === "sonarr" ? "bg-sky-900 text-sky-200" : "text-slate-400 hover:bg-slate-800"
             }`}
           >
             TV
@@ -135,9 +132,7 @@ export default function CodecsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-800 bg-slate-900 p-3 text-sm">
-        <span className="text-xs uppercase tracking-wide text-slate-500">
-          Preferred codec
-        </span>
+        <span className="text-xs uppercase tracking-wide text-slate-500">Preferred codec</span>
         {(["hd", "uhd"] as Tier[]).map((tier) => (
           <label key={tier} className="flex items-center gap-2 text-slate-300">
             {TIER_LABEL[tier]}
@@ -153,15 +148,13 @@ export default function CodecsPage() {
           </label>
         ))}
         <span className="text-xs text-slate-600">
-          UHD defaults to HEVC (its compression advantage is largest at 4K);
-          HD defaults to H.264 for the broadest playback compatibility.
+          UHD defaults to HEVC (its compression advantage is largest at 4K); HD defaults to H.264
+          for the broadest playback compatibility.
         </span>
       </div>
 
       {(error || data?.error) && (
-        <p className="text-sm text-red-400">
-          Failed to load: {data?.error ?? "request failed"}
-        </p>
+        <p className="text-sm text-red-400">Failed to load: {data?.error ?? "request failed"}</p>
       )}
       {!data && !error && <p className="text-sm text-slate-500">Analyzing…</p>}
 
@@ -171,17 +164,13 @@ export default function CodecsPage() {
             {(Object.keys(BUCKET_LABELS) as CodecFamily[]).map((family) => {
               const bucket = data.buckets[family];
               return (
-                <div
-                  key={family}
-                  className="rounded-lg border border-slate-800 bg-slate-900 p-4"
-                >
+                <div key={family} className="rounded-lg border border-slate-800 bg-slate-900 p-4">
                   <p className="text-xs uppercase tracking-wide text-slate-500">
                     {BUCKET_LABELS[family]}
                   </p>
                   <p className="mt-1 text-2xl font-semibold">{bucket.count}</p>
                   <p className="text-sm text-slate-400">
-                    {formatBytes(bucket.totalSize)} ·{" "}
-                    {bucket.percentOfLibrary.toFixed(1)}%
+                    {formatBytes(bucket.totalSize)} · {bucket.percentOfLibrary.toFixed(1)}%
                   </p>
                 </div>
               );
@@ -190,8 +179,8 @@ export default function CodecsPage() {
 
           {data.skippedCount > 0 && (
             <p className="text-xs text-slate-500">
-              {data.skippedCount} file{data.skippedCount === 1 ? "" : "s"}{" "}
-              skipped: no file, or no media info scanned yet.
+              {data.skippedCount} file{data.skippedCount === 1 ? "" : "s"} skipped: no file, or no
+              media info scanned yet.
             </p>
           )}
 
@@ -201,18 +190,15 @@ export default function CodecsPage() {
                 Conversion candidates ({data.candidates.length})
               </h2>
               {data.candidates.length > 0 && (
-                <button
-                  onClick={copyList}
-                  className="text-xs text-slate-400 hover:text-slate-200"
-                >
+                <button onClick={copyList} className="text-xs text-slate-400 hover:text-slate-200">
                   {copied ? "Copied ✓" : "Copy list"}
                 </button>
               )}
             </div>
             {data.candidates.length === 0 ? (
               <p className="text-sm text-slate-500">
-                Nothing worth converting: everything already matches your
-                preferred codec for its resolution tier (see below).
+                Nothing worth converting: everything already matches your preferred codec for its
+                resolution tier (see below).
               </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-slate-800">
@@ -234,12 +220,8 @@ export default function CodecsPage() {
                         <tr key={i} className="border-t border-slate-800">
                           <td className="px-4 py-2">{c.title}</td>
                           <td className="px-4 py-2 text-slate-400">{c.codec}</td>
-                          <td className="px-4 py-2 text-slate-400">
-                            {c.resolution ?? "-"}
-                          </td>
-                          <td className="px-4 py-2 text-slate-400">
-                            {formatBytes(c.size)}
-                          </td>
+                          <td className="px-4 py-2 text-slate-400">{c.resolution ?? "-"}</td>
+                          <td className="px-4 py-2 text-slate-400">{formatBytes(c.size)}</td>
                           <td className="px-4 py-2">
                             <span
                               className={`rounded px-1.5 py-0.5 text-xs ${
@@ -254,9 +236,7 @@ export default function CodecsPage() {
                           <td className="px-4 py-2 text-right">
                             {activeJob ? (
                               <button
-                                onClick={() =>
-                                  setConverting({ candidate: c, jobId: activeJob.id })
-                                }
+                                onClick={() => setConverting({ candidate: c, jobId: activeJob.id })}
                                 className="ml-auto flex items-center gap-2 rounded-md px-2 py-1 text-xs font-medium text-sky-400 hover:bg-sky-950"
                               >
                                 {activeJob.status === "queued" ? (
@@ -297,8 +277,7 @@ export default function CodecsPage() {
                 Already matches preference ({data.matching.length})
               </h2>
               <p className="mb-2 text-xs text-slate-500">
-                Already using the preferred codec for their resolution tier,
-                nothing to do.
+                Already using the preferred codec for their resolution tier, nothing to do.
               </p>
               <div className="overflow-x-auto rounded-lg border border-slate-800">
                 <table className="w-full min-w-[480px] text-sm">
@@ -313,12 +292,8 @@ export default function CodecsPage() {
                     {data.matching.map((c, i) => (
                       <tr key={i} className="border-t border-slate-800">
                         <td className="px-4 py-2">{c.title}</td>
-                        <td className="px-4 py-2 text-slate-400">
-                          {c.resolution ?? "-"}
-                        </td>
-                        <td className="px-4 py-2 text-slate-400">
-                          {formatBytes(c.size)}
-                        </td>
+                        <td className="px-4 py-2 text-slate-400">{c.resolution ?? "-"}</td>
+                        <td className="px-4 py-2 text-slate-400">{formatBytes(c.size)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -33,9 +33,7 @@ export function SeriesModal({
     fetcher
   );
 
-  const [pendingSeason, setPendingSeason] = useState<SeasonSummary | null>(
-    null
-  );
+  const [pendingSeason, setPendingSeason] = useState<SeasonSummary | null>(null);
   const [confirmingWholeSeries, setConfirmingWholeSeries] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -90,20 +88,14 @@ export function SeriesModal({
           <div>
             <h3 className="font-medium">{title}</h3>
             {data && (
-              <p className="text-xs text-slate-500">
-                {formatBytes(totalSize)} total on disk
-              </p>
+              <p className="text-xs text-slate-500">{formatBytes(totalSize)} total on disk</p>
             )}
           </div>
           <ModalCloseButton onClose={onClose} className="-mr-1 -mt-1" />
         </div>
 
-        {error && (
-          <p className="text-sm text-red-400">Failed to load seasons.</p>
-        )}
-        {!data && !error && (
-          <p className="text-sm text-slate-500">Loading…</p>
-        )}
+        {error && <p className="text-sm text-red-400">Failed to load seasons.</p>}
+        {!data && !error && <p className="text-sm text-slate-500">Loading…</p>}
 
         {data && (
           <div className="max-h-80 space-y-1 overflow-y-auto">
@@ -114,13 +106,11 @@ export function SeriesModal({
               >
                 <div>
                   <p className="text-sm">
-                    {season.seasonNumber === 0
-                      ? "Specials"
-                      : `Season ${season.seasonNumber}`}
+                    {season.seasonNumber === 0 ? "Specials" : `Season ${season.seasonNumber}`}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {season.episodeFileCount}/{season.totalEpisodeCount}{" "}
-                    episodes · {formatBytes(season.sizeOnDisk)}
+                    {season.episodeFileCount}/{season.totalEpisodeCount} episodes ·{" "}
+                    {formatBytes(season.sizeOnDisk)}
                     {!season.monitored ? " · unmonitored" : ""}
                   </p>
                 </div>
@@ -171,9 +161,7 @@ export function SeriesModal({
           title={`Delete "${title}"?`}
           body={`This removes the whole series from sonarr and deletes ${formatBytes(
             totalSize
-          )} of files from disk. This can't be undone.${
-            actionError ? ` (${actionError})` : ""
-          }`}
+          )} of files from disk. This can't be undone.${actionError ? ` (${actionError})` : ""}`}
           busy={busy}
           onConfirm={deleteWholeSeries}
           onCancel={() => setConfirmingWholeSeries(false)}

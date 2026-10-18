@@ -77,9 +77,7 @@ export async function getSabnzbdWarnings(): Promise<SabnzbdWarning[]> {
 // mode=history, which SABnzbd documents as combining "the jobs still in
 // post-processing and the database history". Fetch the still-active ones
 // (anything not Completed/Failed) so the queue view can be corrected.
-export async function getSabnzbdActivePostProc(): Promise<
-  Map<string, string>
-> {
+export async function getSabnzbdActivePostProc(): Promise<Map<string, string>> {
   const data = await sabnzbdApi<{ history: { slots: SabnzbdHistorySlot[] } }>(
     "history",
     "&limit=25"

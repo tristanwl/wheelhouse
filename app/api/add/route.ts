@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  addMovie,
-  addSeries,
-  lookupMovieByTmdbId,
-  lookupSeriesByTvdbId,
-} from "@/lib/arr-client";
+import { addMovie, addSeries, lookupMovieByTmdbId, lookupSeriesByTvdbId } from "@/lib/arr-client";
 
 interface AddRequestBody {
   service: "sonarr" | "radarr";

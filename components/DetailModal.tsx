@@ -19,16 +19,8 @@ function formatRuntime(minutes: number | null): string | null {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-export function DetailModal({
-  service,
-  id,
-  fallbackTitle,
-  onClose,
-}: DetailModalProps) {
-  const { data, error } = useSWR<ItemDetails>(
-    `/api/library/${service}/${id}/details`,
-    fetcher
-  );
+export function DetailModal({ service, id, fallbackTitle, onClose }: DetailModalProps) {
+  const { data, error } = useSWR<ItemDetails>(`/api/library/${service}/${id}/details`, fetcher);
 
   const runtime = data ? formatRuntime(data.runtime) : null;
 
@@ -44,11 +36,7 @@ export function DetailModal({
         <div className="w-40 shrink-0 self-stretch bg-slate-800">
           {data?.posterUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.posterUrl}
-              alt={data.title}
-              className="h-full w-full object-cover"
-            />
+            <img src={data.posterUrl} alt={data.title} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full min-h-[220px] items-center justify-center px-2 text-center text-xs text-slate-600">
               {error ? "" : "No poster"}
@@ -76,9 +64,7 @@ export function DetailModal({
                   </span>
                 )}
                 {data.status && <span className="capitalize">· {data.status}</span>}
-                {(data.network || data.studio) && (
-                  <span>· {data.network ?? data.studio}</span>
-                )}
+                {(data.network || data.studio) && <span>· {data.network ?? data.studio}</span>}
               </div>
 
               {data.genres.length > 0 && (
@@ -98,8 +84,7 @@ export function DetailModal({
                 <div className="mb-3 flex flex-wrap gap-3 text-xs text-slate-300">
                   {data.ratings.map((r) => (
                     <span key={r.source}>
-                      <span className="text-slate-500">{r.source}</span>{" "}
-                      {r.value.toFixed(1)}
+                      <span className="text-slate-500">{r.source}</span> {r.value.toFixed(1)}
                       {r.votes ? ` (${r.votes.toLocaleString()})` : ""}
                     </span>
                   ))}

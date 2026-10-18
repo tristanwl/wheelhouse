@@ -21,8 +21,14 @@ cp .env.example .env.local   # point at your Sonarr/Radarr/SABnzbd/etc.
 npm run dev
 ```
 
-Node 20+. Run `npm run build` before opening a PR — it type-checks the whole
-project. (Tests and linting are being added; see the spec.)
+Node 20+. Before opening a PR, run the same checks CI does:
+
+```sh
+npm run typecheck && npm run lint && npm run format:check && npm test && npm run build
+```
+
+`npm run format` fixes formatting. Tests use [Vitest](https://vitest.dev/)
+and live next to the code as `*.test.ts`.
 
 ## Pull requests
 

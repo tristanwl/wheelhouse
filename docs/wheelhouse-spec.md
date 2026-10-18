@@ -322,7 +322,7 @@ fix and can wait for Phase 3.
 
 ### Testing
 
-- Vitest, ESLint, Prettier added in the first PR (none exist today).
+- Vitest, ESLint, Prettier added in the first PR.
 - `__fixtures__/` per provider with sanitized real responses.
 - Contract suites, parameterized over adapters:
   `describeDownloadClientContract(createAdapter)` asserts normalization
@@ -338,7 +338,8 @@ fix and can wait for Phase 3.
 
 Each PR keeps the app working.
 
-1. **Tooling**: Vitest, ESLint, Prettier, `zod`, CI workflow.
+1. **Tooling**: Vitest, ESLint, Prettier, CI workflow. (`zod` arrives in PR 2,
+   where it's first used.)
 2. **Provider core**: types, registry, `providerFetch`, `EnvConfigSource`. No
    behavior change yet.
 3. **SABnzbd → DownloadClient**: adapter, `/api/downloads` aggregation, byte

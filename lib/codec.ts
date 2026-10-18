@@ -1,4 +1,8 @@
-import { DEFAULT_CODEC_PREFERENCES, type CodecPreferences, type PreferableFamily } from "./settings";
+import {
+  DEFAULT_CODEC_PREFERENCES,
+  type CodecPreferences,
+  type PreferableFamily,
+} from "./settings";
 
 export type CodecFamily = "h264" | "hevc" | "legacy";
 export type Tier = "hd" | "uhd";
