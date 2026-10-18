@@ -64,6 +64,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `PLEX_URL`, `PLEX_TOKEN` | no | Media server status card only |
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY` | no | Media server status card only; key from Dashboard → API Keys in Jellyfin. Can run alongside Plex |
 | `TMDB_API_KEY` | no | Enables Explore (with Radarr); free key from themoviedb.org |
+| `TMDB_BASE_URL` | no | Override the TMDB API root, including the version (default `https://api.themoviedb.org/3`). For a caching proxy or a test double; leave unset normally |
 
 ### What unlocks what
 

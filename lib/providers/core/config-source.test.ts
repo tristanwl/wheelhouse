@@ -6,6 +6,14 @@ describe("EnvConfigSource", () => {
     expect(await new EnvConfigSource({}).getInstances()).toEqual([]);
   });
 
+  it("maps TMDB_BASE_URL to the TMDB url override", async () => {
+    const [tmdb] = await new EnvConfigSource({
+      TMDB_API_KEY: "tk",
+      TMDB_BASE_URL: "http://tmdb.example.com/3",
+    }).getInstances();
+    expect(tmdb.config).toEqual({ apiKey: "tk", url: "http://tmdb.example.com/3" });
+  });
+
   it("maps the legacy variables to stable instance ids", async () => {
     const instances = await new EnvConfigSource({
       SONARR_URL: "http://sonarr:8989",

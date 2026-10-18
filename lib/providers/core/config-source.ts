@@ -57,7 +57,7 @@ export const ENV_MAPPINGS: readonly EnvMapping[] = [
     providerId: "tmdb",
     instanceId: "tmdb",
     name: "TMDB",
-    vars: { apiKey: "TMDB_API_KEY" },
+    vars: { apiKey: "TMDB_API_KEY", url: "TMDB_BASE_URL" },
   },
 ];
 

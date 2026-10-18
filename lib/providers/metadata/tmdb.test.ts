@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createProviderRuntime } from "../core/runtime";
 import { createRegistry } from "../core/registry";
 import { GOOD_KEY, installFakeTmdb } from "./__fixtures__/fake-tmdb";
+import { startFakeTmdbServer } from "./__fixtures__/tmdb-server";
 import { tmdbProvider, type TmdbClient } from "./tmdb";
 
 const create = (apiKey: string) =>
@@ -67,5 +68,30 @@ describe("tmdb provider", () => {
     });
     const [{ client }] = await runtime.getClients<TmdbClient>("metadata");
     expect((await client.testConnection()).ok).toBe(true);
+  });
+
+  it("talks to the configured base URL instead of api.themoviedb.org", async () => {
+    const server = await startFakeTmdbServer();
+    try {
+      const client = tmdbProvider.create(
+        { apiKey: GOOD_KEY, url: `${server.url}/3` },
+        { instanceId: "tmdb", instanceName: "TMDB" }
+      );
+      expect(await client.testConnection()).toEqual({ ok: true });
+      const popular = await client.get<{ results: { id: number }[] }>("/movie/popular");
+      expect(popular.results.map((m) => m.id)).toEqual([101, 102, 103]);
+      expect(server.requests.map((r) => r.pathname)).toEqual([
+        "/3/configuration",
+        "/3/movie/popular",
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a base URL that is not a URL", () => {
+    expect(tmdbProvider.configSchema.safeParse({ apiKey: GOOD_KEY, url: "nope" }).success).toBe(
+      false
+    );
   });
 });
