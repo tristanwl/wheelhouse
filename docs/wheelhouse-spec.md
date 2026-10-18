@@ -56,7 +56,7 @@ lib/
     core/
       types.ts          # Role, ProviderDefinition, Instance, ConnectionResult
       registry.ts       # static list of all ProviderDefinitions
-      instances.ts      # getInstances(role), getInstance(id)
+      runtime.ts        # resolves instances, validates config, caches clients
       http.ts           # providerFetch (timeout, redaction, URL base, TLS opt)
       config-source.ts  # ConfigSource interface + EnvConfigSource
     download-client/    # types.ts, sabnzbd.ts, qbittorrent.ts
@@ -116,6 +116,10 @@ Today's `fetch` calls have no timeout, so one dead service can hang
 - URL-base support (`http://host:8989/sonarr`) and trailing-slash
   normalization.
 - Optional `allowInsecureTls` per instance (self-signed certs are common).
+  *Deferred from PR 2*: Node's global `fetch` can't skip certificate checks
+  without an undici dispatcher, which means a new dependency and a test
+  certificate. It lands with the first adapter that needs it; until then a
+  self-signed certificate is reported as a clear `ProviderError`.
 - Error redaction: API keys and tokens are stripped from URLs and messages
   before they reach logs or API responses (SABnzbd puts `apikey` in the query
   string).
@@ -338,10 +342,10 @@ fix and can wait for Phase 3.
 
 Each PR keeps the app working.
 
-1. **Tooling**: Vitest, ESLint, Prettier, CI workflow. (`zod` arrives in PR 2,
-   where it's first used.)
-2. **Provider core**: types, registry, `providerFetch`, `EnvConfigSource`. No
-   behavior change yet.
+1. ✅ **Tooling**: Vitest, ESLint, Prettier, CI workflow.
+2. ✅ **Provider core**: types, registry, runtime, `providerFetch`,
+   `EnvConfigSource`, `zod`. Nothing uses it yet, so no behavior change; the
+   registry is empty until the adapters in PRs 3-5 register themselves.
 3. **SABnzbd → DownloadClient**: adapter, `/api/downloads` aggregation, byte
    normalization, fixtures + contract tests.
 4. **Plex → MediaServer**: adapter, `state` mapping, contract tests.
