@@ -56,8 +56,8 @@ cp .env.example .env.local   # point at your services
 npm run dev
 ```
 
-Requires Node 20+. `npm run build` also type-checks. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Requires Node 20+. `npm test` runs the tests; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full pre-PR checklist.
 
 ## Credits
 
