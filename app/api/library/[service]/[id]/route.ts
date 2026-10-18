@@ -3,17 +3,18 @@ import { deleteMovie, deleteSeries } from "@/lib/arr-client";
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { service: string; id: string } }
+  { params }: { params: Promise<{ service: string; id: string }> }
 ) {
-  const id = Number(params.id);
+  const { service, id: idParam } = await params;
+  const id = Number(idParam);
   if (!Number.isInteger(id)) {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
   try {
-    if (params.service === "sonarr") {
+    if (service === "sonarr") {
       await deleteSeries(id);
-    } else if (params.service === "radarr") {
+    } else if (service === "radarr") {
       await deleteMovie(id);
     } else {
       return NextResponse.json({ error: "unknown service" }, { status: 400 });
