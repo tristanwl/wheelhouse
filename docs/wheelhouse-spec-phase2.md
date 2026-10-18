@@ -137,7 +137,8 @@ The behaviour is defined first, then the server is rebuilt against it.
 4. **Download clients,** then **media servers,** then **media managers,**
    each passing the shared contract tests and the real fixtures.
 5. **API routes and the feature registry,** passing the acceptance suite.
-   (In progress: foundation, features, status and downloads done.)
+   (In progress: foundation, features, status, downloads and the library group
+   (library, storage, search, add, add-meta, details, seasons, deletes) done.)
 6. **UI to Vite:** pages and components move to the SPA served by the Go server.
 7. **Converter in Go:** ffmpeg arguments, hardware-encode detection, hardlink
    check, queue.

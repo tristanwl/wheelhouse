@@ -112,8 +112,8 @@ otherwise.
   made of it: 404 or 502 are both accepted.
 - Cancelling an unknown job is a 4xx (Next answers 400); only the range is required.
 - `DELETE /api/library/{instanceId}/{id}` asks the manager to delete the files
-  as well (`deleteFiles=true`); the confirmation lives in the UI. The suite does
-  not pin that parameter.
+  as well (`deleteFiles=true`). The suite sends `?confirm=true` on every
+  library delete (the Go server requires it, issue #41; the Next app ignores it).
 
 ## Adding a route
 

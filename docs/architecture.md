@@ -58,6 +58,20 @@ is unchanged. See [server/README.md](../server/README.md).
 - A configured URL with `user:pass@` is an invalid config (the Next app never
   worked with these either: `fetch` refuses them), so the instance shows as down
   instead of sending Basic auth upstream.
+- **Library group** (`internal/library`, `app/routes_library.go`). `GET
+  /api/library`, `/api/storage`, `/api/search`, `/api/add-meta`, the details and
+  seasons routes, `POST /api/add` and the two deletes, all over the media-manager
+  role (`ListManagers`, `CollectFromManagers`, `Summarize`, `AsMovies/AsSeries`,
+  the add payload builders). Every merged item carries its `instanceId`; one
+  broken instance is a `problems`/`instances` entry (search answers 502 only when
+  every instance failed), and a route addressed to a broken instance is a 502
+  with the redacted reason. Storage places an item by `path ?? rootFolderPath`
+  in the deepest root folder that contains it. **Deletes need `?confirm=true`**
+  (issue #41): without it `DELETE /api/library/{instanceId}/{id}` and the season
+  variant answer 400 and touch nothing; both write an `audit` log line (action,
+  instance, ids, no query string, no user yet). The Next UI does not send the
+  parameter yet; the acceptance suite does (Next ignores it), and the later UI
+  port must send it after its own confirm dialog.
 
 ### Go provider core (`server/internal/providers/core`)
 

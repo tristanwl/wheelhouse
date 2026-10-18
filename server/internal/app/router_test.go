@@ -35,9 +35,18 @@ func TestEveryRouteHasAnAccessLevel(t *testing.T) {
 		"GET /api/features":  Public,
 		"GET /api/status":    Public,
 		"GET /api/downloads": Public,
-		"/api":               Public,
-		"/api/":              Public,
-		"/":                  Public,
+		"GET /api/library":   Public,
+		"GET /api/storage":   Public,
+		"GET /api/search":    Public,
+		"GET /api/add-meta":  Public,
+		"POST /api/add":      Admin,
+		"GET /api/library/{instanceId}/{id}/details":             Public,
+		"GET /api/library/{instanceId}/{id}/seasons":             Public,
+		"DELETE /api/library/{instanceId}/{id}":                  Admin,
+		"DELETE /api/library/{instanceId}/{id}/seasons/{season}": Admin,
+		"/api":  Public,
+		"/api/": Public,
+		"/":     Public,
 	}
 	for p, l := range want {
 		if seen[p] != l {
