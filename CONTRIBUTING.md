@@ -30,6 +30,14 @@ npm run typecheck && npm run lint && npm run format:check && npm test && npm run
 `npm run format` fixes formatting. Tests use [Vitest](https://vitest.dev/)
 and live next to the code as `*.test.ts`.
 
+### The Go server (`server/`)
+
+Only needed if you work on the Go port (see
+[server/README.md](server/README.md)): Go 1.27+,
+[golangci-lint](https://golangci-lint.run/) v2 and
+[govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck). Then
+`make -C server check` runs the same checks as the `server` CI job.
+
 ## Pull requests
 
 - Keep PRs small and focused; one change per PR.

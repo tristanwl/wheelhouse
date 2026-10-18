@@ -33,6 +33,12 @@ enabled): `npm run build`, then run `.next/standalone/server.js`.
 definition of done for the Go port, so a new route must be added to
 `acceptance/routes.ts` (see `acceptance/README.md`).
 
+The Go server that will replace the Next app is built alongside it in `server/`
+(Go 1.27+, standard library only so far; see `server/README.md` and
+`docs/wheelhouse-spec-phase2.md`). From `server/`: `make check` runs what its CI
+job runs (gofmt, vet, `go test -race`, golangci-lint, govulncheck, build). Nothing
+in the Next app depends on it until the cut-over.
+
 ## How it is built
 
 Next.js 15 (App Router) + React 19, SWR for polling, Tailwind. No database.

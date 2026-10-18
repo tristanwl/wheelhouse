@@ -22,6 +22,13 @@ layer over Sonarr, Radarr, and SABnzbd's existing APIs. Routes live in
 `lib/providers/` (one directory per role: media manager, download client,
 media server).
 
+A Go server that will replace the Next app is being built alongside it in
+`server/`, following [wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md)
+(migration step 2: skeleton, middleware, embedded UI placeholder). It serves
+only `/healthz`, `/api/features` and a placeholder page so far; nothing here
+describes it until the cut-over, and the Next app is unchanged. See
+[server/README.md](../server/README.md).
+
 ## Conventions
 
 Every modal (`ConfirmModal`, `SeriesModal`, `DetailModal`, `TmdbDetailModal`)
