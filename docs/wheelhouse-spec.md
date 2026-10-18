@@ -309,15 +309,24 @@ interface MediaServer {
 }
 
 interface MediaServerStatus {
-  state: "ok" | "needs-setup" | "down";   // needs-setup: unclaimed Plex, missing token
+  state: "ok" | "needs-setup";   // needs-setup: the server itself isn't ready (unclaimed Plex)
+  notice?: string;               // plain words for the user; never names config keys
   name?: string;
   version?: string;
-  activeSessions?: number;
-  error?: string;
+  activeSessions?: number;       // undefined when we can't read it
+  authenticated: boolean;        // do we have working credentials?
 }
 ```
 
-Plex maps its `claimed`/`tokenConfigured` logic onto `state`. Jellyfin uses
+"Down" is not a state: an unreachable server makes `getStatus()` throw a
+`ProviderError`, and the caller reports it as down with the (redacted)
+reason. A server that is up but whose credentials are missing or rejected is
+`ok` with `authenticated: false` and a `notice`, never a misleading "0
+sessions".
+
+Plex: unclaimed gives `needs-setup`; no token or a rejected token (HTTP 401
+with an HTML page) gives `ok` with `authenticated: false`; any other failure
+reading details keeps the server `ok` with a notice. Jellyfin uses
 `/System/Info/Public` (unauthenticated) and, with an API key, `/System/Info`
 and `/Sessions`. Library refresh after a codec conversion is the obvious next
 method, but it is deferred to Phase 3 so Phase 1 doesn't grow past
@@ -409,7 +418,7 @@ Each PR keeps the app working.
    (so the dashboard can age them), and a wrong API key is reported as such:
    SABnzbd 4.x answers it with HTTP 403 and a plain-text body, not a 200 with an
    error field.
-4. **Plex → MediaServer**: adapter, `state` mapping, contract tests.
+4. ✅ **Plex → MediaServer**: adapter, `state` mapping, contract tests.
 5. **Sonarr/Radarr → MediaManager instances**: `[service]` → `[instanceId]`,
    iterate instances in status/storage/explore, fix storage double-count, and
    add the response cache (see "Response caching").

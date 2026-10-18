@@ -19,14 +19,6 @@ export const env = {
   get radarrApiKey() {
     return required("RADARR_API_KEY");
   },
-  // Plex is optional: the server may not be claimed/tokened yet, and status
-  // reporting should degrade gracefully rather than fail to boot.
-  get plexUrl() {
-    return process.env.PLEX_URL;
-  },
-  get plexToken() {
-    return process.env.PLEX_TOKEN;
-  },
   // Optional: the Explore tab degrades to "not configured" without it.
   get tmdbApiKey() {
     return process.env.TMDB_API_KEY;
