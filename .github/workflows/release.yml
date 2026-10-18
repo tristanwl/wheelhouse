@@ -85,7 +85,7 @@ jobs:
         run: |
           version="$GITHUB_REF_NAME"
           prerelease=false
-          case "$version" in 0.0.* | *-*) prerelease=true ;; esac
+          case "$version" in 0.* | *-*) prerelease=true ;; esac
 
           extra="Docker image: \`docker pull $IMAGE:$version\`"
           if [ "$prerelease" = true ]; then
