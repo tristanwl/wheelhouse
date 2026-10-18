@@ -1,7 +1,4 @@
-import {
-  GOOD_KEY as SAB_KEY,
-  startFakeSabnzbd,
-} from "./sabnzbd/server";
+import { GOOD_KEY as SAB_KEY, startFakeSabnzbd } from "./sabnzbd/server";
 import {
   GOOD_PASSWORD as QB_PASSWORD,
   GOOD_USER as QB_USER,
@@ -15,18 +12,9 @@ import {
   type FakeRadarr,
   type FakeSonarr,
 } from "./media-manager/server";
-import {
-  GOOD_KEY as JELLYFIN_KEY,
-  startFakeJellyfin,
-} from "./jellyfin/server";
-import {
-  GOOD_TOKEN as PLEX_TOKEN,
-  startFakePlex,
-} from "./plex/server";
-import {
-  GOOD_KEY as TMDB_KEY,
-  startFakeTmdbServer,
-} from "./tmdb/server";
+import { GOOD_KEY as JELLYFIN_KEY, startFakeJellyfin } from "./jellyfin/server";
+import { GOOD_TOKEN as PLEX_TOKEN, startFakePlex } from "./plex/server";
+import { GOOD_KEY as TMDB_KEY, startFakeTmdbServer } from "./tmdb/server";
 import { Cleanup, closedUrl, startHangingServer } from "../harness";
 
 /** The credentials each fake accepts. */
