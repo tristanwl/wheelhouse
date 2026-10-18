@@ -12,7 +12,7 @@ authentication, the database and the admin page are built.
 - **Server:** Go, standard library `net/http` routing, `log/slog`, a pure-Go
   SQLite driver (`modernc.org/sqlite`, no CGO), `golang.org/x/crypto` for
   Argon2id. A small dependency list, reviewed on every addition.
-- **UI:** the existing React pages move to a Vite build (React Router, SWR kept).
+- **UI:** the existing React pages move to a Vite build with React Router (decided); SWR is kept.
   The build output is embedded into the binary with `embed`. npm is
   therefore build-time only; no JavaScript dependency runs on the server.
 - **One process, one container.** The server serves the API and the UI and runs
@@ -53,15 +53,10 @@ authentication, the database and the admin page are built.
 
 ## Container and deployment model
 
-One image, one process: `wheelhouse`. Two variants:
-
-| Variant | Contents | For |
-|---|---|---|
-| `tristanwl/wheelhouse:<version>` | binary, ffmpeg and VA-API/QSV drivers | everyone, including conversion |
-| `tristanwl/wheelhouse:<version>-slim` | binary only (distroless, non-root) | users who don't convert |
-
-Both run as a non-root user with a read-only root filesystem, all capabilities
-dropped, and one writable volume for config and the SQLite database.
+One image, one process: `wheelhouse`, containing the binary, ffmpeg and the
+VA-API/QSV drivers. It runs as a non-root user with a read-only root filesystem,
+all capabilities dropped, and one writable volume for config and the SQLite
+database. A slimmer variant without ffmpeg is possible later but is not planned.
 
 The converter stays a role inside the server, behind an interface, so it can move
 out later without touching the rest: a separate worker image that the server
@@ -72,6 +67,13 @@ Phase 3 sketch). That split is a possible future change, not a 1.0 goal.
 
 These are acceptance criteria for 1.0, each with a test.
 
+- **Roles:** exactly two. An **admin** has every right: configuration (providers
+  and instances, feature toggles, media roots), users and sessions. A **user**
+  can browse, search, add media through Explore and manage the library
+  (monitoring, quality, deletes, conversions) but cannot see or change
+  configuration, users or any secret. Roles are enforced on the server for every
+  route; the UI only hides what the server would refuse. The first account
+  created in setup is an admin, and the last admin cannot be deleted or demoted.
 - **Passwords:** Argon2id with per-user salts; a minimum length, no composition rules.
 - **Sessions:** random 256-bit tokens, stored hashed server-side; cookies are
   `HttpOnly`, `Secure` (when served over HTTPS), `SameSite=Strict`; rotated on
@@ -104,7 +106,8 @@ These are acceptance criteria for 1.0, each with a test.
 ## Phase 2 features
 
 1. First-run setup: create the first admin, then add services.
-2. Local users with roles (admin, user), optional local-network bypass.
+2. Local users with the admin and user roles above, and an optional
+   local-network bypass (which grants the user role, never admin).
 3. SQLite-backed config source replacing `EnvConfigSource` (the environment
    source stays as a read-only seed and for headless installs).
 4. Admin page: providers and instances, "Test connection", feature toggles,
@@ -139,9 +142,7 @@ Each step is its own PR, and the Next app keeps working until step 8.
 
 ## Open questions
 
-- Router choice for the SPA (React Router is the default).
-- Whether the slim image is worth the extra release matrix before 1.0.
 - Key management for secrets at rest: a key file by default, with optional
   environment variable and external secret managers later.
-- Multi-user scope: whether "user" needs per-library permissions or only the
-  admin and user split.
+- Whether deletes and conversions should be switchable per user later (for
+  example a read-and-add role), or whether the two fixed roles are enough.
