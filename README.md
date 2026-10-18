@@ -44,7 +44,7 @@ root-owned and Wheelhouse can't save settings.
 
 This pulls the published image, [`tristanwl/wheelhouse`](https://hub.docker.com/r/tristanwl/wheelhouse)
 on Docker Hub (linux/amd64). There is no `latest` tag while Wheelhouse is
-alpha; pin a version, for example `tristanwl/wheelhouse:0.0.1`. To build from
+alpha; pin a version, for example `tristanwl/wheelhouse:0.1.0`. To build from
 source instead, uncomment `build: .` in the compose file and run
 `docker compose up -d --build`.
 
