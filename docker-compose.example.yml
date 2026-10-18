@@ -2,7 +2,7 @@
 # create .env from .env.example, and adjust the media paths.
 services:
   wheelhouse:
-    image: tristanwl/wheelhouse:0.1.0
+    image: tristanwl/wheelhouse:0.1.1
     # Or build from source instead (then run `docker compose up -d --build`):
     # build: .
     container_name: wheelhouse
