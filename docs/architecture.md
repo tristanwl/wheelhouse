@@ -26,7 +26,7 @@ A Go server that will replace the Next app is being built alongside it in
 `server/`, following [wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md)
 (migration steps 2 and 3: skeleton, middleware, embedded UI placeholder, and
 the provider core, then the providers and, from step 5, the API routes). So far
-it serves `/healthz`, `/api/features`, `/api/status`, `/api/downloads` and a
+it serves `/healthz`, `/api/features`, `/api/status`, `/api/downloads`, `/api/explore` and a
 placeholder page; nothing here describes it until the cut-over, and the Next app
 is unchanged. See [server/README.md](../server/README.md).
 
@@ -55,6 +55,11 @@ is unchanged. See [server/README.md](../server/README.md).
 - **Downloads.** `downloads.Compute` returns `instances` (one per enabled client,
   `up` false with the reason when it cannot answer) and normalized `items`, both
   in configured order.
+- **Explore.** `explore.Browse` and `explore.Movie` use the first ready TMDB
+  client (`lib/tmdb-client.ts` semantics: paging in units of `limit`, TMDB pages
+  capped at 500) and read the movie library of every Radarr instance in parallel
+  for `alreadyAdded`; an instance that fails is skipped. TMDB failures are a 502
+  with `core.ErrorText`. `limit`/`page`/`id` parse like JavaScript `Number()`.
 - A configured URL with `user:pass@` is an invalid config (the Next app never
   worked with these either: `fetch` refuses them), so the instance shows as down
   instead of sending Basic auth upstream.
