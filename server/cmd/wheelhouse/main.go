@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -162,6 +163,11 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	convSettings, err := converter.NewSettings(ctx, db, converter.EnvRoots(os.Getenv), []string{configDir, filepath.Dir(config.DBPath(os.Getenv, configDir))})
+	if err != nil {
+		return err
+	}
+
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.Addr())
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -172,7 +178,7 @@ func run(log *slog.Logger) error {
 		Logger:    log,
 		Config:    stored,
 		Context:   ctx,
-		Converter: app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv), ConfigDir: configDir},
+		Converter: app.ConverterOptions{Settings: convSettings, Store: db, ConfigDir: configDir},
 		Auth:      accounts,
 		Network:   network,
 	})

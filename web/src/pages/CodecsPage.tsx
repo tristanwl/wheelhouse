@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { formatBytes } from "@/lib/format";
+import { hdrLabel } from "@/lib/hdr";
 import type { CodecAnalysisResponse } from "@/lib/types";
 import type { CodecFamily, ConversionCandidate, Tier } from "@/lib/types";
 import type { ConversionJob } from "@/lib/types";
@@ -166,6 +167,13 @@ export default function CodecsPage() {
 
       {data && (
         <>
+          {data.hdrExcluded > 0 && (
+            <p className="rounded-md border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400">
+              {data.hdrExcluded} HDR or Dolby Vision file{data.hdrExcluded === 1 ? " is" : "s are"}{" "}
+              left out of the candidates: converting writes SDR 8-bit and would lose the HDR. An
+              administrator can allow converting them in the converter settings.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {(Object.keys(BUCKET_LABELS) as CodecFamily[]).map((family) => {
               const bucket = data.buckets[family];
@@ -224,7 +232,17 @@ export default function CodecsPage() {
                       const activeJob = jobsByPath.get(c.filePath);
                       return (
                         <tr key={i} className="border-t border-slate-800">
-                          <td className="px-4 py-2">{c.title}</td>
+                          <td className="px-4 py-2">
+                            {c.title}
+                            {c.hdr !== "none" && (
+                              <span
+                                title="Converting writes SDR 8-bit and drops the HDR / Dolby Vision metadata"
+                                className="ml-2 rounded bg-fuchsia-950 px-1.5 py-0.5 text-xs text-fuchsia-300"
+                              >
+                                {hdrLabel(c.hdr)}
+                              </span>
+                            )}
+                          </td>
                           <td className="px-4 py-2 text-slate-400">{c.codec}</td>
                           <td className="px-4 py-2 text-slate-400">{c.resolution ?? "-"}</td>
                           <td className="px-4 py-2 text-slate-400">{formatBytes(c.size)}</td>
@@ -319,6 +337,7 @@ export default function CodecsPage() {
           codec={converting.candidate.codec}
           originalSize={converting.candidate.size}
           targetFamily={converting.candidate.targetFamily}
+          hdr={converting.candidate.hdr ?? "none"}
           existingJobId={converting.jobId}
           onClose={() => setConverting(null)}
           onConverted={() => mutate()}

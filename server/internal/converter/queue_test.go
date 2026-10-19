@@ -30,7 +30,7 @@ func (r *rescans) got() []string {
 	return slices.Clone(r.calls)
 }
 
-func newQueue(t *testing.T, root string, ft fakeTools, rs *rescans) *MemoryQueue {
+func newQueue(t *testing.T, root string, ft fakeTools, rs *rescans) *JobQueue {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
