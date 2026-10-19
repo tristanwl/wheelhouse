@@ -243,13 +243,13 @@ says how many). With `includeHdr` on, they appear marked as HDR and converting
 one needs an explicit acknowledgement; the server decides from the file itself, so
 a file Radarr reports as SDR that is not, or one whose HDR cannot be determined
 (`unknown`, for example ffprobe fails), is treated the same way. The original is
-kept as `.bak` as for every conversion.
+kept as `.bak` as for every conversion. A backup is never overwritten: converting the same file again keeps the earlier original and uses `.bak.1`, `.bak.2` and so on (the job shows the exact name). Nothing deletes backups; clear them out yourself when you are sure.
 
 **The queue after a restart.** Jobs are saved in the database. When the server
 starts (also after a graceful stop): a job that was running becomes `failed` with
 `interrupted: the server stopped while this conversion was running` (it is not
 resumed; start it again from the page) and its partial file is removed, a swap
-that died between its two renames is repaired, jobs still `queued` stay queued and
+that died halfway is repaired (only a swap the server had recorded in its database; a `.bak` file it did not record is never renamed back), jobs still `queued` stay queued and
 run in order, and finished jobs are listed for 30 days, at most the newest 200
 (`converter.RetainFinishedFor` and `RetainFinishedMax`). The job list shows who
 started each job (a user, `local-network` for the bypass, or `cli`). Starting,

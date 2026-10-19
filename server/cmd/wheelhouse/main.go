@@ -122,6 +122,9 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
+	if limit := applyMemoryLimitFromEnvironment(); limit > 0 {
+		log.Info("soft memory limit set from the container limit (GOMEMLIMIT overrides it)", "bytes", limit)
+	}
 	proxies, err := config.TrustedProxies(os.Getenv)
 	if err != nil {
 		return err

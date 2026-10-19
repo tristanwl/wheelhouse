@@ -53,7 +53,7 @@ func send[T any](ctx context.Context, c *Client, method, path string, query url.
 
 // Series lists the library (cached for a few seconds; any write clears it).
 func (c *Client) Series(ctx context.Context) ([]mm.Series, error) {
-	s, err := get[[]mm.Series](ctx, c, "series", core.Request{CacheTTL: mm.LibraryCacheTTL})
+	s, err := get[[]mm.Series](ctx, c, "series", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LargeListBytes})
 	if s == nil {
 		s = []mm.Series{}
 	}
@@ -94,7 +94,7 @@ func (c *Client) Episodes(ctx context.Context, seriesID int) ([]mm.Episode, erro
 
 // Lookup searches for series to add.
 func (c *Client) Lookup(ctx context.Context, term string) ([]mm.LookupResult, error) {
-	r, err := get[[]mm.LookupResult](ctx, c, "series/lookup", core.Request{Query: url.Values{"term": {term}}})
+	r, err := get[[]mm.LookupResult](ctx, c, "series/lookup", core.Request{Query: url.Values{"term": {term}}, Limits: mm.LookupLimits})
 	if r == nil {
 		r = []mm.LookupResult{}
 	}

@@ -93,7 +93,7 @@ func (c *Client) Get(ctx context.Context, path string, params map[string]string,
 		q.Set(k, v)
 	}
 	q.Set("api_key", c.apiKey)
-	return c.http.JSON(ctx, path, core.Request{Query: q}, out)
+	return c.http.JSON(ctx, path, core.Request{Query: q, MaxBytes: core.SmallResponseBytes * 2}, out)
 }
 
 // TestConnection makes the cheapest authenticated call: a few hundred bytes of

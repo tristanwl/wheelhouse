@@ -196,7 +196,7 @@ func Serve(ctx context.Context, ln net.Listener, h http.Handler, log *slog.Logge
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
 	errc := make(chan error, 1)
-	go func() { errc <- srv.Serve(ln) }()
+	go func() { errc <- srv.Serve(limitListener(ln, MaxConnections)) }()
 
 	select {
 	case err := <-errc:

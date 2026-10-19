@@ -581,6 +581,16 @@ func TestUpstreamFailures(t *testing.T) {
 		}
 	})
 
+	t.Run("a flood of empty elements is refused by its element count, not its size", func(t *testing.T) {
+		c := upstream(t, loginThen(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`[` + strings.Repeat("{},", core.DefaultMaxElements) + `{}]`))
+		}), nil)
+		_, err := c.Items(bg)
+		if err == nil || !strings.Contains(err.Error(), "too large or too deeply nested") {
+			t.Errorf("%v", err)
+		}
+	})
+
 	t.Run("a slow service times out", func(t *testing.T) {
 		release := make(chan struct{})
 		c := upstream(t, func(http.ResponseWriter, *http.Request) { <-release },

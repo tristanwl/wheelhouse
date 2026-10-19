@@ -187,8 +187,8 @@ func TestUpdateKeepsOrReplacesSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Omitted secret: the stored one stays.
-	e, ch, err := f.src.Update(ctx(), "radarr", Patch{Config: map[string]any{"url": "http://h2"}})
-	if err != nil || e.Config["apiKey"] != keyA || e.Config["url"] != "http://h2" {
+	e, ch, err := f.src.Update(ctx(), "radarr", Patch{Config: map[string]any{"url": "http://H1:80/"}})
+	if err != nil || e.Config["apiKey"] != keyA || e.Config["url"] != "http://H1:80/" {
 		t.Fatalf("keep: %+v %v", e, err)
 	}
 	if len(ch.Fields) != 1 || ch.Fields[0] != "url" || len(ch.Secrets) != 0 {
@@ -199,7 +199,7 @@ func TestUpdateKeepsOrReplacesSecrets(t *testing.T) {
 	if err != nil || e.Config["apiKey"] != keyB {
 		t.Fatalf("replace: %+v %v", e, err)
 	}
-	if len(ch.Secrets) != 1 || ch.Secrets[0] != "apiKey" || len(ch.Fields) != 0 {
+	if len(ch.Secrets) != 1 || ch.Secrets[0] != "apiKey" || len(ch.Fields) != 1 {
 		t.Errorf("change = %+v", ch)
 	}
 	// Name and enabled alone leave the settings alone.
@@ -266,7 +266,7 @@ func TestEnvironmentPrecedenceReadOnlyAndImport(t *testing.T) {
 	}
 	f.env["radarr"] = core.Instance{ID: "radarr", ProviderID: "radarr", Name: "Radarr", Enabled: true,
 		Config: map[string]any{"url": "http://changed-env", "apiKey": "other-env-key-0000"}}
-	if _, _, err := f.src.Update(ctx(), "radarr", Patch{Config: map[string]any{"url": "http://db-host"}}); err != nil {
+	if _, _, err := f.src.Update(ctx(), "radarr", Patch{Config: map[string]any{"url": "http://db-host", "apiKey": keyA}}); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := f.src.Instances(ctx())

@@ -2,6 +2,7 @@ package converter
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -115,7 +116,7 @@ func TestConversionSucceedsAndKeepsTheOriginalAsBak(t *testing.T) {
 		t.Errorf("rescans: %v", got)
 	}
 	// The log shows the command and the tool's own output.
-	for _, want := range []string{"Probing " + file, "Target: hevc via software", "Duration: 2.0s", "$ ffmpeg -y -i " + file, "frame=1", "Swapped in converted file; original kept at " + file + ".bak"} {
+	for _, want := range []string{"Probing " + file, "Target: hevc via software", "Duration: 2.0s", "$ ffmpeg -nostdin -y -protocol_whitelist file -i " + file, "frame=1", "Swapped in converted file; original kept at " + file + ".bak"} {
 		if !strings.Contains(job.Log, want) {
 			t.Errorf("log lacks %q:\n%s", want, job.Log)
 		}
@@ -134,7 +135,7 @@ func TestConversionArgumentsForcePixFmtAndCopyStreams(t *testing.T) {
 	if filepath.Dir(temp) != root || !strings.HasPrefix(filepath.Base(temp), TempPrefix+job.ID) || filepath.Ext(temp) != ".mkv" {
 		t.Errorf("temp output %q: want a dotfile with the job id next to the original", temp)
 	}
-	want := []string{"-y", "-i", file, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", temp}
+	want := []string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", file, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", temp}
 	if !slices.Equal(args, want) {
 		t.Errorf("args:\n got %q\nwant %q", args, want)
 	}
@@ -365,27 +366,13 @@ func TestFileSwappedForASymlinkDuringEncodingIsNotReplaced(t *testing.T) {
 	eventually(t, "temp file removed", func() bool { return len(leftovers(t, root)) == 1 })
 }
 
-func TestSwapRefusedLeavesTheOriginalInPlace(t *testing.T) {
-	// A directory sits where the backup would go, so the first rename fails:
-	// the original must stay put and the converted file must not be left behind.
-	root, file := library(t, "a.mkv", "original")
-	if err := os.Mkdir(file+".bak", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	q := newQueue(t, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
-	job := wait(t, q, q.Enqueue(request(file)).ID, StatusFailed)
-	if read(t, file) != "original" || job.BackupPath != "" || job.Error != "Could not move the original to its backup" {
-		t.Errorf("%+v", job)
-	}
-	eventually(t, "temp file removed", func() bool { return len(leftovers(t, root)) == 2 })
-}
-
 func TestStartupCleanupRestoresAndRemoves(t *testing.T) {
 	root, _ := library(t, "keep.mkv", "keep")
 	// A normal finished conversion: file plus .bak, both left alone.
 	mustWrite(t, filepath.Join(root, "done.mkv"), "new")
 	mustWrite(t, filepath.Join(root, "done.mkv.bak"), "old")
-	// Killed between the two renames: only the .bak exists.
+	// A stray .bak with no file beside it: Wheelhouse did not record it, so it
+	// must not be resurrected.
 	mustWrite(t, filepath.Join(root, "stranded.mkv.bak"), "real content")
 	// An interrupted encode's partial output, in a subfolder.
 	sub := filepath.Join(root, "Show", "Season 1")
@@ -405,11 +392,11 @@ func TestStartupCleanupRestoresAndRemoves(t *testing.T) {
 
 	CleanupOrphans([]string{root}, slog.New(slog.DiscardHandler))
 
-	if got := read(t, filepath.Join(root, "stranded.mkv")); got != "real content" {
-		t.Errorf("stranded .bak not restored: %q", got)
+	if _, err := os.Lstat(filepath.Join(root, "stranded.mkv")); err == nil {
+		t.Error("a stray .bak was resurrected")
 	}
-	if _, err := os.Stat(filepath.Join(root, "stranded.mkv.bak")); err == nil {
-		t.Error("stranded .bak still there")
+	if got := read(t, filepath.Join(root, "stranded.mkv.bak")); got != "real content" {
+		t.Errorf("the stray .bak was touched: %q", got)
 	}
 	if got := read(t, filepath.Join(root, "done.mkv.bak")); got != "old" {
 		t.Errorf("a normal .bak must stay: %q", got)
@@ -446,5 +433,98 @@ func TestLogKeepsTheTail(t *testing.T) {
 	}
 	if tail("short", 100) != "short" {
 		t.Error("short text unchanged")
+	}
+}
+
+func TestConvertingTwiceKeepsEveryOriginal(t *testing.T) {
+	// The reviewer's repro: the second conversion used to overwrite the first
+	// run's .bak with the already converted file, destroying the original.
+	root, file := library(t, "a.mkv", "original")
+	q := newQueue(t, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	first := wait(t, q, q.Enqueue(request(file)).ID, StatusSuccess)
+	if first.BackupPath != file+".bak" {
+		t.Fatalf("first backup %q", first.BackupPath)
+	}
+	second := wait(t, q, q.Enqueue(request(file)).ID, StatusSuccess)
+	if second.BackupPath != file+".bak.1" {
+		t.Errorf("second backup %q", second.BackupPath)
+	}
+	if got := read(t, file+".bak"); got != "original" {
+		t.Errorf("the first original was lost: %q", got)
+	}
+	if got := read(t, file+".bak.1"); got != "converted" {
+		t.Errorf(".bak.1: %q", got)
+	}
+	if got := read(t, file); got != "converted" {
+		t.Errorf("file: %q", got)
+	}
+}
+
+func TestExistingBackupDirectoryIsSkipped(t *testing.T) {
+	root, file := library(t, "a.mkv", "original")
+	if err := os.Mkdir(file+".bak", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	q := newQueue(t, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	job := wait(t, q, q.Enqueue(request(file)).ID, StatusSuccess)
+	if job.BackupPath != file+".bak.1" || read(t, file+".bak.1") != "original" {
+		t.Errorf("%+v", job)
+	}
+}
+
+func TestAllBackupNamesTakenRefusesTheJob(t *testing.T) {
+	root, file := library(t, "a.mkv", "original")
+	mustWrite(t, file+".bak", "b0")
+	for i := 1; i < maxBackupNames; i++ {
+		mustWrite(t, backupName(file, i), "b")
+	}
+	q := newQueue(t, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	job := wait(t, q, q.Enqueue(request(file)).ID, StatusFailed)
+	if !strings.Contains(job.Error, "Too many backups") || read(t, file) != "original" || read(t, file+".bak") != "b0" {
+		t.Errorf("%+v", job)
+	}
+}
+
+func TestFailureMidSwapLeavesTheOriginalIntact(t *testing.T) {
+	// The "converted" output is a directory, so moving it over the file fails
+	// after the backup was made.
+	root, file := library(t, "a.mkv", "original")
+	q := newQueue(t, root, newFakeTools(t, "raw:mkdir \"$out\"", probeTwoSeconds), nil)
+	job := wait(t, q, q.Enqueue(request(file)).ID, StatusFailed)
+	if job.Error != "Could not move the converted file into place" || job.BackupPath != "" {
+		t.Errorf("%+v", job)
+	}
+	if got := read(t, file); got != "original" {
+		t.Errorf("the original changed: %q", got)
+	}
+	if _, err := os.Lstat(file + ".bak"); err == nil {
+		t.Error("a dangling backup was left behind")
+	}
+}
+
+func TestRenameFallbackNeverClobbers(t *testing.T) {
+	dir := t.TempDir()
+	src, bak := filepath.Join(dir, "a"), filepath.Join(dir, "a.bak")
+	mustWrite(t, src, "one")
+	mustWrite(t, bak, "two")
+	if _, err := createBackup(src, bak); !errors.Is(err, errBackupExists) {
+		t.Errorf("createBackup over an existing file: %v", err)
+	}
+	if err := renameNoClobber(src, bak); err == nil {
+		t.Error("renameNoClobber replaced a file")
+	}
+	if read(t, bak) != "two" || read(t, src) != "one" {
+		t.Error("contents changed")
+	}
+}
+
+func TestBackupNames(t *testing.T) {
+	for _, c := range []struct {
+		b  string
+		ok bool
+	}{{"/m/a.mkv.bak", true}, {"/m/a.mkv.bak.7", true}, {"/m/a.mkv.bak.0", false}, {"/m/a.mkv.bak.07", false}, {"/m/a.mkv.bak.100", false}, {"/m/b.mkv.bak", false}, {"/x/a.mkv.bak", false}, {"/m/a.mkv.bakx", false}} {
+		if isBackupNameOf("/m/a.mkv", c.b) != c.ok {
+			t.Errorf("%s: want %v", c.b, c.ok)
+		}
 	}
 }

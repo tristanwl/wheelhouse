@@ -366,9 +366,19 @@ func split(def *core.Definition, provided, stored map[string]any) (plain, sec ma
 			merged[k] = v
 		}
 	}
+	// A secret left out is filled from the stored one only while requests still
+	// go where they went when it was stored. Otherwise an administrator (or a
+	// stolen session) could point the instance at a server they control, run the
+	// test, and read the stored key from that server's logs.
+	moved := destinationChanged(def, provided, stored)
 	for _, k := range def.SecretKeys() {
 		if _, ok := merged[k]; !ok {
 			if v, ok := stored[k]; ok {
+				if moved {
+					return nil, nil, &core.ValidationError{Errors: []core.FieldError{{
+						Field: k, Message: "must be entered again when the URL changes (the stored value is not sent to a new address)",
+					}}}
+				}
 				merged[k] = v
 			}
 		}
@@ -389,6 +399,50 @@ func split(def *core.Definition, provided, stored map[string]any) (plain, sec ma
 		}
 	}
 	return plain, sec, nil
+}
+
+// destinationChanged reports whether provided points a URL setting somewhere
+// other than stored does. A URL left out of provided does not count as a change
+// (it is then either refused as missing or falls back to the provider's own
+// default address). Scheme and host are compared in lower case, a default port
+// equals none, and a trailing slash is ignored; anything that does not parse
+// counts as changed.
+func destinationChanged(def *core.Definition, provided, stored map[string]any) bool {
+	for _, f := range def.Fields() {
+		if f.Format != "url" {
+			continue
+		}
+		pv, ok := provided[f.Name]
+		if !ok || pv == nil {
+			continue
+		}
+		ps, _ := pv.(string)
+		ss, _ := stored[f.Name].(string)
+		if normalizeDestination(ps) != normalizeDestination(ss) || normalizeDestination(ps) == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeDestination(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	scheme := strings.ToLower(u.Scheme)
+	port := u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	host := strings.ToLower(u.Hostname())
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/")
 }
 
 func clip(s string) string {

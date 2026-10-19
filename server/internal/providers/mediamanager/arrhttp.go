@@ -66,6 +66,9 @@ func (a *Arr) call(ctx context.Context, path string, req core.Request) ([]byte, 
 	if a.err != nil {
 		return nil, a.err
 	}
+	if req.MaxBytes <= 0 {
+		req.MaxBytes = core.MediumListBytes
+	}
 	res, err := a.http.Do(ctx, "/api/v3/"+path, req)
 	if err != nil {
 		// A wrong key is a plain 401 in the *arr apps.
@@ -78,9 +81,18 @@ func (a *Arr) call(ctx context.Context, path string, req core.Request) ([]byte, 
 	return res.Body, nil
 }
 
-func (a *Arr) invalidJSON(path string) error {
+// smallReq is the request for an endpoint with a short answer (status, health,
+// configuration lists): a low byte cap and element limit.
+func smallReq() core.Request {
+	return core.Request{MaxBytes: core.SmallResponseBytes, Limits: core.JSONLimits{MaxElements: 10_000}}
+}
+
+// LookupLimits bounds the answer of a lookup (a handful of search results).
+var LookupLimits = core.JSONLimits{MaxElements: 5_000}
+
+func (a *Arr) invalidJSON(path string, cause error) error {
 	// Not the decoder's message: it can quote parts of the body.
-	return &core.ProviderError{Message: a.label + " " + strings.SplitN(path, "?", 2)[0] + " returned invalid JSON"}
+	return &core.ProviderError{Message: a.label + " " + strings.SplitN(path, "?", 2)[0] + " " + core.InvalidJSONText(cause)}
 }
 
 // Get performs a GET under /api/v3 and decodes the JSON body into T. An empty
@@ -94,9 +106,9 @@ func Get[T any](ctx context.Context, a *Arr, path string, req core.Request) (T, 
 	if len(body) == 0 {
 		return out, nil
 	}
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := core.DecodeJSON(ctx, body, &out, req.Limits); err != nil {
 		var zero T
-		return zero, a.invalidJSON(path)
+		return zero, a.invalidJSON(path, err)
 	}
 	return out, nil
 }
@@ -126,9 +138,9 @@ func Send[T any](ctx context.Context, a *Arr, method, path string, query url.Val
 	if len(raw) == 0 {
 		return out, nil
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
+	if err := core.DecodeJSON(ctx, raw, &out, req.Limits); err != nil {
 		var zero T
-		return zero, a.invalidJSON(path)
+		return zero, a.invalidJSON(path, err)
 	}
 	return out, nil
 }
@@ -151,24 +163,24 @@ func (b Base) Kind() Kind { return b.kind }
 
 // SystemStatus implements Manager.
 func (b Base) SystemStatus(ctx context.Context) (SystemStatus, error) {
-	return Get[SystemStatus](ctx, b.arr, "system/status", core.Request{})
+	return Get[SystemStatus](ctx, b.arr, "system/status", smallReq())
 }
 
 // Health implements Manager.
 func (b Base) Health(ctx context.Context) ([]HealthIssue, error) {
-	h, err := Get[[]HealthIssue](ctx, b.arr, "health", core.Request{})
+	h, err := Get[[]HealthIssue](ctx, b.arr, "health", smallReq())
 	return nonNil(h), err
 }
 
 // Indexers implements Manager.
 func (b Base) Indexers(ctx context.Context) ([]Indexer, error) {
-	i, err := Get[[]Indexer](ctx, b.arr, "indexer", core.Request{})
+	i, err := Get[[]Indexer](ctx, b.arr, "indexer", smallReq())
 	return nonNil(i), err
 }
 
 // QueueSummary implements Manager: the first page (25 records) and the total.
 func (b Base) QueueSummary(ctx context.Context) (QueueSummary, error) {
-	q, err := Get[QueueSummary](ctx, b.arr, "queue", core.Request{
+	q, err := Get[QueueSummary](ctx, b.arr, "queue", core.Request{MaxBytes: core.MediumListBytes,
 		Query: url.Values{"page": {"1"}, "pageSize": {"25"}},
 	})
 	q.Records = nonNil(q.Records)
@@ -177,19 +189,19 @@ func (b Base) QueueSummary(ctx context.Context) (QueueSummary, error) {
 
 // RootFolders implements Manager.
 func (b Base) RootFolders(ctx context.Context) ([]RootFolder, error) {
-	r, err := Get[[]RootFolder](ctx, b.arr, "rootfolder", core.Request{})
+	r, err := Get[[]RootFolder](ctx, b.arr, "rootfolder", smallReq())
 	return nonNil(r), err
 }
 
 // QualityProfiles implements Manager.
 func (b Base) QualityProfiles(ctx context.Context) ([]QualityProfile, error) {
-	p, err := Get[[]QualityProfile](ctx, b.arr, "qualityprofile", core.Request{})
+	p, err := Get[[]QualityProfile](ctx, b.arr, "qualityprofile", smallReq())
 	return nonNil(p), err
 }
 
 // Tags implements Manager.
 func (b Base) Tags(ctx context.Context) ([]Tag, error) {
-	t, err := Get[[]Tag](ctx, b.arr, "tag", core.Request{})
+	t, err := Get[[]Tag](ctx, b.arr, "tag", smallReq())
 	return nonNil(t), err
 }
 

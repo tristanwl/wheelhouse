@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -24,9 +23,11 @@ const (
 	// DefaultTimeout bounds one upstream request, response body included.
 	DefaultTimeout = 8 * time.Second
 	// DefaultMaxResponseBytes bounds how much of an upstream response is read, so
-	// a hostile or broken service cannot exhaust memory. The largest legitimate
-	// responses are full Sonarr and Radarr library lists.
-	DefaultMaxResponseBytes int64 = 64 << 20
+	// a hostile or broken service cannot exhaust memory. Endpoints that return a
+	// whole library set their own larger cap (LargeListBytes); small ones a lower
+	// one (SmallResponseBytes). The cap bounds bytes, not what they decode to:
+	// see DecodeJSON.
+	DefaultMaxResponseBytes int64 = 8 << 20
 
 	maxRedirects = 10
 )
@@ -62,7 +63,10 @@ type HTTPOptions struct {
 	Secrets []string
 	// Timeout defaults to DefaultTimeout.
 	Timeout time.Duration
-	// MaxResponseBytes defaults to DefaultMaxResponseBytes.
+	// MaxResponseBytes defaults to DefaultMaxResponseBytes. When set it is a
+	// ceiling for the whole client: a call may lower it with Request.MaxBytes but
+	// not raise it. When unset, Request.MaxBytes may raise it per call (library
+	// lists).
 	MaxResponseBytes int64
 	// Logger, if set, gets one Debug line per failed request: label, path without
 	// query, and the redacted error. Never a URL query, header or body.
@@ -79,6 +83,9 @@ type Request struct {
 	Timeout time.Duration
 	// MaxBytes overrides the client's response size limit for this call.
 	MaxBytes int64
+	// Limits bound the shape of the JSON that JSON, DecodeJSON and the adapters
+	// decode (zero fields: the defaults of JSONLimits).
+	Limits JSONLimits
 	// CacheTTL opts in to caching this GET response for this long. Concurrent
 	// identical calls share one upstream request; errors are never cached; writes
 	// should call Invalidate. Ignored for anything but GET.
@@ -120,6 +127,7 @@ type HTTPClient struct {
 	redactor *Redactor
 	timeout  time.Duration
 	maxBytes int64
+	capSet   bool // MaxResponseBytes was set: a ceiling no per-call MaxBytes may raise
 	logger   *slog.Logger
 	hc       *http.Client
 
@@ -194,6 +202,7 @@ func NewHTTPClient(opts HTTPOptions) (*HTTPClient, error) {
 	if c.timeout <= 0 {
 		c.timeout = DefaultTimeout
 	}
+	c.capSet = c.maxBytes > 0
 	if c.maxBytes <= 0 {
 		c.maxBytes = DefaultMaxResponseBytes
 	}
@@ -240,9 +249,9 @@ func (c *HTTPClient) JSON(ctx context.Context, path string, req Request, out any
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(res.Body, out); err != nil {
+	if err := DecodeJSON(ctx, res.Body, out, req.Limits); err != nil {
 		// Not err.Error(): decoder errors can quote parts of the body.
-		return c.errorf(0, "%s %s returned invalid JSON", c.label, pathOnly(path))
+		return c.errorf(0, "%s %s %s", c.label, pathOnly(path), InvalidJSONText(err))
 	}
 	return nil
 }
@@ -325,7 +334,7 @@ func (c *HTTPClient) request(parent context.Context, path string, r Request) (*R
 		timeout = r.Timeout
 	}
 	limit := c.maxBytes
-	if r.MaxBytes > 0 {
+	if r.MaxBytes > 0 && (!c.capSet || r.MaxBytes < c.maxBytes) {
 		limit = r.MaxBytes
 	}
 	ctx, cancel := context.WithTimeout(parent, timeout)

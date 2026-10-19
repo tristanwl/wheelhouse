@@ -23,13 +23,32 @@ import (
 var ErrAddressDenied = errors.New("address not allowed")
 
 // DefaultDeniedNetworks are refused unless configured otherwise: IPv4 and IPv6
-// link-local, and the EC2 IPv6 metadata address.
+// link-local, the EC2 IPv6 metadata address, the NAT64 well-known prefix (a
+// DNS64 gateway would translate 64:ff9b::a9fe:a9fe to 169.254.169.254), and the
+// metadata addresses of Alibaba Cloud (100.100.100.200, inside the carrier-grade
+// NAT range) and Oracle Cloud (192.0.0.192).
 func DefaultDeniedNetworks() []netip.Prefix {
 	return []netip.Prefix{
 		netip.MustParsePrefix("169.254.0.0/16"),
 		netip.MustParsePrefix("fe80::/10"),
 		netip.MustParsePrefix("fd00:ec2::254/128"),
+		nat64Prefix,
+		netip.MustParsePrefix("100.100.100.200/32"),
+		netip.MustParsePrefix("192.0.0.192/32"),
 	}
+}
+
+// nat64Prefix is the well-known NAT64 prefix (RFC 6052). An address in it
+// embeds an IPv4 address in its last four bytes.
+var nat64Prefix = netip.MustParsePrefix("64:ff9b::/96")
+
+// embeddedNAT64 returns the IPv4 address inside a NAT64 well-known address.
+func embeddedNAT64(ip netip.Addr) (netip.Addr, bool) {
+	if !ip.Is6() || !nat64Prefix.Contains(ip) {
+		return netip.Addr{}, false
+	}
+	b := ip.As16()
+	return netip.AddrFrom4([4]byte{b[12], b[13], b[14], b[15]}), true
 }
 
 var deniedNetworks atomic.Pointer[[]netip.Prefix]
@@ -79,8 +98,13 @@ func addressDenied(address string) bool {
 		return true // not an IP literal after resolution: do not guess
 	}
 	ip := ap.Addr().Unmap().WithZone("")
-	for _, p := range *deniedNetworks.Load() {
-		if p.Contains(ip) {
+	denied := *deniedNetworks.Load()
+	// A NAT64 address stands for the IPv4 address inside it: apply the IPv4
+	// rules to that too, so a custom list that names only 169.254.0.0/16 still
+	// refuses 64:ff9b::a9fe:a9fe.
+	embedded, isNAT64 := embeddedNAT64(ip)
+	for _, p := range denied {
+		if p.Contains(ip) || (isNAT64 && p.Contains(embedded)) {
 			return true
 		}
 	}

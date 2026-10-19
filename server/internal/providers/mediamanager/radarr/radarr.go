@@ -52,7 +52,7 @@ func send[T any](ctx context.Context, c *Client, method, path string, query url.
 
 // Movies lists the library (cached for a few seconds; any write clears it).
 func (c *Client) Movies(ctx context.Context) ([]mm.Movie, error) {
-	m, err := get[[]mm.Movie](ctx, c, "movie", core.Request{CacheTTL: mm.LibraryCacheTTL})
+	m, err := get[[]mm.Movie](ctx, c, "movie", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LargeListBytes})
 	if m == nil {
 		m = []mm.Movie{}
 	}
@@ -66,7 +66,7 @@ func (c *Client) MovieDetail(ctx context.Context, id int) (mm.MovieDetail, error
 
 // Lookup searches for movies to add. Results already in the library carry an id.
 func (c *Client) Lookup(ctx context.Context, term string) ([]mm.LookupResult, error) {
-	r, err := get[[]mm.LookupResult](ctx, c, "movie/lookup", core.Request{Query: url.Values{"term": {term}}})
+	r, err := get[[]mm.LookupResult](ctx, c, "movie/lookup", core.Request{Query: url.Values{"term": {term}}, Limits: mm.LookupLimits})
 	if r == nil {
 		r = []mm.LookupResult{}
 	}

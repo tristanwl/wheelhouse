@@ -27,7 +27,7 @@ import (
 // Tone mapping is out of scope.
 
 // hdrProbeTimeout bounds one ffprobe run for classification.
-const hdrProbeTimeout = 30 * time.Second
+var hdrProbeTimeout = 30 * time.Second // a variable only so a test can shorten it
 
 // ProbeHDR classifies the first video stream of the file with ffprobe. Anything
 // that cannot be read or understood is HDRUnknown, never HDRNone: an answer the
@@ -40,7 +40,7 @@ func ProbeHDR(ctx context.Context, ffprobe, path string) codecs.HDR {
 	defer cancel()
 	var out bytes.Buffer
 	cmd := exec.CommandContext(ctx, ffprobe, //nolint:gosec // the path is absolute and resolved inside the media roots
-		"-v", "error", "-select_streams", "v:0",
+		"-v", "error", "-protocol_whitelist", "file", "-select_streams", "v:0",
 		"-show_entries", "stream=color_transfer,color_primaries:stream_side_data=side_data_type",
 		"-of", "json", path)
 	cmd.Stdout = &limitWriter{w: &out, n: 1 << 20}

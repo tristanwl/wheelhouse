@@ -87,6 +87,9 @@ func TestDecodeRequiredEmptyNilAndWrongShapes(t *testing.T) {
 		{"no host", map[string]any{"url": "http://", "apiKey": "k"}, "url: must be an http or https URL"},
 		{"relative", map[string]any{"url": "/x", "apiKey": "k"}, "url: must be an http or https URL"},
 		{"credentials", map[string]any{"url": "http://u:CANARY-PASS@h", "apiKey": "k"}, "url: must not contain a username or password"},
+		{"fragment swallows the path", map[string]any{"url": "http://h:7878#/x", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
+		{"empty fragment", map[string]any{"url": "http://h:7878/#", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
+		{"query", map[string]any{"url": "http://h:7878/radarr?apikey=x", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
 		{"username only", map[string]any{"url": "http://CANARY-USER@h", "apiKey": "k"}, "url: must not contain a username or password"},
 	}
 	for _, c := range cases {
