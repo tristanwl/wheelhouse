@@ -110,7 +110,10 @@ mkdir -p config && docker run -d --name wheelhouse --restart unless-stopped \
   convert files (Codecs → Convert) it also needs write access to the media.
 - **Mounts.** `/movies` and `/tv` only matter for Convert, and must be the same
   in-container paths Sonarr and Radarr use. Another layout: set
-  `WHEELHOUSE_MEDIA_ROOTS` (see below).
+  `WHEELHOUSE_MEDIA_ROOTS` (see below) or, as an administrator, save the roots in the
+  converter settings. HDR and Dolby Vision files are left out of the candidates by
+  default (conversion writes SDR 8-bit); [docs/operations.md](docs/operations.md#media-roots-hdr-and-the-conversion-queue)
+  explains the switch and what happens to queued jobs when the server restarts.
 - **Hardware encoding** (optional): pass the GPU with `--device /dev/dri` and, if
   the render node is not accessible, `--group-add <render GID>` (`getent group
   render`). With rootless Podman use `--group-add keep-groups` instead; see the
@@ -144,7 +147,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `TMDB_BASE_URL` | no | Override the TMDB API root, including the version (default `https://api.themoviedb.org/3`). For a caching proxy or a test double; leave unset normally |
 | `PORT` | no | TCP port to listen on (default `3000`; the image sets `3050`) |
 | `WHEELHOUSE_LISTEN` | no | Address to listen on as `host:port` (for example `127.0.0.1:3050`); overrides `PORT`. Default: all interfaces on `PORT`. `HOSTNAME` is never used |
-| `WHEELHOUSE_MEDIA_ROOTS` | no | Folders Convert may touch, separated like `PATH` (default `/movies:/tv`) |
+| `WHEELHOUSE_MEDIA_ROOTS` | no | Folders Convert may touch, separated like `PATH` (default `/movies:/tv`). A read-only seed: roots an administrator saves in the app (`GET/PUT /api/admin/converter`) take precedence |
 | `WHEELHOUSE_DB` | no | SQLite database file (accounts, sessions, audit log; default `/config/wheelhouse.db`). The server opens it at start and refuses to start if it cannot |
 | `WHEELHOUSE_CONFIG_DIR` | no | The config directory (default `/config`, which is what the image uses): database, master key, setup token, `settings.json`. Mainly for running outside a container |
 | `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated at first start. **Keep a copy: [docs/operations.md](docs/operations.md#key-loss)** |
