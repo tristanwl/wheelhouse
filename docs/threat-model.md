@@ -321,6 +321,20 @@ the other set.)
 | 6 | Low/Info | NAT64, Alibaba and Oracle metadata addresses were not denied; an instance URL with `#...` silently dropped the API path | See E5 | Fixed |
 | 7 | Info | This document said the container runs read-only with capabilities dropped, but the Dockerfile only sets `USER` | T2 now separates what the image guarantees from what the operator configures; the compose example and the systemd unit enable the options by default; timeouts and the connection cap: see D3 | Fixed (docs and examples) |
 
+## Fuzzing findings (road to 1.0.0)
+
+Every parser or validator that handles untrusted input has a native Go fuzz
+target (`func FuzzXxx`) with a seed corpus under `testdata/fuzz/` made from the
+real fixtures and the hostile cases of the existing tests; `go test` replays the
+seeds on every build, and the scheduled `fuzz.yml` workflow runs each target for
+a couple of minutes a week (see [CONTRIBUTING.md](../CONTRIBUTING.md#fuzz-tests)).
+Each target asserts invariants, not just "does not panic". What the fuzzing found,
+with the regression entry that fails on the old code:
+
+| # | Severity | Finding | Fix and regression test | Status |
+|---|---|---|---|---|
+| F1 | Low | A secret echoed percent-encoded in a mix of conventions was not redacted: a space as `%20` next to a mark (`! * ' ( )`) and a reserved character (`$ & + = : @`) matched none of the three encoders the redactor knew (`encodeURIComponent`, Go's query and path escapes). The same went for JSON written with `\uXXXX` escapes (Python, Java, .NET), PHP's `\/`, and HTML entities in an error page | `redact.go` now generates every combination of the three choices (and both hex cases), the ASCII-escaped and slash-escaped JSON forms, and both HTML entity styles. `FuzzRedact` seeds `bug_redact_*` | Fixed |
+
 ## Phase 2 items and the threats they close
 
 | Item | Closes |

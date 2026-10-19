@@ -1,0 +1,4 @@
+go test fuzz v1
+string("https://user:pass@example.com/api?apikey=abc123&token=xyz")
+string("SECRETVALUE")
+string("abc")

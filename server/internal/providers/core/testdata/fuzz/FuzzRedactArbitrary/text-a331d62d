@@ -1,0 +1,4 @@
+go test fuzz v1
+string("api_key=")
+string("SECRETVALUE")
+string("abc")
