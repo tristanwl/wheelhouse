@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router";
 import { AddSearchGate } from "./AddSearchGate";
 import { FeatureNav } from "./FeatureNav";
 import { Logo } from "./Logo";
+import { UserMenu } from "./UserMenu";
 
 /**
  * A new page starts at the top, as it did under Next. (React Router's own
@@ -16,13 +17,16 @@ function ScrollToTop() {
   return null;
 }
 
-/** The frame around every page: logo and nav, then the add/search box when Library is available. */
+/** The frame around every signed-in page: logo, nav and account menu, then the add/search box when Library is available. */
 export function Layout() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Logo />
-        <FeatureNav />
+        <div className="flex items-center gap-4">
+          <FeatureNav />
+          <UserMenu />
+        </div>
       </header>
       <AddSearchGate />
       <Outlet />

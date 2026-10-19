@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useState } from "react";
 import { mutate as globalMutate } from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -78,7 +79,7 @@ export function AddSearch() {
     setAdding(true);
     setAddError(null);
     try {
-      const res = await fetch("/api/add", {
+      const res = await apiFetch("/api/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

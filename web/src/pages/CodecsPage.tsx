@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -49,7 +50,7 @@ export default function CodecsPage() {
     if (!prefs) return;
     const next = { ...prefs, [tier]: family };
     await mutatePrefs(
-      fetch("/api/codec-analysis/settings", {
+      apiFetch("/api/codec-analysis/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(next),

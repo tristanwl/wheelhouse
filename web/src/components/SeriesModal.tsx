@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useState } from "react";
 import useSWR from "swr";
 import { confirmedDeleteUrl } from "@/lib/api";
@@ -47,7 +48,7 @@ export function SeriesModal({
     setBusy(true);
     setActionError(null);
     try {
-      const res = await fetch(confirmedDeleteUrl(instanceId, seriesId), { method: "DELETE" });
+      const res = await apiFetch(confirmedDeleteUrl(instanceId, seriesId), { method: "DELETE" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `delete failed: ${res.status}`);
@@ -64,7 +65,7 @@ export function SeriesModal({
     setBusy(true);
     setActionError(null);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         confirmedDeleteUrl(instanceId, seriesId, pendingSeason.seasonNumber),
         {
           method: "DELETE",

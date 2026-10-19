@@ -1,4 +1,5 @@
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
+import { useSession } from "@/lib/session-context";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -29,6 +30,38 @@ const TONE_BAR: Record<RowTone, string> = {
   neutral: "bg-sky-500",
 };
 
+/**
+ * Right after the setup wizard (it navigates here with `{ welcome: true }`), point
+ * the new administrator at the administration pages, where services are added.
+ */
+function WelcomeBanner() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { isAdmin } = useSession();
+  const welcome = (location.state as { welcome?: boolean } | null)?.welcome === true;
+  if (!welcome || !isAdmin) return null;
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-900 bg-sky-950/40 p-4 text-sm"
+    >
+      <p>
+        <strong className="font-medium">Add your services.</strong> Wheelhouse is set up. Connect
+        Radarr, Sonarr and the rest next.{" "}
+        <Link to="/admin" className="underline hover:text-white">
+          Add your services
+        </Link>
+      </p>
+      <button
+        onClick={() => void navigate(location.pathname, { replace: true, state: null })}
+        className="rounded-md px-3 py-1 text-slate-300 hover:bg-slate-800"
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   // Service links use whatever hostname the browser reached Wheelhouse by (IP, mDNS
   // name, Tailscale, ...), so they work the same way you got here.
@@ -49,6 +82,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <WelcomeBanner />
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
           Service status

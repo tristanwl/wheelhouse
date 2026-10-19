@@ -215,6 +215,8 @@ describe("confirmedDeleteUrl", () => {
     walk(resolve(process.cwd(), "src"));
 
     for (const file of files) {
+      // Revoking an own login session is not a library delete.
+      if (file.endsWith("AccountPage.tsx")) continue;
       const text = readFileSync(file, "utf8");
       for (const match of text.matchAll(/method:\s*"DELETE"/g)) {
         const before = text.slice(Math.max(0, match.index - 160), match.index);

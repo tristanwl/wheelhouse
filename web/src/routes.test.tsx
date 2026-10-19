@@ -124,9 +124,10 @@ describe("feature gating", () => {
     expect(nav().queryByRole("link", { name: "Codecs" })).not.toBeInTheDocument();
   });
 
-  it("shows just the Dashboard link until the list loads", () => {
+  it("shows just the Dashboard link until the list loads", async () => {
     mockApi({ ...emptyStack, "GET /api/features": () => new Promise(() => {}) });
     renderApp("/");
+    await screen.findByRole("navigation");
     expect(nav().getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(nav().queryByRole("link", { name: "Library" })).not.toBeInTheDocument();
   });

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useState } from "react";
 import useSWR from "swr";
 import { youtubeWatchUrl } from "@/lib/api";
@@ -54,7 +55,7 @@ export function TmdbDetailModal({
     setAdding(true);
     setAddError(null);
     try {
-      const res = await fetch("/api/add", {
+      const res = await apiFetch("/api/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
