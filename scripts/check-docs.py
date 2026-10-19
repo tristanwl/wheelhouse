@@ -41,6 +41,9 @@ TEST_ONLY = {
 # references are history, so only their links are checked.
 HISTORICAL = {os.path.join("docs", "wheelhouse-spec.md")}
 
+# Paths a build or a run creates (all git-ignored): documented, but absent in a clean checkout.
+GENERATED = {"server/.devconfig", "server/wheelhouse", "server/internal/ui/dist", "web/dist"}
+
 problems = []
 
 
@@ -119,6 +122,8 @@ def check_spans(path, text):
             if first not in TOP:
                 continue
             s = s.split(":")[0].rstrip("/")  # file.ts:12 style
+            if any(s == g or s.startswith(g + "/") for g in GENERATED):
+                continue
             if not os.path.exists(os.path.join(ROOT, s)):
                 problems.append(f"{rel(path)}:{n}: `{span}` does not exist")
 
