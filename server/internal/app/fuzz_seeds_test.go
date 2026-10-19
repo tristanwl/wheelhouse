@@ -1,6 +1,7 @@
 package app
 
 import (
+	"sort"
 	"strings"
 	"testing"
 
@@ -117,6 +118,34 @@ func TestWriteFuzzSeeds(t *testing.T) {
 		{"GET", "http://evil.example/api/status", "", "", adminOK},
 	} {
 		w.Add("FuzzHTTPSurface", "hostile", c.method, c.target, c.headers, []byte(c.body), uint8(c.who), uint8(0))
+	}
+
+	// Hostile upstream answers: the real fixtures of every fake service, each as the
+	// answer to a different request of the conversation, then
+	// hostile bodies at the first requests of it.
+	fixtures := fuzzseed.Fixtures(t,
+		"../providers/mediamanager/mmtest/testdata/*/*.json",
+		"../providers/downloadclient/qbittorrent/fakeqbittorrent/testdata/*.json",
+		"../providers/downloadclient/sabnzbd/fakesabnzbd/testdata/*.json",
+		"../providers/mediaserver/plex/plextest/testdata/*",
+		"../providers/mediaserver/jellyfin/jellyfintest/testdata/*.json")
+	names := make([]string, 0, len(fixtures))
+	for n := range fixtures {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for i, name := range names {
+		if i%2 == 0 { // every second one: each seed runs the whole API, and go test runs them all
+			w.Add("FuzzHostileUpstream", name, uint8(i*3%56), uint8(0), fixtures[name])
+		}
+	}
+	for i, h := range []string{
+		``, `null`, `[]`, `{}`, `"` + hostiletest.Key + `"`, `{"error":"` + hostiletest.Key + ` ` + hostiletest.Pass + `"}`,
+		`{"progress":"NaN","eta":"Infinity","size":1e999,"queue":{"slots":"x","noofslots":-5}}`, `[{"id":-1,"title":null,"sizeOnDisk":-9,"movieFile":{"size":-1,"mediaInfo":"x"}}]`,
+		`<html>401 Unauthorized</html>`, strings.Repeat("[", 60), "\x00\xff", `{"streams":[]}`, `{"MediaContainer":{"Metadata":[{}]}}`,
+		`[{"hash":"` + strings.Repeat("a", 40) + `","progress":7,"size":-1,"dlspeed":"x"}]`,
+	} {
+		w.Add("FuzzHostileUpstream", "hostile", uint8(i*4)%56, uint8(i), []byte(h))
 	}
 
 	// Guard inputs: the Origin, Sec-Fetch-Site and Host combinations of the guard

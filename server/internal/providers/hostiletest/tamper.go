@@ -61,18 +61,47 @@ func (t *Tamper) take() (status int, body []byte, mutate bool) {
 	return t.status, t.body, true
 }
 
+// Upstream is the address a proxy forwards to; it can be changed while the proxy
+// runs, so a fuzz test can start a fresh fake service (one whose state the last
+// iteration did not change) for every input and keep the proxy and the
+// configuration that points at it.
+type Upstream struct {
+	mu  sync.Mutex
+	url string
+}
+
+// Set points the proxy at a new upstream base URL.
+func (u *Upstream) Set(url string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.url = url
+}
+
+func (u *Upstream) get() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.url
+}
+
 // Proxy starts a reverse proxy in front of upstream (the base URL of a fake
 // service) and returns its base URL. Every request is forwarded and answered as
 // the upstream answered, except the one the Tamper is armed for, whose body (and
 // status, unless 200) is replaced.
 func Proxy(tb testing.TB, upstream string, t *Tamper) string {
 	tb.Helper()
+	u := &Upstream{url: upstream}
+	return ProxyTo(tb, u, t)
+}
+
+// ProxyTo is Proxy for an upstream whose address can change (see Upstream).
+func ProxyTo(tb testing.TB, up *Upstream, t *Tamper) string {
+	tb.Helper()
 	client := &http.Client{
 		Transport:     &http.Transport{},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		out, err := http.NewRequestWithContext(r.Context(), r.Method, upstream+r.URL.RequestURI(), r.Body)
+		out, err := http.NewRequestWithContext(r.Context(), r.Method, up.get()+r.URL.RequestURI(), r.Body)
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return

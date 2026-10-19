@@ -49,7 +49,9 @@ type upstream struct {
 // enum.
 func FuzzUpstreamResponses(f *testing.F) {
 	tamper := &hostiletest.Tamper{}
-	radarr, sonarr := mmtest.StartRadarr(f), mmtest.StartSonarr(f)
+	// Radarr and Sonarr change state (add, remove, rescan): every input gets
+	// fresh fakes, so a run does not depend on what an earlier one deleted.
+	radarrUp, sonarrUp := &hostiletest.Upstream{}, &hostiletest.Upstream{}
 	sab := fakesabnzbd.Start(f, fakesabnzbd.Active)
 	qbit := fakeqbittorrent.Start(f, fakeqbittorrent.V5, fakeqbittorrent.Active)
 	plex := plextest.Start(f, plextest.Scenario{Claimed: true, Active: true})
@@ -57,8 +59,8 @@ func FuzzUpstreamResponses(f *testing.F) {
 	tm := tmdbtest.Start(f, tmdbtest.Options{})
 
 	ups := []upstream{
-		{"radarr", map[string]any{"url": hostiletest.Proxy(f, radarr.URL, tamper), "apiKey": mmtest.GoodKey}, []string{mmtest.GoodKey}},
-		{"sonarr", map[string]any{"url": hostiletest.Proxy(f, sonarr.URL, tamper), "apiKey": mmtest.GoodKey}, []string{mmtest.GoodKey}},
+		{"radarr", map[string]any{"url": hostiletest.ProxyTo(f, radarrUp, tamper), "apiKey": mmtest.GoodKey}, []string{mmtest.GoodKey}},
+		{"sonarr", map[string]any{"url": hostiletest.ProxyTo(f, sonarrUp, tamper), "apiKey": mmtest.GoodKey}, []string{mmtest.GoodKey}},
 		{"sabnzbd", map[string]any{"url": hostiletest.Proxy(f, sab.URL, tamper), "apiKey": fakesabnzbd.GoodKey}, []string{fakesabnzbd.GoodKey}},
 		{"qbittorrent", map[string]any{"url": hostiletest.Proxy(f, qbit.URL, tamper), "username": fakeqbittorrent.GoodUser, "password": fakeqbittorrent.GoodPassword}, []string{fakeqbittorrent.GoodPassword}},
 		{"plex", map[string]any{"url": hostiletest.Proxy(f, plex.URL, tamper), "token": plextest.GoodToken}, []string{plextest.GoodToken}},
@@ -72,6 +74,12 @@ func FuzzUpstreamResponses(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, prov, at, statusSel uint8, body []byte) {
 		up := ups[int(prov)%len(ups)]
+		switch up.id {
+		case "radarr":
+			radarrUp.Set(mmtest.StartRadarr(t).URL)
+		case "sonarr":
+			sonarrUp.Set(mmtest.StartSonarr(t).URL)
+		}
 		def, ok := reg.Get(up.id)
 		if !ok {
 			t.Fatalf("no provider %s", up.id)

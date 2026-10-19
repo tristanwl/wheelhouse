@@ -62,6 +62,7 @@ type httpFixture struct {
 	root   string
 	db     *store.DB
 	cancel context.CancelFunc
+	opts   Options
 }
 
 type syncBuffer struct {
@@ -93,6 +94,9 @@ const (
 // fuzzUpstreams are the fake services, started once for the whole fuzz run.
 type fuzzUpstreams struct {
 	env map[string]string
+	// radarr and sonarr, when set, are the switches behind the proxies of the
+	// hostile-upstream test: they point at a fresh fake for every input.
+	radarr, sonarr *hostiletest.Upstream
 }
 
 func startUpstreams(tb testing.TB) *fuzzUpstreams {
@@ -218,12 +222,24 @@ func newHTTPFixture(up *fuzzUpstreams) (*httpFixture, error) {
 			Settings: convSettings, Store: db, ConfigDir: filepath.Join(dir, "config"), Ffmpeg: ffmpeg, Ffprobe: ffprobe,
 		},
 	}
+	fx.opts = opts
 	fx.h, fx.rt = buildHandler(opts, false)
 	fx.levels = map[string]Level{}
 	for _, r := range fx.rt.Routes() {
 		fx.levels[r.Pattern] = r.Level
 	}
 	return fx, nil
+}
+
+// rebuild makes a new handler over the same database and sessions: new provider
+// clients (nothing cached from the last request), a new job queue.
+func (fx *httpFixture) rebuild() {
+	fx.cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	fx.cancel = cancel
+	o := fx.opts
+	o.Context = ctx
+	fx.h, fx.rt = buildHandler(o, false)
 }
 
 func (fx *httpFixture) close() {

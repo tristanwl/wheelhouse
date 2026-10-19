@@ -1,0 +1,4 @@
+go test fuzz v1
+uint8(36)
+uint8(0)
+[]byte("[\n  {\n    \"id\": 1,\n    \"name\": \"Example Indexer 1\",\n    \"enableRss\": true,\n    \"enableAutomaticSearch\": true,\n    \"enableInteractiveSearch\": true,\n    \"protocol\": \"usenet\",\n    \"priority\": 25,\n    \"implementation\": \"Newznab\",\n    \"implementationName\": \"Newznab\",\n    \"tags\": []\n  },\n  {\n    \"id\": 2,\n    \"name\": \"Example Indexer 2\",\n    \"enableRss\": true,\n    \"enableAutomaticSearch\": true,\n    \"enableInteractiveSearch\": true,\n    \"protocol\": \"usenet\",\n    \"priority\": 25,\n    \"implementation\": \"Newznab\",\n    \"implementationName\": \"Newznab\",\n    \"tags\": []\n  }\n]\n")
