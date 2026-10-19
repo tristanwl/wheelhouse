@@ -1,18 +1,20 @@
 # Security policy
 
 Wheelhouse can delete library items and rewrite media files. Releases 0.0.x to
-0.2.x have **no authentication**: run them only on a trusted network and do not
-expose them to the internet. Later versions (and the development branch) enforce
-accounts, sessions, CSRF protection and login throttling, and have a login page,
-a setup wizard and an account page; they are still pre-releases (0.x) until the
-[Phase 2 plan](docs/wheelhouse-phase2-plan.md) is finished, so keep them off the
-internet too and read [docs/operations.md](docs/operations.md) before running one.
-Check the release notes of the version you run to see which applies.
+0.2.x have **no authentication**: upgrade, and until then run
+them only on a trusted network, never exposed to the internet. From 0.3.0 on, every
+route needs a signed-in user, with accounts, sessions, CSRF protection, login
+throttling, encrypted service credentials and an audit log; read
+[docs/operations.md](docs/operations.md) before running one and put a TLS reverse
+proxy in front of it if it is reachable from outside your home network. Versions
+before 1.0.0 are pre-releases.
+What is deliberately not covered (no second factor, no API tokens and so on) is listed
+under [Known limitations](docs/release-1.0-checklist.md#known-limitations).
 
 The [threat model](docs/threat-model.md) lists what Wheelhouse protects, from
-whom, which mitigation is already in place, which comes with which planned
-change ([Phase 2 plan](docs/wheelhouse-phase2-plan.md)), and the risks that
-remain. A finding that contradicts it, or a gap it does not list, is worth
+whom, which mitigation is in place and which test enforces it, and the risks that
+remain; [docs/release-1.0-checklist.md](docs/release-1.0-checklist.md) checks each of
+them again before a release. A finding that contradicts it, or a gap it does not list, is worth
 reporting.
 
 ## Reporting a vulnerability
