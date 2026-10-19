@@ -37,7 +37,7 @@ func TestWriteFuzzSeeds(t *testing.T) {
 	for _, c := range [][2]string{
 		{goodPW, "admin-user"}, {otherPW, "admin-user"}, {"short", "admin-user"}, {"Admin-User-123", "admin-user"},
 		{"ADMIN-USER-123", "admin-user-123"}, {"aaaaaaaaaaaaaaaa", "x"}, {"abababababababab", "x"}, {"abcdabcdabcdabcd", "x"},
-		{strings.Repeat("😀", 11), "x"}, {strings.Repeat("😀", 12), "x"}, {"😀😁😂🤣😃😄😅😆😉😊😋😎", "x"}, {"日本語のパスワードです長い", "x"},
+		{strings.Repeat("😀", 11), "x"}, {strings.Repeat("😀", 12), "x"}, {"😀😁😂🤣😃😄😅😆😉😊😋😎", "x"}, {"😀😁😂🤣😃😄😅😆😉😊😋", "x"}, {"日本語のパス", "x"}, {"日本語のパスワードです", "x"}, {"日本語のパスワードです長い", "x"},
 		{"ééééééé", "x"}, {"good\x00password-123", "x"}, {"bad\xffutf8-password-123", "x"},
 		{strings.Repeat("x1", 512), "x"}, {strings.Repeat("x1", 513), "x"}, {"correct horse battery staple", "x"},
 		{"　　　　　　　　　　　　", "x"}, {"            ", "x"},

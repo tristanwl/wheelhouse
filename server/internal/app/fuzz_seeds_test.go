@@ -157,6 +157,8 @@ func TestWriteFuzzSeeds(t *testing.T) {
 		{"", "https://evil.example", "example.com"}, {"", "http://user@example.com", "example.com"}, {"", "http://example.com/", "example.com"},
 		{"", "ftp://example.com", "example.com"}, {"", "http://", ""}, {"", "http://[::1]:3000", "[::1]:3000"}, {"", "http://xn--nxasmq6b", "xn--nxasmq6b"},
 		{"", "http://münchen.example", "xn--mnchen-3ya.example"}, {"", "http://example.com.", "example.com"}, {"", "//example.com", "example.com"},
+		{"", "http://evilexample.com", "example.com"}, {"", "http://sub.example.com", "example.com"}, {"", "http://example.com", "sub.example.com"},
+		{"", "http://example.com:80", "example.com"}, {"", "https://example.com", "example.com:443"},
 		{"same-origin", "http://example.com", "example.com"}, {"Same-Origin", "", "example.com"}, {" none ", "", "example.com"},
 	} {
 		w.Add("FuzzSameOrigin", "combo", c[0], c[1], c[2])

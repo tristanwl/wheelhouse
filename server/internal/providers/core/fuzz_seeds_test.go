@@ -66,6 +66,16 @@ func TestWriteFuzzSeeds(t *testing.T) {
 		sur := surroundings[form%len(surroundings)]
 		w.Add("FuzzRedact", "secret"+string(rune('a'+i)), secrets[i], sur[0], sur[1], uint8(form))
 	}
+	// The encodings that only differ for some characters need such a secret:
+	// the canary (quote, slash, plus, ampersand) for JSON, HTML and the escaped
+	// slash; "a?>b?>c?>" for the base64 alphabets ("+" and "/" in the standard one).
+	for form := 9; form <= 13; form++ {
+		w.Add("FuzzRedact", "alphabet", "ÿÿÿ-key", "token ", " ", uint8(form)) // base64 "w7/Dvy1rZXk=": a slash
+	}
+	for form := 9; form <= 21; form++ {
+		w.Add("FuzzRedact", "alphabet", `CANARY-key/+&"9f8e7d6c`, `"key":"`, `"`, uint8(form))
+		w.Add("FuzzRedact", "alphabet", "a?>b?>c?>", "Authorization: ", " ", uint8(form))
+	}
 	for _, text := range []string{
 		"https://user:pass@example.com/api?apikey=abc123&token=xyz",
 		"request failed: Get \"http://192.0.2.1:8989/api?apikey=SECRETVALUE\": connection refused",

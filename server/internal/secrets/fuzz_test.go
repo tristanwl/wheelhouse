@@ -10,9 +10,11 @@ import (
 	"testing"
 )
 
-func fuzzCipher(tb testing.TB, version uint32) *Cipher {
+func fuzzCipher(tb testing.TB, version uint32) *Cipher { return fuzzCipherWithKey(tb, version, 0x5a) }
+
+func fuzzCipherWithKey(tb testing.TB, version uint32, fill byte) *Cipher {
 	tb.Helper()
-	raw := bytes.Repeat([]byte{0x5a}, KeySize)
+	raw := bytes.Repeat([]byte{fill}, KeySize)
 	raw[0] = byte(version)
 	key, err := NewKey(raw)
 	if err != nil {
@@ -113,8 +115,12 @@ func FuzzSealOpenTamper(f *testing.F) {
 				t.Fatal("opened with other associated data")
 			}
 		}
-		if _, err := other.Open(env, ad); err == nil {
-			t.Fatal("opened under another key")
+		if _, err := other.Open(env, ad); !errors.Is(err, ErrKeyVersion) {
+			t.Fatalf("opening under another key version: %v, want ErrKeyVersion (so a half-finished rotation is told apart from a wrong key)", err)
+		}
+		sameVersionOtherKey := fuzzCipherWithKey(t, 1, 0x33)
+		if _, err := sameVersionOtherKey.Open(env, ad); !errors.Is(err, ErrDecrypt) {
+			t.Fatalf("opening under another key of the same version: %v, want ErrDecrypt", err)
 		}
 		moved, err := Reencrypt(c, other, []Item{{AD: ad, Envelope: env}})
 		if err != nil || len(moved) != 1 || bytes.Equal(moved[0], env) {

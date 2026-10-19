@@ -97,6 +97,14 @@ func TestWriteFuzzSeeds(t *testing.T) {
 		w.Add("FuzzHostAllowed", "host", h, "*.nas.example.lan", "nas.example.lan")
 		w.Add("FuzzHostAllowed", "host-nolist", h, "", "")
 	}
+	// Names that only differ from an allowed one by a suffix or a prefix.
+	for _, c := range [][3]string{
+		{"evil.localhost", "", ""}, {"localhost.evil.example.com", "", ""}, {"x.localhost.", "", ""}, {"notlocalhost", "", ""},
+		{"nas.example.lan", "*.nas.example.lan", ""}, {"xnas.example.lan", "*.nas.example.lan", ""}, {"a.nas.example.lan", "*.nas.example.lan", ""},
+		{"evilnas.example.lan", "", "*.nas.example.lan"}, {"nas.example.lan.evil.com", "nas.example.lan", ""}, {"NAS.EXAMPLE.LAN.", "nas.example.lan", ""},
+	} {
+		w.Add("FuzzHostAllowed", "suffix", c[0], c[1], c[2])
+	}
 	// Regressions found by fuzzing (docs/threat-model.md, "Fuzzing findings"):
 	// a wildcard entry matched any text that ended in ".<base>", labels or not.
 	for _, h := range []string{".nas.example.lan", "a..nas.example.lan", "x y.nas.example.lan", "evil.example.com/.nas.example.lan", "a@b.nas.example.lan"} {
