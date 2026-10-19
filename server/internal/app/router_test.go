@@ -69,6 +69,8 @@ var wantLevels = map[string]Level{
 	"GET /api/users/{id}/sessions":     Admin,
 	"DELETE /api/users/{id}/sessions":  Admin,
 	"GET /api/audit":                   Admin,
+	"GET /api/admin/network":           Admin,
+	"PUT /api/admin/network":           Admin,
 }
 
 // Every route the app registers has an explicit, valid access level. This is

@@ -26,6 +26,7 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
 	"github.com/tristanwl/wheelhouse/server/internal/converter"
+	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
@@ -143,6 +144,11 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("accounts: %w", err)
 	}
 
+	network, err := netaccess.New(ctx, db, proxies)
+	if err != nil {
+		return err
+	}
+
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.Addr())
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
@@ -150,12 +156,12 @@ func run(log *slog.Logger) error {
 	log.Info("listening", "addr", ln.Addr().String(), "version", version.Version)
 
 	handler := app.Handler(app.Options{
-		Logger:         log,
-		Source:         core.NewProcessEnvConfigSource(),
-		Context:        ctx,
-		Converter:      app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv), ConfigDir: configDir},
-		Auth:           accounts,
-		TrustedProxies: proxies,
+		Logger:    log,
+		Source:    core.NewProcessEnvConfigSource(),
+		Context:   ctx,
+		Converter: app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv), ConfigDir: configDir},
+		Auth:      accounts,
+		Network:   network,
 	})
 	return app.Serve(ctx, ln, handler, log)
 }

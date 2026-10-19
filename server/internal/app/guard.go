@@ -2,7 +2,12 @@ package app
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
+	"errors"
 	"net"
 	"net/http"
 	"net/netip"
@@ -10,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
+	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
 )
 
 // Guard is the single authorization hook every route passes through. For each
@@ -19,9 +25,14 @@ import (
 //     same-origin: a foreign Origin or a cross-site Sec-Fetch-Site is 403, for
 //     every route including login and setup;
 //  2. a route that is not public needs the service to be set up (503 "setup
-//     required" while no account exists) and a valid session (401);
-//  3. a state-changing authenticated request must carry the session's CSRF token
-//     in X-CSRF-Token (403);
+//     required" while no account exists) and a valid session (401). With the
+//     local-network bypass on, a request without a valid session from inside the
+//     configured ranges is a signed-in user instead (never an administrator, and
+//     never on the routes that need a real login: password and sessions). A real
+//     session always wins;
+//  3. a state-changing authenticated request must carry the CSRF token in
+//     X-CSRF-Token (403): the session's, or for the bypass the stateless token
+//     GET /api/auth/session hands out;
 //  4. an account that must change its password may do nothing else (403);
 //  5. an admin route needs the admin role (403).
 //
@@ -29,8 +40,47 @@ import (
 type Guard struct {
 	// Auth is the account service. Nil refuses every non-public route.
 	Auth *auth.Service
-	// TrustedProxies are the peers whose X-Forwarded-Proto is believed.
-	TrustedProxies []netip.Prefix
+	// Net decides the client address and the bypass. Nil means no bypass and no
+	// trusted proxy.
+	Net *netaccess.Service
+
+	bypassKey [32]byte // per process; the bypass CSRF token is an HMAC under it
+}
+
+// NewGuard returns a Guard over the account service and the network settings.
+func NewGuard(a *auth.Service, n *netaccess.Service) *Guard {
+	g := &Guard{Auth: a, Net: n}
+	_, _ = rand.Read(g.bypassKey[:]) // crypto/rand.Read never fails (it ends the program)
+	return g
+}
+
+var noNet = netaccess.NewMemory(nil)
+
+func (g *Guard) network() *netaccess.Service {
+	if g == nil || g.Net == nil {
+		return noNet
+	}
+	return g.Net
+}
+
+type clientKey struct{}
+
+// ClientOf returns where the request came from, as decided at the start of the
+// request (the TCP peer, or the forwarded address of a trusted proxy).
+func ClientOf(ctx context.Context) netaccess.Client {
+	c, _ := ctx.Value(clientKey{}).(netaccess.Client)
+	return c
+}
+
+// bypassCSRF is the CSRF token of a bypass client. A bypass request has no
+// session to derive one from, so it is an HMAC of the client address under a key
+// made at start: stateless (nothing stored, no cookie), unguessable by another
+// site, and it dies with the process (the UI fetches a new one from
+// GET /api/auth/session).
+func (g *Guard) bypassCSRF(c netaccess.Client) string {
+	m := hmac.New(sha256.New, g.bypassKey[:])
+	m.Write([]byte("wheelhouse-bypass-csrf-v1\x00" + c.Addr.String()))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
 type identityKey struct{}
@@ -40,6 +90,15 @@ type identityKey struct{}
 func IdentityOf(ctx context.Context) *auth.Identity {
 	i, _ := ctx.Value(identityKey{}).(*auth.Identity)
 	return i
+}
+
+// Routes that need a real login: they act on the account or its sessions, which
+// the bypass principal does not have.
+var needsRealLogin = map[string]bool{
+	"POST /api/auth/logout":          true,
+	"POST /api/auth/password":        true,
+	"GET /api/auth/sessions":         true,
+	"DELETE /api/auth/sessions/{id}": true,
 }
 
 // Routes a session that must change its password may still use.
@@ -55,7 +114,8 @@ func isSafeMethod(m string) bool {
 
 func (g *Guard) authorize(pattern string, level Level, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), levelKey{}, level)
+		client := g.network().Resolve(r)
+		ctx := context.WithValue(context.WithValue(r.Context(), levelKey{}, level), clientKey{}, client)
 		r = r.WithContext(ctx)
 
 		if !isSafeMethod(r.Method) && !sameOrigin(r) {
@@ -87,11 +147,19 @@ func (g *Guard) authorize(pattern string, level Level, next http.Handler) http.H
 			if token != "" {
 				clearSessionCookie(w, secure) // a dead cookie is dropped by the browser
 			}
-			if err == auth.ErrUnauthenticated { //nolint:errorlint // the sentinel is returned as is
-				errorJSON(w, http.StatusUnauthorized, "authentication required")
-			} else {
+			switch {
+			case !errors.Is(err, auth.ErrUnauthenticated):
 				errorJSON(w, http.StatusServiceUnavailable, "service unavailable")
+				return
+			case g.network().Bypasses(client):
+				id = auth.BypassIdentity(g.bypassCSRF(client))
+			default:
+				errorJSON(w, http.StatusUnauthorized, "authentication required")
+				return
 			}
+		}
+		if id.Bypass && needsRealLogin[pattern] {
+			errorJSON(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
 		if !isSafeMethod(r.Method) && !csrfOK(r, id) {
@@ -147,19 +215,11 @@ func (g *Guard) secure(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if g == nil || len(g.TrustedProxies) == 0 || !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
+	if !strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https") {
 		return false
 	}
 	peer, ok := peerAddr(r)
-	if !ok {
-		return false
-	}
-	for _, p := range g.TrustedProxies {
-		if p.Contains(peer) {
-			return true
-		}
-	}
-	return false
+	return ok && g.network().IsTrustedProxy(peer)
 }
 
 func peerAddr(r *http.Request) (netip.Addr, bool) {
@@ -174,9 +234,15 @@ func peerAddr(r *http.Request) (netip.Addr, bool) {
 	return a.Unmap(), true
 }
 
-// clientAddr is the address recorded for a request: the TCP peer. Forwarded
-// headers are not believed (item 5 of the plan adds the trusted-proxy rules).
+// clientAddr is the address recorded for a request: the TCP peer, or, when the
+// peer is a trusted proxy, the client its forwarded headers name. A forwarded
+// address that cannot be trusted falls back to the peer.
 func clientAddr(r *http.Request) string {
+	if c, ok := r.Context().Value(clientKey{}).(netaccess.Client); ok {
+		if s := c.String(); s != "" {
+			return s
+		}
+	}
 	if a, ok := peerAddr(r); ok {
 		return a.String()
 	}
