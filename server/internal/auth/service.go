@@ -143,6 +143,9 @@ type Service struct {
 
 	setupMu    sync.Mutex
 	setupToken string
+	// beforeSetupTx is nil outside tests, which use it to interleave two setups
+	// at the one point where the transaction's own check is what protects.
+	beforeSetupTx func()
 }
 
 // New returns a Service over db.
@@ -341,6 +344,9 @@ func (s *Service) Setup(ctx context.Context, token, username, password string, c
 	}
 	now := s.unix()
 	u := User{ID: newID(), Username: username, Role: RoleAdmin, CreatedAt: time.Unix(now, 0).UTC(), PasswordChangedAt: time.Unix(now, 0).UTC()}
+	if s.beforeSetupTx != nil {
+		s.beforeSetupTx() // tests: another request wins the race here
+	}
 	err = s.db.Tx(ctx, func(tx *sql.Tx) error {
 		var n int
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM users").Scan(&n); err != nil {

@@ -201,6 +201,20 @@ describe("the Secure cookie and the trusted proxy list", () => {
     }
   });
 
+  it("ignores X-Forwarded-Proto from a peer that is not in the list", async () => {
+    const server = await startServer({ env: { WHEELHOUSE_TRUSTED_PROXIES: "192.0.2.0/24" } });
+    try {
+      const res = await server
+        .newClient()
+        .login(ADMIN.username, ADMIN.password, { headers: { "x-forwarded-proto": "https" } });
+      const set = res.headers.getSetCookie()[0];
+      expect(set.startsWith("wheelhouse=")).toBe(true);
+      expect(attrs(set)).not.toContain("secure");
+    } finally {
+      await server.stop();
+    }
+  });
+
   it("uses a Secure __Host- cookie when a trusted proxy says HTTPS, and only reads that cookie then", async () => {
     // The harness connects from 127.0.0.1, the peer the server sees.
     const server = await startServer({ env: { WHEELHOUSE_TRUSTED_PROXIES: "127.0.0.1" } });

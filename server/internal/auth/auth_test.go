@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"os"
@@ -240,6 +241,20 @@ func TestGeneratedPasswordsPassThePolicyAndDiffer(t *testing.T) {
 
 // ---------------------------------------------------------------- setup
 
+// Without a prepared token (the server prepares one at start whenever no account
+// exists) nothing opens setup: an empty token is not a match for an empty token.
+func TestSetupWithoutAPreparedTokenIsRefused(t *testing.T) {
+	e := newEnv(t)
+	for _, tok := range []string{"", "anything"} {
+		if _, err := e.s.Setup(e.ctx(), tok, "alice", goodPW, client); !errors.Is(err, ErrBadSetupToken) {
+			t.Errorf("token %q with none prepared: %v", tok, err)
+		}
+	}
+	if e.count("SELECT count(*) FROM users") != 0 {
+		t.Fatal("a user was created")
+	}
+}
+
 func TestSetupNeedsTheTokenAndWorksOnce(t *testing.T) {
 	e := newEnv(t)
 	if need, _ := e.s.NeedsSetup(e.ctx()); !need {
@@ -340,6 +355,25 @@ func TestSetupTokenGuessesLockTheAddress(t *testing.T) {
 	}
 }
 
+// The race, made deterministic: another request creates the account after this
+// one passed every check but before its transaction. The transaction's own
+// count is what must stop it.
+func TestSetupLosingTheRaceCreatesNothing(t *testing.T) {
+	e := newEnv(t)
+	_ = e.s.PrepareSetup(e.ctx())
+	raw, _ := os.ReadFile(filepath.Join(e.dir, SetupTokenFile))
+	e.s.beforeSetupTx = func() {
+		mustExec(t, e.db, `INSERT INTO users (id, username, password_hash, role, created_at, password_changed_at)
+			VALUES (?, 'winner', '$argon2id$x', 'admin', 1, 1)`, strings.Repeat("e", 32))
+	}
+	if _, err := e.s.Setup(e.ctx(), strings.TrimSpace(string(raw)), "loser-user", goodPW, client); !errors.Is(err, ErrSetupDone) {
+		t.Fatalf("%v", err)
+	}
+	if n := e.count("SELECT count(*) FROM users"); n != 1 {
+		t.Fatalf("%d users", n)
+	}
+}
+
 func TestConcurrentSetupCreatesExactlyOneAdmin(t *testing.T) {
 	e := newEnv(t)
 	_ = e.s.PrepareSetup(e.ctx())
@@ -380,7 +414,8 @@ func TestLoginAndTheStoredFormOfTheSession(t *testing.T) {
 	if err := e.db.QueryRow(e.ctx(), "SELECT token_hash FROM sessions WHERE id = ?", r.Session.ID).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(stored, hashToken(r.Token)) || bytes.Contains(stored, []byte(r.Token)) {
+	// Computed here, not with the package's own helper, so a change to that helper cannot hide.
+	if want := sha256.Sum256([]byte(r.Token)); !bytes.Equal(stored, want[:]) || bytes.Contains(stored, []byte(r.Token[:16])) {
 		t.Fatal("token_hash is not the SHA-256 of the token")
 	}
 	for _, table := range []string{"sessions", "users", "audit_log"} {
@@ -911,6 +946,13 @@ func TestUserManagement(t *testing.T) {
 	}
 	if _, err := e.s.UpdateUser(e.ctx(), a, bob, UserPatch{Disabled: ptr(false), Username: ptr("robert")}); err != nil {
 		t.Fatal(err)
+	}
+	// Enabling the account again does not bring the old session back to life.
+	if _, err := e.s.Authenticate(e.ctx(), b.Token); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatal("a session from before the account was disabled works again")
+	}
+	if e.count("SELECT count(*) FROM sessions WHERE user_id = ?", bob) != 0 {
+		t.Fatal("a disabled user's sessions were kept")
 	}
 	if _, err := e.login("robert", goodPW); err != nil {
 		t.Fatal(err)
