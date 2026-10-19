@@ -48,6 +48,7 @@ answers a generic 500 and never logs the panic value.
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
 | `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
 | `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
+| `WHEELHOUSE_DENIED_NETWORKS` | link-local, cloud metadata | Comma-separated CIDRs or addresses provider clients refuse to connect to (default `169.254.0.0/16,fe80::/10,fd00:ec2::254`; `none` allows all; an unparsable entry is fatal). Private ranges and loopback are allowed unless listed |
 | `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose `X-Forwarded-Proto: https` makes the session cookie `Secure` (default none; an unparsable entry is fatal) |
 | `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
 | `WHEELHOUSE_SECRET_KEY` | | The master key, base64 of 32 bytes; second choice |
@@ -176,7 +177,8 @@ clears them) and records the reset in the audit log as `cli`. There is no
 The storage layer under the accounts ([plan](../docs/wheelhouse-phase2-plan.md),
 item 1). The server opens the database and the master key at start (fatal, with a
 message that says what to fix, if it cannot); stored service configuration, the
-first user of the secret columns, comes in item 4. What to back up, and what
+first user of the secret columns, is `internal/instances` (item 4, see
+[docs/architecture.md](../docs/architecture.md#stored-configuration)). What to back up, and what
 losing the key means, is in [docs/operations.md](../docs/operations.md).
 
 ### `internal/store`
@@ -215,7 +217,8 @@ Migration `0001_meta` creates the `meta` key/value table; `0002_auth` creates
 `users` (case-insensitive unique names, Argon2id hash, role, disabled and
 must-change flags, with triggers that keep the last enabled administrator),
 `sessions` (SHA-256 of the token, cascade on user delete) and the append-only
-`audit_log`; the instances table comes with item 4. Never edit an applied
+`audit_log`; `0003_instances` creates `instances` (non-secret JSON `config` plus
+the sealed `secrets` BLOB, a registered secret column) and `feature_settings`. Never edit an applied
 migration: add a new one.
 
 ### `internal/secrets`
