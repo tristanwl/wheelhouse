@@ -132,7 +132,7 @@ database and key at start; users, Argon2id passwords, sessions, CSRF, login
 throttling, the `Guard` that enforces the route levels, the audit log, a minimal
 `POST /api/auth/setup` with the setup token, the user and audit API, `wheelhouse
 reset-password` and `forget-secrets`, [docs/operations.md](operations.md), and an
-authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Item 6 (web login, setup wizard, account, route guards): the UI has its own session handling and the browser smoke test drives the real login and setup flows. Items 3, 5 and 7 to 10 are open.
+authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Item 6 (web login, setup wizard, account, route guards): the UI has its own session handling and the browser smoke test drives the real login and setup flows. **Item 7 (web admin pages) is done:** services (forms generated from the provider schemas, test, import), features, users, sessions, network, media and converter, audit log, the first-run checklist, and a browser walk-through in the smoke test. Items 3, 5 and 8 to 10 are tracked above.
 
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`
@@ -146,7 +146,7 @@ without a release; the release after item 6 is 0.3.0.
 | 4 | Stored configuration | `DatabaseConfigSource`, environment seed and import, instance CRUD and test-connection routes, feature toggles, runtime reload |
 | 5 | Local-network bypass (done) | CIDRs, trusted proxies, role cap, tests for header spoofing; `GET/PUT /api/admin/network`, migration 0004. Decided: the client is the right-most address that is not a trusted proxy (the "left-most untrusted" wording above was wrong: that is the spoofable end); bypass requests keep the same-origin check and carry a stateless CSRF token from `GET /api/auth/session` |
 | 6 | Web: login, setup wizard, account, route guards | session handling, CSRF header, 401 handling, user menu |
-| 7 | Web: admin pages | services (add provider from JSON Schema forms, test, import from environment), users, sessions, features, settings, audit |
+| 7 | Web: admin pages (done) | services (add provider from JSON Schema forms, test, import from environment), users, sessions, features, settings, audit |
 | 8 | Converter settings and fixes | media roots from the database (#31), HDR and Dolby Vision excluded by default with an explicit override (#32), queue persisted in SQLite with a documented recovery policy for interrupted jobs (#33), job owner recorded |
 | 9 | Bugs and polish | Explore instance picker (#30), API inconsistencies (#42), arm64 image (#14: buildx with QEMU in the release workflow, drivers per architecture) |
 | 10 | Security review and release candidate | independent adversarial reviews (auth, injection, path handling, SSRF through provider URLs, header handling), fuzz tests on parsers, dependency audit, full `govulncheck`/`npm audit`, update `SECURITY.md`, final docs |

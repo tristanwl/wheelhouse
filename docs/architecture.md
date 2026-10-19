@@ -691,12 +691,15 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
 - **Routes.** `/login` and `/setup` are open; everything else is behind
   `RequireAuth` (loading, error, setup, login redirect, forced password change).
   `/admin/*` is behind `RequireAdmin`: a `user` sees "Not authorised", a bypass
-  visitor is sent to the login page for an administrator login. The pages item 7
-  adds replace the placeholder children of the `/admin` route in `routes.tsx`.
+  visitor is sent to the login page for an administrator login. The administration
+  pages (item 7) are the children of that route: Services, Features, Users,
+  Sessions, Network, Media and converter, Audit log, under a sub-navigation; the
+  header shows an "Admin" link to administrators only.
 - **Pages.** Login (generic error for 401, a throttling message for 429), setup
   wizard step 1 (token, username, password with the 12-character hint, confirm;
-  then signs in and lands on the Dashboard with an "Add your services" banner
-  linking to `/admin`), account (role, change password, own sessions with revoke;
+  then signs in and lands on the Dashboard, where a first-run checklist banner
+  (administrators only, until at least one service exists) links to the new-service
+  form), account (role, change password, own sessions with revoke;
   for a bypass visitor only "signed in from the local network"), forced password
   change, and a header user menu (name, role, Account, Sign out; no Sign out for
   bypass).
@@ -742,6 +745,19 @@ values):
 | `POST /api/admin/instances/{id}/import` | copy an environment instance into the database |
 | `POST /api/admin/instances/test` | connection test of unsaved `{providerId, config}`, or of a saved `{id}` (with optional edited `config`, stored secrets filled in); returns `{ok, version, error, durationMs}`, redacted |
 | `GET/PUT /api/admin/features` | per-feature `enabled` flags |
+
+**Administration pages** (`web/src/pages/admin`). Service forms are generated from
+the provider's JSON Schema (`configSchema`, with `x-order` for the order and `x-secret` /
+`writeOnly` for credentials), so a new provider needs no UI code; a committed copy of the
+registry's output (`web/src/fixtures/providers.json`) is checked against the Go registry
+by `TestWebProviderSnapshotMatchesRegistry`. A secret is never read back: the list
+reports `secrets: {name: {set}}`, the edit form shows "set" and a Replace action, and
+an update that omits the secret keeps the stored one. The UI also uses
+`DELETE /api/users/{id}/sessions/{sessionId}` (administrator: end one session of another
+user; added with item 7 because the users API could only end all of them), the users,
+sessions and audit routes, `GET/PUT /api/admin/network` and `GET/PUT /api/admin/converter`.
+The audit log filters (action, who) apply to the entries loaded so far; the API has
+no filter parameters.
 
 **URLs are trusted administrator input.** The server requests whatever address an
 admin configures (a connection test, then every poll), so a URL must be `http` or

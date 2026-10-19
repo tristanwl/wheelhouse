@@ -264,7 +264,7 @@ Off by default. An administrator turns it on with a list of CIDR ranges
 | 3 First-run setup and recovery | The web side of S2 (setup page), the upgrade path for 0.2.x installs |
 | 4 Stored configuration | I2, I3 end to end, I7 import path |
 | 5 Local-network bypass (merged) | S4, E3, I8 |
-| 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary |
+| 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary. Done: the admin pages never receive a stored secret, secrets are not kept in browser storage or logged, one-time passwords live only in component state, and every destructive action asks first |
 | 8 Converter settings | T-7 for configurable roots, HDR handling, D6 persisted queue |
 | 9 Bugs and polish | arm64 image: no change to the model |
 | 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit |

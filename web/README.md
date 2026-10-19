@@ -45,8 +45,37 @@ to `components/SessionProvider.tsx`. The provider holds the user, role and the
 `RequireAdmin` (`components/Guards.tsx`) send people to `/login`, `/setup`,
 `/change-password` or the not-authorised page. The pages are `/login`, `/setup`
 (wizard step 1), `/account` and `/change-password`. Nothing about the session is
-written to browser storage. `/admin/*` is reserved for the admin pages: replace the
-placeholder children of that route in `src/routes.tsx`.
+written to browser storage.
+
+### Administration pages (`/admin/*`)
+
+Behind `RequireAdmin`, with a sub-navigation (`components/admin/AdminLayout.tsx`)
+and one page per area in `src/pages/admin/`: Services (list, add, edit, test, delete,
+import from the environment), Features, Users, Sessions, Network, Media and converter
+and Audit log; the "Admin" link in the header shows for administrators only, and the
+dashboard shows a first-run checklist banner while no service exists.
+
+- **Service forms are generated from the provider's JSON Schema**
+  (`GET /api/admin/providers`): `lib/admin.ts` (`fieldsOf`, `validateAll`,
+  `buildConfig`) and `components/admin/SchemaForm.tsx`. A new provider needs no UI
+  work. Secrets (`x-secret`) are masked inputs with Show/Hide, never pre-filled: a
+  saved service shows "Set (hidden)" and a Replace button, and the request leaves the
+  secret out unless it was replaced (the server then keeps the stored one).
+- **The schemas the tests use are the real ones.** `src/fixtures/providers.json` is
+  what the Go registry returns; `go test ./internal/providers/all` fails when it
+  drifts. After changing a provider's settings run
+  `UPDATE_PROVIDER_SNAPSHOT=1 go test ./internal/providers/all` (in `server/`) and
+  commit the file.
+- Every destructive action (delete a service or user, reset a password, end sessions,
+  disable or demote an account) goes through `components/ConfirmModal.tsx` (dialog role,
+  focus on Cancel, Escape cancels). A test checks that every `DELETE` in
+  `src/pages/admin/` sits in a file that uses it.
+- A password the server must never see twice (a user's reset or generated password) is
+  made in the browser (`generatePassword`), shown once with a Copy button and kept only
+  in component state. No admin code touches browser storage (a test scans for it).
+- Media and converter reads and writes `GET/PUT /api/admin/converter`
+  (`{mediaRoots, includeHdr, effectiveRoots}`); while the server answers 404 the page
+  says the settings are not available instead of showing a form.
 
 ## Security constraints
 
