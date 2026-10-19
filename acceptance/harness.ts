@@ -203,6 +203,12 @@ export interface StartOptions {
   configDir?: string;
   /** Keep the config directory after stop(), so a test can start a second server on it (the test deletes it). */
   keepConfig?: boolean;
+  /**
+   * Try this port first instead of a free one (for the test that proves a port
+   * taken by somebody else does not fool the readiness check). A server that
+   * cannot bind is started again on a free port.
+   */
+  firstPort?: number;
 }
 
 // The only variables passed through from the test process. Provider variables
@@ -283,8 +289,8 @@ interface Spawned {
   exit: Promise<void>;
 }
 
-async function spawnServer(options: StartOptions): Promise<Spawned> {
-  const port = await freePort();
+async function spawnServer(options: StartOptions, wantedPort?: number): Promise<Spawned> {
+  const port = wantedPort ?? (await freePort());
   const ownsConfigDir = options.configDir === undefined;
   // Under the real temp directory: the container wrapper mounts it at the same path.
   const configDir =
@@ -336,7 +342,7 @@ async function spawnServer(options: StartOptions): Promise<Spawned> {
 async function spawnReady(options: StartOptions): Promise<Spawned> {
   const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
   for (let attempt = 1; ; attempt++) {
-    const sp = await spawnServer(options);
+    const sp = await spawnServer(options, attempt === 1 ? options.firstPort : undefined);
     const kill = async () => {
       if (sp.exited() === undefined) {
         sp.child.kill("SIGTERM");
