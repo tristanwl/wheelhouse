@@ -10,7 +10,7 @@ and the roadmap. [CONTRIBUTING.md](CONTRIBUTING.md) covers the human workflow.
 
 ## Layout and commands
 
-A Go server (`server/`, standard library only, Go 1.27+) with a Vite + React UI
+A Go server (`server/`, standard library plus one justified dependency, the SQLite driver, Go 1.27+) with a Vite + React UI
 (`web/`, own `package.json`) embedded in the binary, shipped as one Docker image
 with ffmpeg. The root `package.json` is only tooling for the black-box
 acceptance suite (`acceptance/`) and the **single source of the release
@@ -25,7 +25,7 @@ Before opening a PR, run what CI runs for what you touched (jobs `check`,
 `acceptance`, `server`, `web`, `docker`):
 
 ```sh
-make -C server check                       # gofmt, vet, go test -race, golangci-lint, govulncheck, build
+make -C server check                       # gofmt, vet, go test -race, golangci-lint, govulncheck, deps (tidy, licenses), build
 cd web && npm ci && npm run typecheck && npm run lint && npm run format:check \
   && npm test && npm audit && npm run build && npm run embed    # then: npm run test:smoke (Chromium)
 npm ci && npm run typecheck && npm run format:check && npm audit  # root tooling
@@ -49,8 +49,11 @@ on library deletes only after its confirm dialog.
 
 ## How it is built
 
-No database. Everything that talks to another service goes through the provider
-layer in `server/internal/providers/`:
+Today the server itself keeps no database (the config is the environment plus
+`/config/settings.json`); `internal/store` and `internal/secrets` are the tested
+foundation for Phase 2 and nothing in the server process opens them yet (only
+the `backup` and `rekey` commands and tests do). Everything that talks to
+another service goes through the provider layer in `server/internal/providers/`:
 
 - **Roles:** `downloadClient`, `mediaManager`, `mediaServer`, `metadata`. Each
   role has a package with the normalized model and a reusable `contract.go`
@@ -104,9 +107,23 @@ layer in `server/internal/providers/`:
 - **The image must keep working as any `--user`, read-only, with all capabilities
   dropped.** Write only under `/config` and the media directories; anything else
   goes under `/tmp`. `acceptance/docker-smoke.sh` checks this.
-- **Dependencies:** the Go server uses the standard library only; adding a module
-  needs a reason in the PR. Use the newest versions of everything, pin GitHub
-  Actions by commit SHA and the Docker base images by digest.
+- **Storage and secrets** (`server/internal/store`, `server/internal/secrets`).
+  Open the database only through `store.Open` (it enforces mode 0600, WAL, foreign
+  keys and the migration checks); schema changes are a new numbered file in
+  `store/migrations/`, never an edit of an applied one. A secret column stores
+  only `secrets.Cipher` envelopes sealed with `secrets.AD(table, id, field)` and is
+  listed in `store.SecretColumns`; never log, print or return a `secrets.Key` or
+  plaintext (use `secrets.Secret`), and keep the plaintext-on-disk canary test
+  (`TestPlaintextNeverReachesDisk`) covering any new secret column. Update
+  `docs/threat-model.md` when a PR changes a boundary or a mitigation.
+- **Dependencies:** the Go server is the standard library plus `modernc.org/sqlite`
+  and its pure-Go dependencies. Every added module needs a written reason in the
+  PR (why not the standard library, why this one), the newest stable version
+  (`go list -m -u all`; nothing published in the last two weeks), a clean
+  `govulncheck`, a license that works with GPL-3.0 (`make -C server deps` checks
+  an allow-list) and a tidy `go.mod`/`go.sum`. `modernc.org/libc` stays at the
+  version the SQLite driver pins. Pin GitHub Actions by commit SHA and the Docker
+  base images by digest.
 
 ## Adding a provider
 

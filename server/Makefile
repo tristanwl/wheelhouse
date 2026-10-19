@@ -1,4 +1,4 @@
-.PHONY: build ui fmt fmt-check vet test lint vuln check run clean
+.PHONY: build ui fmt fmt-check vet test lint vuln deps check run clean
 
 BIN := wheelhouse
 
@@ -29,8 +29,17 @@ lint:
 vuln:
 	govulncheck ./...
 
+# Module hygiene: go.mod and go.sum are tidy and verified, and every module in
+# the shipped binary has a permissive license that is compatible with GPL-3.0
+# (allow-list; a new license type needs a conscious edit here and in ci.yml).
+LICENSES := MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC
+deps:
+	go mod tidy -diff
+	go mod verify
+	go run github.com/google/go-licenses/v2@v2.0.1 check ./cmd/wheelhouse --ignore github.com/tristanwl/wheelhouse --allowed_licenses=$(LICENSES)
+
 # Everything CI runs.
-check: fmt-check vet test lint vuln build
+check: fmt-check vet test lint vuln deps build
 
 run:
 	go run ./cmd/wheelhouse

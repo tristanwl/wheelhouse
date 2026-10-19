@@ -1,7 +1,8 @@
 # Wheelhouse Go server
 
-The Wheelhouse server: one static Go binary (standard library only) that serves
-the API and the embedded UI. It replaced the Next.js app in release 0.2.0
+The Wheelhouse server: one static Go binary (standard library plus one
+dependency, the pure-Go SQLite driver; see [Dependencies](#dependencies)) that
+serves the API and the embedded UI. It replaced the Next.js app in release 0.2.0
 ([docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md), migration
 steps 2 to 8). Comments in the code that mention `lib/...` or `app/...` refer to
 that app, which is in git history (tag `0.1.1`).
@@ -45,6 +46,9 @@ answers a generic 500 and never logs the panic value.
 | `PORT`     | `3000`    | TCP port (the image sets `3050`) |
 | `WHEELHOUSE_LISTEN` | `0.0.0.0:$PORT` | Address to listen on, `host:port` (`:3050`, `127.0.0.1:3050`, `[::]:3050`); overrides `PORT` |
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
+| `WHEELHOUSE_DB` | `/config/wheelhouse.db` | SQLite file used by `backup` and `rekey`; the server itself does not open it yet |
+| `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
+| `WHEELHOUSE_SECRET_KEY` | | The master key, base64 of 32 bytes; second choice |
 
 `HOSTNAME` is **not read**. Container runtimes set it to the container id (and
 to the machine's name with host networking), so using it as the bind address
@@ -108,12 +112,131 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
 
 ## Commands
 
-`wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
+`wheelhouse backup <file>` and `wheelhouse rekey` are described under
+[Storage and secrets](#storage-and-secrets). `wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
 this machine (at `WHEELHOUSE_LISTEN` or `PORT`) answers `/healthz`, for the
 image's `HEALTHCHECK`. `wheelhouse version` (or `--version`) prints the version,
 which `-ldflags "-X github.com/tristanwl/wheelhouse/server/internal/version.Version=0.2.0"`
 sets (the Dockerfile reads it from the root `package.json`; a plain `go build`
 says `dev`). The version is also in `/healthz` and the startup log line.
+
+## Storage and secrets
+
+Phase 2 keeps accounts, stored service settings and an audit log in a SQLite
+database ([plan](../docs/wheelhouse-phase2-plan.md), [threat
+model](../docs/threat-model.md)). Item 1 of that plan, merged first, is only the
+foundation: two packages and two commands. **The server does not open the
+database or create a key at start-up** and its behaviour is unchanged; the
+`backup` and `rekey` commands and the tests are the only users until the next
+items wire it in.
+
+### `internal/store`
+
+SQLite through `modernc.org/sqlite`. `store.Open(ctx, path)`:
+
+- creates the file with mode 0600 (and so its `-wal` and `-shm`), and refuses a
+  missing or world-writable directory, a file that is not a regular file, and a
+  database that group or others can access (with the `chmod` to run);
+- opens a **writer** pool of one connection (`BEGIN IMMEDIATE`, so a read-then-write
+  transaction cannot fail half way) and a **reader** pool of four `query_only`
+  connections. Every connection has `foreign_keys=ON`, `busy_timeout=5000`,
+  `secure_delete=ON` (deleted secrets are overwritten), `trusted_schema=OFF`,
+  `cell_size_check=ON` and the driver's defensive mode; the writer is WAL with
+  `synchronous=FULL`;
+- applies pending migrations in one transaction (below);
+- returns a `*DB` with context-aware `Exec` (writer), `Query`/`QueryRow` (readers),
+  `Tx` (write transaction; a panic or error rolls back; do not call `db.Exec`
+  from inside it, there is one writer connection) and `ReadTx` (one snapshot),
+  `GetMeta`/`SetMeta`, `Backup` and `Close`.
+
+`store.Options{Existing: true}` opens a database that must exist without
+creating or migrating it; `backup` uses it so a copy taken before an upgrade is
+of exactly what is there (and a database newer than the binary can still be
+backed up).
+
+**Migrations** are `internal/store/migrations/NNNN_name.sql`, embedded, numbered
+from `0001` without gaps, forward-only. The `schema_migrations` table records
+each one's version, name, SHA-256 and time; at every start the history must be a
+prefix of what the binary embeds with matching hashes (an applied migration that
+was edited is an error). A database whose newest migration is **newer than the
+binary** is refused with `ErrSchemaTooNew`: restore a backup or run the newer
+version. Pending migrations run in one `BEGIN IMMEDIATE` transaction, so two
+processes starting together apply them once and a failure leaves nothing behind.
+Migration `0001_meta` creates the `meta` key/value table; the users, sessions,
+instances and audit tables come with the items that use them. Never edit an
+applied migration: add a new one.
+
+### `internal/secrets`
+
+AES-256-GCM from the standard library. `Cipher.Seal(plaintext, ad)` draws a
+fresh random 12-byte nonce for every value and returns an **envelope**:
+
+```
+byte 0       format  0x01 = AES-256-GCM, 12-byte nonce, 16-byte tag
+bytes 1-4    key version, big endian (the first key is 1)
+bytes 5-16   nonce
+bytes 17-    ciphertext, then the tag
+```
+
+The GCM additional data is the five header bytes followed by the caller's `ad`,
+built with `secrets.AD(table, rowID, field)` (length-prefixed parts), so a value
+copied to another row or field, or with a changed header, does not open. A new
+algorithm gets a new format byte and old formats stay readable.
+
+The **master key** is 32 random bytes, from the first of:
+
+1. `WHEELHOUSE_SECRET_KEY_FILE`: a file of exactly 32 raw bytes, mode 0600 or 0400
+   (symlinks are followed, as secret mounts use them; anything group- or
+   world-accessible is refused with the `chmod` to run);
+2. `WHEELHOUSE_SECRET_KEY`: base64 (standard alphabet) of 32 bytes;
+3. `/config/secret.key`, created with `O_EXCL` and mode 0600 on first use by a
+   command or feature that owns the key (never merely by starting the server).
+
+A source that is set but unusable is an error; it never falls through to the
+next. Make a key file with `head -c 32 /dev/urandom > key && chmod 600 key`.
+Be clear about what this protects: with the generated file next to the database
+it protects a copied database or backup, **not** a copy of the whole `/config`
+volume. Point `WHEELHOUSE_SECRET_KEY_FILE` at a secret mount for more.
+`secrets.Key` and `secrets.Secret` print as `[redacted]` under every `fmt` verb,
+in `slog` and in JSON.
+
+**Key versions.** The database stores one encrypted check value
+(`meta.secret_key_check`); its envelope header carries the current key version
+and only the right key opens it, so a wrong or swapped key is `ErrWrongKey`
+at start instead of garbage later. The columns that hold secrets are listed in
+`store.SecretColumns` (none yet; a test checks each exists and is a `BLOB`).
+
+### Backup and key rotation
+
+Both run inside the container, as the container's user, with the same
+environment as the server (`docker exec` bypasses the image's entrypoint, so the
+binary is named):
+
+```sh
+docker exec wheelhouse wheelhouse backup /config/wheelhouse-backup.db
+podman exec wheelhouse wheelhouse rekey
+```
+
+- `wheelhouse backup <file>` writes a consistent snapshot (SQLite `VACUUM INTO`)
+  while the server runs, mode 0600, built under a temporary name and linked into
+  place when complete. It **refuses to overwrite**, needs the directory to exist,
+  does not create or migrate the database, and secrets in the copy are encrypted.
+  The master key is **not** in it: keep `secret.key` (or your key file) elsewhere.
+  Restore by stopping Wheelhouse and copying the backup over `wheelhouse.db`
+  (remove a leftover `-wal`/`-shm`).
+- `wheelhouse rekey` makes a new master key (version n+1) and re-encrypts every
+  stored secret **in one transaction**; any failure leaves the database and the
+  old key untouched. Stop the server and take a backup first (the running server
+  holds the old key and cannot read the new data). For the generated
+  `secret.key` it stages `secret.key.next`, commits, then renames it over the key;
+  if the process dies in between, the next start finishes or discards the swap
+  (the stored check value says which key is right). For a key you supply
+  (`WHEELHOUSE_SECRET_KEY_FILE` or `WHEELHOUSE_SECRET_KEY`) it cannot replace your
+  mount, so run `wheelhouse rekey --new-key-out /config/new.key` and install that
+  file as your key (for the environment form, `base64 -w0 new.key`), then delete
+  it. The key is never printed. With no secrets stored it still works and moves
+  the key version on (it creates the database and generated key if they do not
+  exist; this command owns them). Old backups need the old key.
 
 ## Container image
 
@@ -133,7 +256,7 @@ Needs Go 1.27+ (see `go.mod`). From `server/`:
 make build        # static, CGO-free binary ./wheelhouse (-trimpath -s -w)
 make run          # go run ./cmd/wheelhouse
 make test         # go test -race ./...
-make check        # gofmt, vet, test, golangci-lint, govulncheck, build (what CI runs)
+make check        # gofmt, vet, test, golangci-lint, govulncheck, deps (tidy + licenses), build (what CI runs)
 ```
 
 Linting and vulnerability scanning use two tools installed separately:
@@ -221,9 +344,11 @@ every error string, JSON description and log line the core can produce for them.
 ## Layout
 
 ```
-cmd/wheelhouse        main: config, signals, listener, healthcheck and version commands
+cmd/wheelhouse        main: config, signals, listener, healthcheck, version, backup and rekey commands
 internal/app          routes, middleware chain, graceful Serve
-internal/config       listen address (PORT, WHEELHOUSE_LISTEN)
+internal/config       listen address (PORT, WHEELHOUSE_LISTEN), database path (WHEELHOUSE_DB)
+internal/store        SQLite database: open, migrations, backup, secret-column rekey
+internal/secrets      AES-256-GCM envelopes, master key loading, redacting key and secret types
 internal/features     feature gating
 internal/status       GET /api/status logic
 internal/downloads    GET /api/downloads logic
@@ -238,5 +363,23 @@ internal/ui           embedded UI
 internal/version      the release version
 ```
 
-Adding a dependency needs a reason in the PR; use the newest version
-(`go list -m -u all`) and run `govulncheck ./...`.
+## Dependencies
+
+The server is the standard library plus **one** module, `modernc.org/sqlite`,
+and the modules it needs (`go.mod` lists them; all are BSD-3-Clause or MIT, so
+GPL-3.0 compatible). Why it is there rather than the alternatives:
+
+- **Not cgo SQLite** (`mattn/go-sqlite3`): it needs a C toolchain, breaks the
+  static `CGO_ENABLED=0` binary and the cross-compiled multi-arch image, and
+  makes arm64 builds slow and fragile.
+- **Not a hand-rolled store** (JSON files, a bolt-style key/value file): accounts,
+  sessions, audit queries, constraints, transactions, crash safety and an online
+  backup are exactly what SQLite already does well and is exhaustively tested
+  for; rewriting that in a security-sensitive product is the riskier choice.
+
+`modernc.org/libc` must stay at the version `modernc.org/sqlite`'s own `go.mod`
+pins (its maintainers' rule), so it is not bumped on its own. A policy for
+every addition: a written reason in the PR, the newest stable version (check
+`go list -m -u all`; skip anything published in the last two weeks), a clean
+`govulncheck ./...`, and a license that works with GPL-3.0 (CI runs
+`go-licenses check`; locally `make -C server deps`).

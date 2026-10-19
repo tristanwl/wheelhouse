@@ -126,13 +126,17 @@ media). The open question below covers a later read-and-add role.
 
 ## Work plan
 
+Status: **item 1 is done** (threat model, `internal/store`, `internal/secrets`,
+`wheelhouse backup` and `rekey`; the server does not use the database yet, that
+starts with item 2). Items 2 to 10 are open.
+
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`
 without a release; the release after item 6 is 0.3.0.
 
 | # | PR | Notes |
 |---|---|---|
-| 1 | Threat model and storage foundation | `docs/threat-model.md`; SQLite package, migrations, backups, secret encryption, `rekey`; first third-party dependency, justified |
+| 1 | Threat model and storage foundation (done) | `docs/threat-model.md`; SQLite package, migrations, backups, secret encryption, `rekey`; first third-party dependency, justified |
 | 2 | Users, sessions and login | Argon2id, session store, CSRF, throttling, `authorize` middleware enforcing levels, audit log; acceptance suite gets an authenticated mode (setup then login helper; no server backdoor) |
 | 3 | First-run setup and recovery | setup token, 503 until set up, `reset-password`, upgrade path for 0.2.x installs |
 | 4 | Stored configuration | `DatabaseConfigSource`, environment seed and import, instance CRUD and test-connection routes, feature toggles, runtime reload |
