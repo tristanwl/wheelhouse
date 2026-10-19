@@ -48,6 +48,33 @@ the lock and keep working while the server runs (`backup` uses SQLite's online b
   changed while it was running, and shows the affected services as needing a restart instead
   of "required". Restarting loads the new key.
 
+## Large libraries
+
+Wheelhouse reads a whole Radarr or Sonarr list in one request and refuses a response over a
+cap, so one hostile or broken service cannot use up the server's memory. The cap is **96 MiB**
+of JSON (about 25,000 movies at the usual 4 KB each). A library over it shows, on the Library
+page and the dashboard, "the library is larger than Wheelhouse is set up to read; an
+administrator can raise the limit (see the documentation)", and the server log has one line
+saying how large the response was against the limit and which setting to change:
+
+```
+level=WARN msg="a library response is larger than Wheelhouse is set up to read; raise the setting ..." service=radarr limitMiB=96 responseMiB=130 percentOfLimit=135 setting=WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB
+```
+
+Set `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (16 to 512, whole MiB; anything else stops the server
+at start) to a little above `responseMiB`, and restart. It is an environment setting on
+purpose: nothing in the web interface can raise it.
+
+- **Memory.** The response is held in memory while it is decoded, so budget three to four times
+  the cap for the decode on top of the usual use; with a container memory limit, Wheelhouse sets
+  its soft limit from it. Do not set a cap far above what your library needs.
+- **Other limits stay.** Only the byte cap moves. A list may still have at most 200,000 entries,
+  12 million values in all, nesting up to 32 levels and strings up to 1 MiB, however large the
+  cap, so a library of more than roughly 100,000 movies is refused by those limits instead.
+  The torrent list of qBittorrent keeps its own fixed 96 MiB cap.
+- The log line reports at most twice the limit for a service that does not announce its size
+  (it stops counting there; the real size can be larger).
+
 ## Audit log retention
 
 The audit log (Admin, Audit log) keeps entries for **180 days** by default. Set

@@ -122,7 +122,9 @@ See [server/README.md](../server/README.md) for the server and
   plus `apikey=`-style parameters and `user:pass@` URLs, `ProviderError` with a
   status, GET cache with TTL, in-flight de-duplication and `Invalidate()`. At
   most 8 MiB is read from upstream by default (an endpoint sets its own cap:
-  96 MiB for library and torrent lists, 2 MiB for status calls), the body is
+  96 MiB for library and torrent lists, 2 MiB for status calls; the Radarr and Sonarr
+  lists take their cap from `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB`, 16 to 512 MiB, through
+  `core.LibraryListBytes()`), the body is
   scanned before it is decoded (`core.DecodeJSON`: elements per array, values in
   total, nesting depth, string length, and a process-wide gate for large
   decodes, so a few bytes of `{}` cannot become gigabytes), redirects to another host (or from https to

@@ -138,6 +138,15 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	libraryMiB, err := config.MaxLibraryResponseMiB(os.Getenv)
+	if err != nil {
+		return err
+	}
+	core.SetLibraryListBytes(int64(libraryMiB) << 20)
+	core.SetDiagnostics(log)
+	if libraryMiB != config.DefaultMaxLibraryResponseMiB {
+		log.Info("the cap on Radarr and Sonarr list responses is set", "mib", libraryMiB, "setting", config.EnvMaxLibraryResponseMiB)
+	}
 	configDir := config.ConfigDir(os.Getenv)
 
 	// The lock first: while this process lives, `rekey` and `forget-secrets`

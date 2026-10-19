@@ -423,8 +423,10 @@ Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
 
 - 8 s timeout per request (body included), `Request.Timeout` overrides it.
 - At most 8 MiB read from upstream by default; an endpoint sets its own cap with
-  `Request.MaxBytes` (`core.LargeListBytes`, 96 MiB, for library and torrent
-  lists, `core.SmallResponseBytes`, 2 MiB, for status calls). `MaxResponseBytes`
+  `Request.MaxBytes` (`core.LargeListBytes`, 96 MiB, for torrent lists and,
+  with `core.LibraryListBytes()` set from `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB`, for the
+  Radarr and Sonarr lists, whose refusal reads "the library is larger than Wheelhouse is set
+  up to read" with the numbers and the setting in the server log, `core.SmallResponseBytes`, 2 MiB, for status calls). `MaxResponseBytes`
   set on the client is a ceiling no call may raise. A larger response is a
   `ProviderError`, and the stream is cut off at the limit.
 - The decoded shape is bounded too: decode with `core.DecodeJSON` (or

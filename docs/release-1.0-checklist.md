@@ -193,9 +193,14 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
 
 **Media and conversion**
 
-- **Library responses are capped at 96 MiB of JSON** (about 25,000 movies at the usual 4 KB
-  each). A larger library gets an error instead of a list (issue #88). Other upstream
-  responses have smaller caps.
+- **Radarr and Sonarr list responses are capped at 96 MiB of JSON by default** (about 25,000
+  movies at the usual 4 KB each). A larger library gets a notice ("the library is larger than
+  Wheelhouse is set up to read") instead of a list; an administrator raises the cap with
+  `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (16 to 512 MiB, [operations.md](operations.md#large-libraries)).
+  The element, value, depth and string limits stay whatever the cap, so a library of more than
+  about 100,000 movies is still refused, and a raised cap costs memory (budget three to four
+  times the cap). A streaming decode would lift this later (issue #88). Other upstream responses
+  have smaller caps.
 - **Hardware encoding is untested on arm64**, and the arm64 image has no Intel VAAPI drivers;
   software x264/x265 works (issue #87). NVENC and other hardware paths are likewise only as
   tested as the amd64 VAAPI one.
