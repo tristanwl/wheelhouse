@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(2)
+uint8(36)
+uint8(0)
+[]byte("{\n  \"warnings\": [\n    {\n      \"type\": \"ERROR\",\n      \"text\": \"Saving /config/Downloads/incomplete/Example.Movie.2024.1080p.WEB-DL.x264-GROUP/__ADMIN__/SABnzbd_nzo_aaa111 failed\",\n      \"time\": 1792297332,\n      \"origin\": \"filesystem.py1127\"\n    },\n    {\n      \"type\": \"WARNING\",\n      \"text\": \"Refused connection from: 192.0.2.10 (host.example.lan)\",\n      \"time")

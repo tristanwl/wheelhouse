@@ -1,0 +1,7 @@
+go test fuzz v1
+string("10.0.0.2:1")
+string("")
+string("")
+string("for=\"[fd00::5]:4711\";proto=https;by=10.0.0.2")
+string("")
+bool(false)

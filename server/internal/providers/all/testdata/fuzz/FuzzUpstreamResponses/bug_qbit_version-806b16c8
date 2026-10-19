@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(3)
+uint8(3)
+uint8(0)
+[]byte("<html><body>Please sign in to continue</body></html>")

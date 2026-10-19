@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(4)
+uint8(11)
+uint8(0)
+[]byte("{\n  \"MediaContainer\": {\n    \"size\": 25,\n    \"allowCameraUpload\": true,\n    \"allowChannelAccess\": true,\n    \"allowMediaDeletion\": true,\n    \"allowSharing\": true,\n    \"allowSync\": true,\n    \"allowTuners\": true,\n    \"apiVersion\": \"redacted\",\n    \"backgroundProcessing\": true,\n    \"certificate\": true,\n    \"companionProxy\": true,\n    \"countryCode\": \"redacted\",\n    \"diagnostics\": \"redacted\",\n    \"eventStream\": true,\n    \"friendlyName\": \"Example Plex\",\n    \"hubSearch\": true,\n    \"itemClusters\": true,\n    \"livetv\": 7,\n    \"machineIdentifier\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"mediaProviders\": true,\n    \"multiuser\": true,\n    \"musicAnalysis\": 2,\n    \"myPlex\": true,\n    \"myPlexMappingState\": \"redacted\",\n    \"myPlexSigninState\": \"redacted\",\n    \"myPlexSubscription\": true,\n    \"")

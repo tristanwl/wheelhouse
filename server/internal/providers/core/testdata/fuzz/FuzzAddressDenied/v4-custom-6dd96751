@@ -1,0 +1,8 @@
+go test fuzz v1
+string("")
+uint8(169)
+uint8(253)
+uint8(255)
+uint8(255)
+uint16(8989)
+bool(true)

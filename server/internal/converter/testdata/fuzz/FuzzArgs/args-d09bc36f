@@ -1,0 +1,5 @@
+go test fuzz v1
+string("nvenc")
+string("h264")
+string("/m/ü.mkv")
+string("/m/\x00.mkv")

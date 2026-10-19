@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"OperatingSystemDisplayName\": \"\",\n  \"HasPendingRestart\": false,\n  \"IsShuttingDown\": false,\n  \"SupportsLibraryMonitor\": true,\n  \"WebSocketPortNumber\": 8096,\n  \"CompletedInstallations\": [],\n  \"CanSelfRestart\": true,\n  \"CanLaunchWebBrowser\": false,\n  \"ProgramDataPath\": \"/config\",\n  \"WebPath\": \"/jellyfin/jellyfin-web\",\n  \"ItemsByNamePath\": \"/config/metadata\",\n  \"CachePath\": \"/cache\",\n  \"LogPath\": \"/config/log\",\n  \"InternalMetadataPath\": \"/config/metadata\",\n  \"TranscodingTempPath\": \"/cache/transc")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

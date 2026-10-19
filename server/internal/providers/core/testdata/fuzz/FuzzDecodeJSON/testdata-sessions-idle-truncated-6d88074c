@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"PlayState\": {\n      \"CanSeek\": false,\n      \"IsPaused\": false,\n      \"IsMuted\": false,\n      \"RepeatMode\": \"RepeatNone\",\n      \"PlaybackOrder\": \"Default\"\n    },\n    \"AdditionalUsers\": [],\n    \"Capabilities\": {\n      \"PlayableMediaTypes\": [],\n      \"SupportedCommands\": [],\n      \"SupportsMediaControl\": false,\n      \"SupportsPersistentIdentifier\": true\n    },\n    \"RemoteEndPoint\": \"192.0.2.10\",\n    \"PlayableMediaTypes\": [],\n    \"Id\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n    \"UserId\": \"fedcba9876543210fedcba987654")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

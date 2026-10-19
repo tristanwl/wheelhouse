@@ -1,0 +1,4 @@
+go test fuzz v1
+string("same-site")
+string("")
+string("example.com")

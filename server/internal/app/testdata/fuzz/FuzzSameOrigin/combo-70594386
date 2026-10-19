@@ -1,0 +1,4 @@
+go test fuzz v1
+string("")
+string("http://example.com:81")
+string("example.com")

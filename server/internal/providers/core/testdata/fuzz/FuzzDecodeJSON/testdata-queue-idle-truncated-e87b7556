@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"queue\": {\n    \"version\": \"4.5.2\",\n    \"paused\": false,\n    \"pause_int\": \"0\",\n    \"paused_all\": false,\n    \"diskspace1\": \"162.33\",\n    \"diskspace2\": \"162.33\",\n    \"diskspace1_norm\": \"162.3 G\",\n    \"diskspace2_norm\": \"162.3 G\",\n    \"diskspacetotal1\": \"232.20\",\n    \"diskspacetotal2\": \"232.20\",\n    \"speedlimit\": \"100\",\n    \"speedlimit_abs\": \"62914560\",\n    \"have_warnings\": \"4\",\n    \"finishaction\": null,")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

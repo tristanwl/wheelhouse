@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"source\": \"IndexerLongTermStatusCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for IndexerLongTermStatusCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/radarr/system#indexers-are-unavailable-due-to-failures\"\n  },\n  {\n    \"source\": \"UpdateCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health messag")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

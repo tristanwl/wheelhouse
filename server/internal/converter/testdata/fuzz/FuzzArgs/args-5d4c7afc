@@ -1,0 +1,5 @@
+go test fuzz v1
+string("vaapi")
+string("hevc")
+string("/m/'quoted'\"x\".mkv")
+string("/m/$(id).mkv")

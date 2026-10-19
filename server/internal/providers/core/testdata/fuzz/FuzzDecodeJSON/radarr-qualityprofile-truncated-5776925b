@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"name\": \"Example Profile 1\",\n    \"upgradeAllowed\": false,\n    \"cutoff\": 25,\n    \"items\": [\n      {\n        \"quality\": {\n          \"id\": 0,\n          \"name\": \"Unknown\",\n          \"source\": \"unknown\",\n          \"resolution\": 0,\n          \"modifier\": \"none\"\n        },\n        \"items\": [],\n        \"allowed\": false\n      },\n      {\n        \"quality\": {\n          \"id\": 24,\n          \"name\": \"WORKPRINT\",\n          \"source\": \"workprint\",\n          \"resolution\": 0,\n          \"modifier\": \"none\"\n        },\n        \"items\": [],\n        \"allowed\": true\n      },\n      {\n        \"quality\": {\n          \"id\": 25,\n          \"name\": \"CAM\",\n          \"source\": \"cam\",\n          \"resolution\": 0,\n          \"modifier\": \"none\"\n        },\n        \"items\": [],\n        \"allowed\": true\n      }\n    ],\n    \"minFormatScore\": 0,\n    \"cutoffFormatScore\": 0,\n    \"minUpgradeFormatScore\": 1,\n    \"formatItems\": [],\n    \"language\": {\n      \"id\": 1,\n      \"name\": \"English\"\n    },\n    \"id\": 1\n  },")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

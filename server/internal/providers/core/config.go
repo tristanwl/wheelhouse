@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"unicode"
 )
 
 // A provider describes its settings as a plain struct. Each exported field
@@ -235,6 +236,13 @@ func toInt(v any) (int, bool) {
 // validHTTPURL accepts absolute http and https URLs with a host. (Stricter than
 // zod's z.url(), which accepts any scheme.)
 func validHTTPURL(s string) bool {
+	// A space (a pasted trailing one, a name split in two) or a backslash (which
+	// browsers and some servers read as a slash, Go does not) is never part of a
+	// service address; net/url lets either into the path, and every request would
+	// then go to "/%20/api/..." or "/%5C".
+	if strings.ContainsFunc(s, unicode.IsSpace) || strings.ContainsRune(s, '\\') {
+		return false
+	}
 	u, err := url.Parse(s)
 	if err != nil {
 		return false

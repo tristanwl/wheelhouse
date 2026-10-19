@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(6)
+uint8(0)
+uint8(0)
+[]byte("{\"backdrop_path\":\"/backdrop.jpg\",\"genres\":[{\"id\":1,\"name\":\"Drama\"}],\"id\":603,\"overview\":\"A made-up plot.\",\"poster_path\":\"/poster603.jpg\",\"release_date\":\"2024-01-01\",\"runtime\":100,\"title\":\"Example Movie 603\",\"videos\":{\"results\":[]},\"vote_average\":7.5}")

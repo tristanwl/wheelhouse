@@ -1,0 +1,4 @@
+go test fuzz v1
+uint8(0)
+string("http://192.0.2.10:7878/radarr\n")
+bool(false)

@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(5)
+uint8(6)
+uint8(0)
+[]byte("{\n  \"LocalAddress\": \"http://192.0.2.1:8096\",\n  \"ServerName\": \"Example Jellyfin\",\n  \"Version\": \"12.2.0\",\n  \"ProductName\": \"")

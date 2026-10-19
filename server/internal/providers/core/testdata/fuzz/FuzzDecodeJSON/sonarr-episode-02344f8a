@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"seriesId\": 1,\n    \"tvdbId\": 601001,\n    \"episodeFileId\": 101,\n    \"seasonNumber\": 1,\n    \"episodeNumber\": 4,\n    \"title\": \"Example Episode 1\",\n    \"airDate\": \"2013-06-09\",\n    \"airDateUtc\": \"2013-06-10T00:00:00Z\",\n    \"runtime\": 60,\n    \"overview\": \"Placeholder overview.\",\n    \"hasFile\": true,\n    \"monitored\": false,\n    \"unverifiedSceneNumbering\": false,\n    \"id\": 1001\n  },\n  {\n    \"seriesId\": 2,\n    \"tvdbId\": 602001,\n    \"episodeFileId\": 201,\n    \"seasonNumber\": 3,\n    \"episodeNumber\": 9,\n    \"title\": \"Example Episode 1\",\n    \"airDate\": \"2025-08-18\",\n    \"airDateUtc\": \"2025-08-19T01:00:00Z\",\n    \"runtime\": 45,\n    \"overview\": \"Placeholder overview.\",\n    \"hasFile\": true,\n    \"monitored\": true,\n    \"unverifiedSceneNumbering\": false,\n    \"id\": 2001\n  }\n]\n")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

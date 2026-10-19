@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"CodecPreferences\":{\"HD\":\"hevc\",\"UHD\":\"h264\"}}")

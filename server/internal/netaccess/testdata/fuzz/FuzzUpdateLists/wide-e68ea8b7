@@ -1,0 +1,6 @@
+go test fuzz v1
+string("0.0.0.0/0")
+string("::/0")
+string("::ffff:0:0/96")
+string("8.8.8.0/24")
+bool(true)

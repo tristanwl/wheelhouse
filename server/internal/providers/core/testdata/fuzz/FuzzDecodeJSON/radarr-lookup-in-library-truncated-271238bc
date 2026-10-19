@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"title\": \"Example Movie 1\",\n  \"originalTitle\": \"Example Movie 1\",\n  \"originalLanguage\": {\n    \"id\": 1,\n    \"name\": \"English\"\n  },\n  \"alternateTitles\": [],\n  \"secondaryYearSourceId\": 0,\n  \"sortTitle\": \"example movie 1\",\n  \"status\": \"released\",\n  \"overview\": \"Placeholder overview for Example Movie 1.\",\n  \"inCinemas\": \"2025-06-04T00:00:00Z\",\n  \"physicalRelease\": \"2025-08-27T00:00:00Z\",\n  \"digitalRelease\": \"2025-06-30T00:00:00Z\",\n  \"releaseDate\": \"2025-06-04T00:00:00Z\",\n  \"images\": [\n    {\n      \"coverType\": \"poster\",\n      \"remoteUrl\": \"https://example.com/images/movie1/poster.jpg\"\n    },\n    {\n      \"coverType\": \"fanart\",\n      \"remoteUrl\": \"https://example.com/images/movie1/fanart.jpg\"\n    }\n  ],\n  \"website\": \"\",\n  \"year\": 2025,\n  \"youTubeTrailerId\": \"\",\n  \"studio\": \"Example Studio\",\n  \"qualit")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

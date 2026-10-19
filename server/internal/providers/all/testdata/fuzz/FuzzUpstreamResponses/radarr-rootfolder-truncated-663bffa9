@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(0)
+uint8(36)
+uint8(0)
+[]byte("[\n  {\n    \"path\": \"/movies\",\n    \"accessible\": true,\n    \"freeSpace\": 25910312960,\n    \"unmappedFolders\": [\n      {\n        \"name\": \"Unm")

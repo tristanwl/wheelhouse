@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(1)
+uint8(10)
+uint8(0)
+[]byte("[\n  {\n    \"source\": \"UpdateCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for UpdateCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/sonarr/system#new-update-is-available\"\n  },\n  {\n    \"source\": \"IndexerLongTermStatusCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for IndexerLongTermStatusCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/sonarr/system#indexers-are-unavailable-due-to-failures\"\n  }\n]\n")

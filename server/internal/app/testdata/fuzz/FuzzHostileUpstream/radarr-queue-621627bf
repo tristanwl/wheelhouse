@@ -1,0 +1,4 @@
+go test fuzz v1
+uint8(18)
+uint8(0)
+[]byte("{\n  \"page\": 1,\n  \"pageSize\": 25,\n  \"sortKey\": \"timeleft\",\n  \"sortDirection\": \"descending\",\n  \"totalRecords\": 0,\n  \"records\": []\n}\n")

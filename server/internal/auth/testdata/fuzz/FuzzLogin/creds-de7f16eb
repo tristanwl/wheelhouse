@@ -1,0 +1,5 @@
+go test fuzz v1
+string("fuzz-admin")
+string("wrong")
+string("192.0.2.1")
+string("ua")

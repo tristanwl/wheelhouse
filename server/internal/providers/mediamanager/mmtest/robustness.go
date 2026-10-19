@@ -83,6 +83,23 @@ func operations(c mm.Manager) []operation {
 	return ops
 }
 
+// Call is one upstream call of a client, by name.
+type Call struct {
+	Name string
+	Do   func(ctx context.Context) error
+}
+
+// Calls lists every upstream call of a client, reads and writes, for the fuzz
+// tests and sweeps that run them all.
+func Calls(c mm.Manager) []Call {
+	ops := operations(c)
+	out := make([]Call, len(ops))
+	for i, op := range ops {
+		out[i] = Call{Name: op.name, Do: op.call}
+	}
+	return out
+}
+
 func canaryForms() []string {
 	var forms []string
 	for _, s := range []string{CanaryKey, canaryPass} {

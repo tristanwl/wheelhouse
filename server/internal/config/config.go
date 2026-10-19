@@ -107,6 +107,16 @@ func TrustedProxies(getenv func(string) string) ([]netip.Prefix, error) {
 			continue
 		}
 		if p, err := netip.ParsePrefix(part); err == nil {
+			// Peers are compared as IPv4 (netaccess unmaps every address), so a
+			// range written as IPv4-mapped IPv6 must be kept as IPv4, or it would
+			// silently trust nobody; one wider than the mapped block cannot be
+			// written as IPv4 at all.
+			if p.Addr().Is4In6() {
+				if p.Bits() < 96 {
+					return nil, fmt.Errorf("WHEELHOUSE_TRUSTED_PROXIES: %q: an IPv4-mapped IPv6 range must be /96 or longer; write the IPv4 range instead", part)
+				}
+				p = netip.PrefixFrom(p.Addr().Unmap(), p.Bits()-96)
+			}
 			out = append(out, p.Masked())
 			continue
 		}

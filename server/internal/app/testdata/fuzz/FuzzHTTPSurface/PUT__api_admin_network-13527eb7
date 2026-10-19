@@ -1,0 +1,7 @@
+go test fuzz v1
+string("PUT")
+string("/api/admin/network")
+string("Content-Type: application/json")
+[]byte("{\"enabled\":true,\"cidrs\":[\"0.0.0.0/0\"]}")
+uint8(2)
+uint8(1)

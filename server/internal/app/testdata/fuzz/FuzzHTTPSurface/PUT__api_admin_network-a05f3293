@@ -1,0 +1,7 @@
+go test fuzz v1
+string("PUT")
+string("/api/admin/network")
+string("Content-Type: application/json")
+[]byte("{\"enabled\":true,\"cidrs\":[\"192.0.2.0/24\"],\"trustedProxies\":[\"10.0.0.0/8\"],\"allowedHosts\":[\"nas.example.lan\"]}")
+uint8(2)
+uint8(0)

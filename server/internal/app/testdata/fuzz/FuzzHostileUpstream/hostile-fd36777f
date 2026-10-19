@@ -1,0 +1,4 @@
+go test fuzz v1
+uint8(24)
+uint8(6)
+[]byte("{\"progress\":\"NaN\",\"eta\":\"Infinity\",\"size\":1e999,\"queue\":{\"slots\":\"x\",\"noofslots\":-5}}")

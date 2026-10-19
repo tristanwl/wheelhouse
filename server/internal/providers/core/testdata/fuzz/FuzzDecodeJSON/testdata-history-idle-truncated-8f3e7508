@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"history\": {\n    \"noofslots\": 0,\n    \"ppslots\"")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

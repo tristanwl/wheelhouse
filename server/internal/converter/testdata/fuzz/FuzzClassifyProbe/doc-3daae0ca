@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"streams\":[{\"side_data_list\":[{\"side_data_type\":\"Dolby Vision RPU Data\"}]}]}")

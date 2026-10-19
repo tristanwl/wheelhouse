@@ -1,0 +1,4 @@
+go test fuzz v1
+string("")
+string("https://evil.example")
+string("example.com")
