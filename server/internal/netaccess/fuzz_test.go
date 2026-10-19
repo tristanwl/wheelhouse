@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // FuzzParseRange: a bypass or proxy range is canonical or refused.
@@ -286,7 +287,7 @@ func FuzzResolveRaw(f *testing.F) {
 // the header values.
 func appearsIn(a netip.Addr, values []string) bool {
 	for _, v := range values {
-		for _, tok := range strings.FieldsFunc(v, func(r rune) bool { return strings.ContainsRune(",;=\"[] ", r) }) {
+		for _, tok := range strings.FieldsFunc(v, func(r rune) bool { return strings.ContainsRune(",;=\"[]", r) || unicode.IsSpace(r) }) {
 			cands := []string{tok}
 			if i := strings.LastIndex(tok, ":"); i > 0 {
 				cands = append(cands, tok[:i])

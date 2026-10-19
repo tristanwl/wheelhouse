@@ -490,7 +490,7 @@ func FuzzHTTPSurface(f *testing.F) {
 		if status >= 500 && !strings.HasPrefix(res.Header.Get("Content-Type"), "application/json") {
 			t.Fatalf("%s: a %d that is not JSON", desc, status)
 		}
-		if elapsed > 8*time.Second {
+		if elapsed > 20*time.Second { // a connection test of an address that never answers takes its 12 s
 			t.Fatalf("%s: took %s", desc, elapsed)
 		}
 		if rec.Body.Len() > 16<<20 {

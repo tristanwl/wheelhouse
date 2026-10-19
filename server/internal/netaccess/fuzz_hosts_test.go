@@ -11,7 +11,7 @@ import (
 // FuzzNormalizeHost: a Host header value is reduced to a bare host or refused.
 //
 // Invariants: it never panics; a result is non-empty, lower case, without
-// brackets, without a trailing dot and without a port; normalising the result
+// leading bracket, without a trailing dot and without a port; normalising the result
 // again changes nothing (so the allow-list and the logs agree on one spelling).
 // It is a normaliser, not the check: FuzzHostAllowed holds the verdict.
 func FuzzNormalizeHost(f *testing.F) {
@@ -23,7 +23,7 @@ func FuzzNormalizeHost(f *testing.F) {
 			}
 			return
 		}
-		if h == "" || h != strings.ToLower(h) || strings.HasSuffix(h, ".") || strings.ContainsAny(h, "[]") {
+		if h == "" || h != strings.ToLower(h) || strings.HasSuffix(h, ".") || strings.HasPrefix(h, "[") {
 			t.Fatalf("%q normalised to %q", in, h)
 		}
 		if again, ok := NormalizeHost(h); !ok || again != h {

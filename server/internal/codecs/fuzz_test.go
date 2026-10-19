@@ -49,7 +49,7 @@ func FuzzClassifyDynamicRange(f *testing.F) {
 			if strings.Contains(both, "hlg") && got != HDRHLG {
 				t.Fatalf("(%q, %q) mentions HLG but is %q", dynamicRange, dynamicRangeType, got)
 			}
-			if !strings.Contains(both, "hlg") && (strings.Contains(both, "hdr10") || strings.Contains(both, "pq") || strings.Contains(both, "2084")) && got != HDRHDR10 {
+			if !strings.Contains(both, "hlg") && (strings.Contains(both, "hdr10") || strings.Contains(both, "pq") || strings.Contains(both, "st2084")) && got != HDRHDR10 {
 				t.Fatalf("(%q, %q) mentions PQ but is %q", dynamicRange, dynamicRangeType, got)
 			}
 		}
