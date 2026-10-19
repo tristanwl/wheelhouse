@@ -7,9 +7,12 @@ focused pull requests.
 ## Before you start
 
 - For anything bigger than a bug fix, open an issue first so we can agree on
-  the approach. The planned direction (swappable providers, auth, setup
-  wizard) is in [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md); work that
+  the approach. The direction (providers, accounts and admin pages, the road to
+  1.0.0) is in [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md) and
+  [docs/wheelhouse-phase2-plan.md](docs/wheelhouse-phase2-plan.md); work that
   fits it is easiest to merge.
+- Security problems are not issues: see [SECURITY.md](SECURITY.md) (private
+  vulnerability reporting).
 - Wheelhouse is a companion for the *arr stack. New *arr-family manager
   support is in scope; replacing Sonarr/Radarr is not.
 
@@ -39,6 +42,7 @@ cd web && npm ci && npm run typecheck && npm run lint && npm run format:check \
 # acceptance suite on the real binary (job "acceptance") and repository tooling (job "check")
 npm ci && make -C server build && npm run test:acceptance
 npm run typecheck && npm run format:check
+shellcheck acceptance/*.sh scripts/*.sh && scripts/check-pins.sh   # every action SHA-pinned, every base image digest-pinned
 
 # the image (job "docker")
 docker build -t wheelhouse:dev . && acceptance/docker-smoke.sh wheelhouse:dev
@@ -60,17 +64,30 @@ The tools for `make check` are installed separately, see
 - Match the surrounding code's style and comment density.
 - Don't add destructive actions (deletes, file rewrites) without an in-app
   confirm step.
-- Never commit API keys, tokens, `.env` or `.env.local`.
+- Never commit API keys, tokens, `.env` or `.env.local`, and keep real
+  hostnames, IPs and library titles out of code, docs, fixtures and tests (this
+  repository is public).
+- Pin new GitHub Actions by full commit SHA (with a `# vX.Y.Z` comment) and new
+  Docker base images by digest; `scripts/check-pins.sh` fails the `check` job
+  otherwise. Explain every new dependency in the PR.
 - Describe what you tested, and on what stack (OS, GPU, which services).
 
-## Sign your commits (DCO)
+## Sign your commits (DCO) and with a key
+
+`main` requires signed commits (GPG, SSH or S/MIME signatures that GitHub shows
+as "Verified"; `git commit -S`, or set `commit.gpgsign` to true), and every
+commit needs the DCO sign-off below. A pull request with unsigned commits
+cannot be merged. The settings that protect `main` and releases are listed in
+[docs/maintainer-settings.md](docs/maintainer-settings.md).
+
+### DCO sign-off
 
 We use the [Developer Certificate of Origin](https://developercertificate.org/)
 instead of a CLA. Certify that you wrote the change or have the right to
 submit it by adding a sign-off to each commit:
 
 ```sh
-git commit -s -m "Describe the change"
+git commit -s -S -m "Describe the change"
 ```
 
 This adds a `Signed-off-by: Your Name <you@example.com>` line.

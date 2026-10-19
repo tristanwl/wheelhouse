@@ -1,0 +1,3 @@
+# Justified exceptions to scripts/check-pins.sh, one per line:
+#     <file>: <exact reference>  # why this cannot be pinned
+# There are none: every action, image and base image is pinned.
