@@ -215,9 +215,8 @@ func TestRunAuditPruningRunsAtStartAndAgainLater(t *testing.T) {
 	waitFor(t, func() bool { return e.actions()["before-start"] == 0 }, "the first run at start")
 	e.row(100*day, "added-later")
 	waitFor(t, func() bool { return e.actions()["added-later"] == 0 }, "a later run")
-	if e.actions()["audit.prune"] < 2 {
-		t.Errorf("rows = %v", e.actions())
-	}
+	// The audit.prune entry is written just after the rows are deleted.
+	waitFor(t, func() bool { return e.actions()["audit.prune"] >= 2 }, "both prune entries")
 }
 
 func waitFor(t *testing.T, ok func() bool, what string) {
