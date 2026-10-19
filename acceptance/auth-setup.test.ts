@@ -1,7 +1,14 @@
+import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { ADMIN, startExpectingFailure, startServer, type RunningServer } from "./harness";
+import {
+  ADMIN,
+  runCommand,
+  startExpectingFailure,
+  startServer,
+  type RunningServer,
+} from "./harness";
 import { PAGES, ROUTE_LEVELS, sampleRequest } from "./routes";
 
 const json = (body: unknown) => ({
@@ -189,5 +196,56 @@ describe("a server that cannot start", () => {
     });
     expect(r.code).not.toContain("code 0");
     expect(r.output).toMatch(/does not exist/);
+  });
+});
+
+// docs/operations.md, "Key loss": the master key is not in backups. Without it
+// the server refuses to start (it never invents a new key for an old database),
+// `forget-secrets --yes` discards the stored provider credentials, and accounts
+// and sessions are untouched because they never depended on the key.
+describe("a master key that is lost", () => {
+  it("stops the server with a clear message, and forget-secrets lets it start with the accounts intact", async () => {
+    const first = await startServer({ keepConfig: true });
+    const dir = first.configDir;
+    const cookie = first.admin.cookie!;
+    const csrf = first.admin.csrf!;
+    await first.stop();
+
+    // What a restore without secret.key looks like: a different key.
+    writeFileSync(path.join(dir, "secret.key"), randomBytes(32), { mode: 0o600 });
+    try {
+      const failed = await startExpectingFailure({ configDir: dir });
+      expect(failed.code).not.toContain("code 0");
+      expect(failed.output).toMatch(/does not match this database/);
+      expect(failed.output).toContain("forget-secrets");
+      expect(failed.output).toContain("operations.md");
+
+      // Discarding secrets needs the explicit flag.
+      const bare = await runCommand(["forget-secrets"], { configDir: dir });
+      expect(bare.code).not.toBe(0);
+      expect(bare.stderr).toMatch(/usage/);
+      const done = await runCommand(["forget-secrets", "--yes"], { configDir: dir });
+      expect(done.code, done.stderr).toBe(0);
+      expect(done.stdout).toMatch(/Discarded \d+ stored secret/);
+
+      const second = await startServer({ auth: "existing", configDir: dir });
+      try {
+        expect((await second.admin.request("/api/status")).status).toBe(200);
+        // A session from before the loss still works: it never needed the key.
+        const old = await second.anon.request("/api/auth/session", {
+          headers: { cookie: `${cookie.name}=${cookie.value}`, "x-csrf-token": csrf },
+        });
+        expect(old.status).toBe(200);
+      } finally {
+        await second.stop();
+      }
+
+      // With a working key there is nothing to forget, and nothing is discarded.
+      const again = await runCommand(["forget-secrets", "--yes"], { configDir: dir });
+      expect(again.code).not.toBe(0);
+      expect(again.stderr).toMatch(/nothing to forget/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

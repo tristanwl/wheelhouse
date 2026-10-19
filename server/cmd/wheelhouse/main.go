@@ -6,6 +6,7 @@
 //	wheelhouse backup FILE   write a consistent copy of the database to FILE
 //	wheelhouse rekey         re-encrypt every stored secret under a new master key
 //	wheelhouse reset-password USER   set a one-time password for USER (recovery)
+//	wheelhouse forget-secrets --yes  discard stored credentials after the master key is lost
 package main
 
 import (
@@ -43,7 +44,7 @@ func main() {
 				os.Exit(1)
 			}
 			return
-		case "backup", "rekey", "reset-password":
+		case "backup", "rekey", "reset-password", "forget-secrets":
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			e := cliEnv{getenv: os.Getenv, configDir: config.ConfigDir(os.Getenv), stdout: os.Stdout}
 			var err error
@@ -52,6 +53,8 @@ func main() {
 				err = runBackup(ctx, e, os.Args[2:])
 			case "rekey":
 				err = runRekey(ctx, e, os.Args[2:])
+			case "forget-secrets":
+				err = runForgetSecrets(ctx, e, os.Args[2:])
 			default:
 				err = runResetPassword(ctx, e, os.Args[2:])
 			}
@@ -62,7 +65,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version | backup <file> | rekey | reset-password <user>]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version | backup <file> | rekey | reset-password <user> | forget-secrets --yes]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -130,6 +133,9 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("secret key: %w", err)
 	}
 	if _, err := db.UnlockSecrets(ctx, loaded, true); err != nil { // the Cipher is used from Phase 2 item 4 on
+		if errors.Is(err, store.ErrWrongKey) {
+			return fmt.Errorf("secret key: %w. Put the original key back (%s). If it is lost for good, `wheelhouse forget-secrets --yes` discards the stored provider credentials and keeps the accounts; see docs/operations.md, \"Key loss\"", err, loaded.Source)
+		}
 		return fmt.Errorf("secret key: %w", err)
 	}
 	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log})

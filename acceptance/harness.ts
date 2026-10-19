@@ -226,6 +226,52 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
+function serverEnv(
+  configDir: string,
+  extra: Record<string, string> | undefined,
+  port: number
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of PASS_THROUGH) {
+    const value = process.env[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return Object.assign(
+    env,
+    {
+      WHEELHOUSE_CONFIG_DIR: configDir,
+      WHEELHOUSE_DB: path.join(configDir, "wheelhouse.db"),
+    },
+    extra ?? {},
+    {
+      PORT: String(port),
+      WHEELHOUSE_LISTEN: `127.0.0.1:${port}`,
+      // What a container runtime sets. The server must not take its bind address from it.
+      HOSTNAME: "0123456789ab",
+    }
+  );
+}
+
+/** Runs `wheelhouse <args>` against a config directory and waits for it (no server involved). */
+export async function runCommand(
+  args: string[],
+  options: { configDir: string; env?: Record<string, string> }
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const env = serverEnv(options.configDir, options.env, await freePort());
+  const cmd = `exec ${SERVER_CMD} ${args.map(shellQuote).join(" ")}`;
+  const child = spawn("sh", ["-c", cmd], {
+    cwd: SERVER_CWD,
+    env: env as unknown as NodeJS.ProcessEnv,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout!.on("data", (c) => (stdout += c));
+  child.stderr!.on("data", (c) => (stderr += c));
+  const code = await new Promise<number | null>((resolve) => child.once("exit", resolve));
+  return { code, stdout, stderr };
+}
+
 interface Spawned {
   child: ChildProcess;
   env: Record<string, string>;
@@ -244,25 +290,7 @@ async function spawnServer(options: StartOptions): Promise<Spawned> {
   const configDir =
     options.configDir ??
     mkdtempSync(path.join(realpathSync(tmpdir()), "wheelhouse-acceptance-cfg-"));
-  const env: Record<string, string> = {};
-  for (const name of PASS_THROUGH) {
-    const value = process.env[name];
-    if (value !== undefined) env[name] = value;
-  }
-  Object.assign(
-    env,
-    {
-      WHEELHOUSE_CONFIG_DIR: configDir,
-      WHEELHOUSE_DB: path.join(configDir, "wheelhouse.db"),
-    },
-    options.env ?? {},
-    {
-      PORT: String(port),
-      WHEELHOUSE_LISTEN: `127.0.0.1:${port}`,
-      // What a container runtime sets. The server must not take its bind address from it.
-      HOSTNAME: "0123456789ab",
-    }
-  );
+  const env = serverEnv(configDir, options.env, port);
 
   let output = "";
   // `exec` replaces the shell with the command, so the PID we hold is the

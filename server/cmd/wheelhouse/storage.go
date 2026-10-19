@@ -137,3 +137,39 @@ func runRekey(ctx context.Context, e cliEnv, args []string) error {
 	_, _ = fmt.Fprintln(e.stdout, "Old backups need the old key.")
 	return nil
 }
+
+// runForgetSecrets implements `wheelhouse forget-secrets --yes`: the recovery
+// from a master key that is lost for good. The server refuses to start when the
+// key does not match the database (ErrWrongKey); the stored provider credentials
+// cannot be read by anyone, so this discards them and makes the key that is
+// configured now the database's key. Accounts and sessions are untouched. It
+// refuses when the configured key does work, so it cannot destroy readable
+// secrets, and without --yes.
+func runForgetSecrets(ctx context.Context, e cliEnv, args []string) error {
+	fs := flag.NewFlagSet("forget-secrets", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	yes := fs.Bool("yes", false, "confirm that the stored provider credentials are discarded")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || !*yes {
+		return errors.New("usage: wheelhouse forget-secrets --yes   (discards every stored provider API key and password; only for a master key that is lost for good, see docs/operations.md)")
+	}
+	path := e.dbPath()
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("no database at %s", path)
+	}
+	db, err := store.Open(ctx, path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	loaded, err := secrets.Load(secrets.LoadOptions{Getenv: e.getenv, ConfigDir: e.configDir, Generate: true})
+	if err != nil {
+		return err
+	}
+	_, n, err := db.ForgetSecrets(ctx, loaded.Key)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(e.stdout, "Discarded %d stored secret value(s). The key from %s is now this database's key.\n", n, loaded.Source)
+	_, _ = fmt.Fprintln(e.stdout, "Accounts and sessions were not touched. Enter the credentials of your services again in Wheelhouse, and keep a copy of the key somewhere safe.")
+	return nil
+}
