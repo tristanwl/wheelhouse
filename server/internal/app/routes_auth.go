@@ -177,7 +177,19 @@ func registerAuth(r *Router, d deps) {
 
 	handle("GET /api/auth/session", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		id := IdentityOf(req.Context())
-		writeJSON(w, http.StatusOK, sessionBody(id.User, id.CSRF, id.ExpiresAt, id.AbsoluteExpiresAt, id.SessionID))
+		if id.Bypass {
+			// No account, no session, no expiry: the client is inside the
+			// local-network bypass. The UI skips the login screen on "bypass": true
+			// and sends csrfToken on state changes.
+			writeJSON(w, http.StatusOK, map[string]any{
+				"bypass": true, "csrfToken": id.CSRF,
+				"user": map[string]any{"id": "", "username": id.Username, "role": string(id.Role), "disabled": false, "mustChangePassword": false},
+			})
+			return
+		}
+		body := sessionBody(id.User, id.CSRF, id.ExpiresAt, id.AbsoluteExpiresAt, id.SessionID)
+		body["bypass"] = false
+		writeJSON(w, http.StatusOK, body)
 	})
 
 	handle("POST /api/auth/password", Authenticated, func(w http.ResponseWriter, req *http.Request) {

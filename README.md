@@ -149,7 +149,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `WHEELHOUSE_CONFIG_DIR` | no | The config directory (default `/config`, which is what the image uses): database, master key, setup token, `settings.json`. Mainly for running outside a container |
 | `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated at first start. **Keep a copy: [docs/operations.md](docs/operations.md#key-loss)** |
 | `WHEELHOUSE_DENIED_NETWORKS` | no | Networks Wheelhouse refuses to connect to when it contacts your services (default: link-local and cloud-metadata addresses; `none` allows everything; private LAN ranges are always fine). Service URLs are trusted administrator input |
-| `WHEELHOUSE_TRUSTED_PROXIES` | no | Comma-separated addresses and CIDR ranges of reverse proxies whose `X-Forwarded-Proto` is believed (it makes the session cookie `Secure`). Default empty: no proxy is trusted |
+| `WHEELHOUSE_TRUSTED_PROXIES` | no | Comma-separated addresses and CIDR ranges of reverse proxies whose forwarded headers are believed (`X-Forwarded-Proto` makes the session cookie `Secure`; `X-Forwarded-For`, `Forwarded` and `X-Real-IP` give the client address, used by the audit log and the local-network bypass). Added to the proxies an admin stores in the database. Default empty: no proxy is trusted |
 
 The variable names are the same as in 0.1.x, so an existing `.env` keeps working.
 

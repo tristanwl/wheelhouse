@@ -50,6 +50,15 @@ type Entry struct {
 // counts, never passwords, tokens or request bodies.
 func (s *Service) auditTx(ctx context.Context, tx *sql.Tx, a Actor, action, target string, detail map[string]any) error {
 	d := []byte("{}")
+	if a.Via != "" {
+		merged := map[string]any{"via": a.Via}
+		for k, v := range detail {
+			if k != "via" {
+				merged[k] = v
+			}
+		}
+		detail = merged
+	}
 	if len(detail) > 0 {
 		if b, err := json.Marshal(detail); err == nil && len(b) <= 4000 {
 			d = b

@@ -64,8 +64,9 @@ key under `/config`.
 
 1. **Network to proxy.** Untrusted. TLS ends here (assumption T1).
 2. **Proxy to Wheelhouse.** Wheelhouse does not know whether a proxy exists. It
-   trusts forwarded headers only from an explicit trusted-proxy list (item 5);
-   today it reads none of them.
+   trusts forwarded headers only from an explicit trusted-proxy list
+   (`WHEELHOUSE_TRUSTED_PROXIES` plus the list an admin stores; see "What the
+   local-network bypass changes" below).
 3. **Wheelhouse to services.** The services are configured by the admin and
    *trusted to be what they are*, but their **responses are untrusted input**
    (A2).
@@ -120,7 +121,7 @@ risks), **out of scope**.
 | S1 | A1 uses the app with no identity at all | Authentication on every non-public route; the `Guard` (`internal/app/guard.go`); an enumerating test fails if a route has no decision, and the acceptance suite sends an unauthenticated request to every non-public route and expects 401 | **In place** (item 2; `TestEveryRouteHasAnAccessLevel`, `TestUnauthenticatedRequestsGet401OnEveryGuardedRoute`, `acceptance/auth-levels.test.ts`). Released 0.2.x: none |
 | S2 | A1 claims a fresh install before the admin does | Only the setup routes answer until an admin exists (503 `setup required` elsewhere); a one-time setup token (logged once, `/config/setup-token`, mode 0600, constant-time compare, throttled, removed on success, new at every start) is required; setup works only while no account exists, re-checked inside its transaction | **In place** on the server (item 2; `TestSetupNeedsTheTokenAndWorksOnce`, `TestSetupLosingTheRaceCreatesNothing`, `acceptance/auth-setup.test.ts`); the web setup page is item 3 / 6 |
 | S3 | A1 guesses or brute-forces a password | Argon2id (64 MiB, 3 passes) with at most 3 hashes at a time, minimum length 12, common-password list, per-account (5 failures, 30 s doubling to 15 min) and per-address (20) lockout kept in memory, identical responses for unknown users, wrong passwords, disabled accounts and locked logins | **In place** (item 2; `TestEveryFailedLoginLooksTheSameAndComputesAHash`, `TestAccountLockoutBacksOffAndLiftsAfterTheTime`, `acceptance/auth-throttle.test.ts`). The counters are not persisted; a restart clears them (accepted: only the operator restarts the server) |
-| S4 | A3 spoofs `X-Forwarded-For` to look like a local address and get the bypass | Bypass matches the TCP peer address; forwarded headers ignored unless the peer is in the trusted-proxy list; tests for spoofing | Item 5 |
+| S4 | A3 spoofs `X-Forwarded-For` to look like a local address and get the bypass | Bypass matches the TCP peer address; forwarded headers ignored unless the peer is in the trusted-proxy list, then only the right-most untrusted entry counts and malformed or contradictory values give "unknown" (no bypass); tests for spoofing, chains, IPv6, IPv4-mapped, zone ids and malformed values | **In place** (item 5; `server/internal/netaccess`, `TestSpoofedForwardedHeadersAreIgnoredFromUntrustedPeers`, `acceptance/auth-bypass.test.ts`) |
 | S5 | Session theft or fixation | 256-bit random tokens, only the SHA-256 stored, a new session at login and password change (a client-supplied token is never adopted), `HttpOnly`, `SameSite=Strict`, `Secure` and the `__Host-` name over HTTPS, idle 12 h and absolute 30 d limits, revocation (own and, for admins, anyone's); a stolen cookie works until it expires or is revoked | **In place** (item 2; `TestSessionCookieFlags`, `TestSessionsEndWhenIdleOrOld`, `TestPasswordChangeRotatesAndRevokes`, `acceptance/auth-sessions.test.ts`) |
 | S6 | A2 impersonates a configured service | TLS verification is always on, no insecure option (`TestHTTPClientVerifiesTLSCertificates`); plain-HTTP services on a LAN are the operator's choice and are not authenticated beyond their API key | In place; plain HTTP **accepted** |
 | S7 | A CSRF request makes a signed-in browser act | `SameSite=Strict` cookie; per-session CSRF token in `X-CSRF-Token` (derived from the cookie, not stored, not in a script-readable cookie) plus an `Origin`/`Sec-Fetch-Site` same-origin check on every state-changing request, login and setup included; `GET` never changes state; the JSON routes need `Content-Type: application/json`, which a cross-site form cannot send | **In place** (item 2; `TestEveryMutatingRouteRefusesMissingCSRFAndForeignOrigins`, `TestGETRoutesNeverChangeState`, `acceptance/auth-levels.test.ts`) |
@@ -137,13 +138,13 @@ risks), **out of scope**.
 | T-6 | A crash corrupts the database or leaves half a migration | WAL, `synchronous=FULL`, every migration batch in one transaction (`TestCrashMidTransactionLeavesNoTrace`, `TestMigrationsApplyInOrderAndAllOrNothing`) | **In place** (item 1) |
 | T-7 | Path traversal or a symlink escape makes conversion touch a file outside the media roots | The path is resolved (`..` refused, `EvalSymlinks`, regular file), must be inside a root, and the check repeats at job start and before the swap (`TestResolveInRoots`) | **In place** |
 | T-8 | A request body or header forged to reach ffmpeg arguments | Arguments come from validated enums and an absolute resolved path; `os/exec`, never a shell | **In place** (`internal/converter`) |
-| T-9 | A hostile `Host`/`Origin` or header trick | Only the TCP peer is used for the bypass (S4); the CSRF origin check (S7); `X-Forwarded-Proto` is believed only from a peer in `WHEELHOUSE_TRUSTED_PROXIES` and only decides the cookie's `Secure` flag; the recorded address is the TCP peer | Origin check and proxy list: **in place** (item 2; `TestSessionCookieFlags`); the bypass: item 5 |
+| T-9 | A hostile `Host`/`Origin` or header trick | Only the TCP peer is used for the bypass (S4); the CSRF origin check (S7); `X-Forwarded-Proto` is believed only from a peer in `WHEELHOUSE_TRUSTED_PROXIES` and only decides the cookie's `Secure` flag; the recorded address is the client address resolved by the same rules (the TCP peer unless a trusted proxy forwarded it) | **In place** (items 2 and 5; `TestSessionCookieFlags`, `netaccess` tests). DNS rebinding against a bypass client is not stopped by the origin check (Origin and Host both name the attacker's name); a Host allow-list is a candidate for item 10 |
 
 ### Repudiation
 
 | ID | Threat | Mitigation | Status |
 |---|---|---|---|
-| R1 | A destructive action cannot be traced to anyone | Append-only audit table: setup, logins, failures, lockouts, logouts, password changes and resets (also by the CLI), user and role changes, session revocations, library adds and deletes, conversions; acting user and address, never secrets; admins read it through `GET /api/audit`; the 180-day retention is not enforced yet (rows are kept) | **In place** (item 2; `TestAuditTrailHasNoSecretsAndCannotBeEdited`, `acceptance/auth-users.test.ts`); service changes and bypass use arrive with items 4 and 5; pruning with the settings that configure it |
+| R1 | A destructive action cannot be traced to anyone | Append-only audit table: setup, logins, failures, lockouts, logouts, password changes and resets (also by the CLI), user and role changes, session revocations, library adds and deletes, conversions; acting user and address, never secrets; admins read it through `GET /api/audit`; the 180-day retention is not enforced yet (rows are kept) | **In place** (item 2; `TestAuditTrailHasNoSecretsAndCannotBeEdited`, `acceptance/auth-users.test.ts`); bypass settings changes and, for the bypass principal, `via: bypass` plus the peer address on adds, deletes and conversions (item 5); service changes arrive with item 4; pruning with the settings that configure it |
 | R2 | An admin edits or deletes audit rows | Nothing in the app writes anything but inserts, and triggers refuse `UPDATE` and `DELETE` on the table; **not** protected against someone with the database file (T-3) | **In place** (item 2); limit **accepted** |
 
 ### Information disclosure
@@ -157,7 +158,7 @@ risks), **out of scope**.
 | I5 | The key or a plaintext leaks into a log, panic message, `%v` print or JSON | `secrets.Key` and `secrets.Secret` redact under every fmt verb, `slog` and JSON (`TestKeyNeverPrints`, `TestSecretsAndKeysRedact`); errors are static text; the access log omits queries, headers and bodies; panics answer a generic 500 (`TestRecoverHidesDetails`) | **In place** |
 | I6 | Anyone on the network reads library and status data | Same as S1 | **In place** (item 2) |
 | I7 | Secrets in the process environment are readable (`docker inspect`, `/proc/<pid>/environ`) | The environment source is the 0.2.x interface and stays supported; the admin page shows environment values as "from environment" and offers import into the database; operators can use a key file for the master key | **Accepted** for the environment path |
-| I8 | A user session reveals admin data | Role-gated routes (T-2); the local-network bypass never grants `admin` | Items 2 and 5 |
+| I8 | A user session reveals admin data | Role-gated routes (T-2); the local-network bypass never grants `admin` | **In place** (items 2 and 5) |
 | I9 | Browser-side leakage (referrers, framing, MIME sniffing, third-party images) | `Referrer-Policy: no-referrer`, `frame-ancestors 'none'`, `nosniff`, CSP with images only from `self`, `data:` and the two metadata hosts (`TestSecurityHeaders`, `TestCSPAllowsExactlyTheImageHosts`) | **In place** |
 | I10 | A backup is left world-readable | Backups are created `0600` and never overwrite (`TestBackupCopiesEverythingWithMode0600`, `TestBackupNeverOverwrites`); the database and key file are refused when group or world accessible | **In place** (item 1) |
 | I11 | Timing reveals whether a username exists | A password hash is computed for every login, against a dummy hash made at start when the name is unknown; the error text and status are identical; the audit log does not record unknown names | **In place** (item 2; `TestEveryFailedLoginLooksTheSameAndComputesAHash` counts hashes, the acceptance suite compares timings with a generous bound) |
@@ -182,7 +183,7 @@ risks), **out of scope**.
 |---|---|---|---|
 | E1 | A4 reaches an `admin` route | Role check by the `Guard`, read from the account on every request (a demotion is immediate); an enumerating test sends a `user` request to every admin route and expects 403 | **In place** (item 2; `acceptance/auth-levels.test.ts`) |
 | E2 | A4 or A3 sets their own role or creates an admin | User management is `admin` only; a role is never taken from a request field of the acting user; strict JSON refuses unknown fields | **In place** (item 2; `TestUserManagementAPI`) |
-| E3 | The bypass becomes admin | Capped at `user` in the code that builds the identity; the admin pages ask for the admin's login even from the local network; a test asserts it | Item 5 |
+| E3 | The bypass becomes admin | Capped at `user` in the code that builds the identity; the admin pages ask for the admin's login even from the local network; a test asserts it | **In place** (item 5; `TestBypassGrantsUserNeverAdmin`) |
 | E4 | SQL injection | Statements use bound parameters; the only dynamic SQL is table and column names from a fixed list validated against `^[a-z][a-z0-9_]*$`; the SQLite connection runs in defensive mode with `trusted_schema=OFF` | **In place** (item 1); each later query is reviewed in item 10 |
 | E5 | SSRF through provider URLs: an admin (or, before item 4, the operator) points a service at an internal address and uses Test connection as a scanner | Provider URLs must be `http`/`https` with a host and without credentials; responses are never echoed (only a redacted status). Blocking private ranges is **not** possible, because the services *are* on private addresses. Instance URLs are trusted administrator input. What is refused, at connect time and after DNS (so a rebinding name and a redirect are covered too), is link-local space and the cloud metadata addresses (`169.254.0.0/16`, `fe80::/10`, `fd00:ec2::254`), configurable with `WHEELHOUSE_DENIED_NETWORKS` (`none` to allow all; `TestHTTPClientRefusesMetadataAddresses`, `acceptance/config.test.ts`). Loopback and private ranges stay allowed | **Mitigated** (item 4), with a dedicated review in item 10 |
 | E6 | Code execution through a hostile media file (A7) in ffmpeg or ffprobe | Fixed argument shapes, no shell, no user-supplied filter strings; the container runs non-root, read-only, caps dropped. Memory-safety bugs in ffmpeg are not Wheelhouse's to fix but are the main reason T2 matters; keep the image's ffmpeg current | **Accepted** |
@@ -209,6 +210,51 @@ risks), **out of scope**.
   safety in the same way as hand-written Go. The alternative (cgo SQLite) is not
   safer and costs the static binary and easy arm64.
 
+## What the local-network bypass changes (item 5)
+
+Off by default. An administrator turns it on with a list of CIDR ranges
+(`PUT /api/admin/network`); the settings live in the database (table
+`network_settings`), so a restored backup restores them. What changes, exactly:
+
+- **Who is treated as signed in.** A request with no valid session whose client
+  address is inside a range becomes a synthetic `user` named `local-network`
+  (marked `Identity.Bypass`, no account, no session, no cookie, no throttling). It
+  can use every `authenticated` route, including library deletes and conversions
+  (item 5 of the residual risks). It can never reach `admin` routes (403), and the
+  routes that act on an account (logout, password change, own sessions) answer
+  401 so the UI asks for a real login. Login itself is unchanged: logging in from
+  inside a range yields a real session, and **a real session always wins** (an
+  administrator on the LAN is an administrator; a dead cookie falls back to the
+  bypass). Setup is never covered: 503 "setup required" applies to everyone.
+- **Which address counts.** The TCP peer. `X-Forwarded-For`, `Forwarded` and
+  `X-Real-IP` are read only when the peer is a trusted proxy (union of
+  `WHEELHOUSE_TRUSTED_PROXIES` and the stored list). Each chain is walked right
+  to left and the first entry that is not itself a trusted proxy is the client
+  (everything left of it is client-supplied). Several headers must agree; a
+  malformed value (bad address, zone id, `unknown`, an empty element, an
+  over-long chain) or a disagreement makes the client unknown and unknown matches
+  no range. IPv4-mapped IPv6 addresses are normalised to IPv4 before matching,
+  for the peer, the headers and the stored ranges.
+- **CSRF.** The bypass has no cookie, so the ambient authority is the browser's
+  network position: a hostile web page could make a LAN browser send state
+  changes. Defences: the same-origin check applies unchanged (a foreign `Origin`
+  or cross-site `Sec-Fetch-Site` is 403), and every state change must also carry
+  `X-CSRF-Token`, a stateless token (HMAC of the client address under a key made
+  at process start) that `GET /api/auth/session` returns to the bypass client. A
+  cross-origin page cannot read that response, so it cannot learn the token. It
+  changes when the server restarts or the client's address does; the UI refetches
+  it. A script that worked without credentials in 0.2.x must fetch the session
+  first and send the token. Limit: DNS rebinding makes the attacker's page
+  same-origin, so it can read the token (see T-9).
+- **Wide ranges.** Ranges that are not entirely inside private space (RFC 1918,
+  100.64/10, loopback, 169.254/16, fc00::/7, fe80::/10) are accepted with a
+  `warnings` entry that the admin page must show; `0.0.0.0/0` and `::/0` (and the
+  IPv4-mapped equivalent) are refused, as are more than 64 entries per list and
+  enabling with no ranges. Trusted-proxy ranges get the same warning.
+- **Audit.** Changes to the settings (`network.update`, by the admin) and every
+  add, delete and conversion by the bypass principal carry `via: bypass`, the
+  resolved client address, and the TCP `peer` when a proxy forwarded the request.
+
 ## Phase 2 items and the threats they close
 
 | Item | Closes |
@@ -217,7 +263,7 @@ risks), **out of scope**.
 | 2 Users, sessions, login, CSRF, `authorize`, audit (merged) | S1, S3, S5, S7, T-2, T-9 (origin), E1, E2, I6, I11, I12, R1, R2, D4, and the server side of S2 |
 | 3 First-run setup and recovery | The web side of S2 (setup page), the upgrade path for 0.2.x installs |
 | 4 Stored configuration | I2, I3 end to end, I7 import path |
-| 5 Local-network bypass | S4, E3, I8 |
+| 5 Local-network bypass (merged) | S4, E3, I8 |
 | 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary |
 | 8 Converter settings | T-7 for configurable roots, HDR handling, D6 persisted queue |
 | 9 Bugs and polish | arm64 image: no change to the model |

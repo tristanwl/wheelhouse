@@ -92,6 +92,20 @@ type Identity struct {
 	ExpiresAt time.Time
 	// AbsoluteExpiresAt is the hard limit.
 	AbsoluteExpiresAt time.Time
+	// Bypass marks the synthetic principal of the local-network bypass: no account,
+	// no session (SessionID is empty), role user. Code that needs a real login
+	// (password, sessions) must refuse it.
+	Bypass bool
+}
+
+// BypassUsername is the name shown for, and audited as, the bypass principal.
+const BypassUsername = "local-network"
+
+// BypassIdentity is who a request from inside the bypass ranges is: a signed-in
+// user with no account behind it. csrf is the stateless token the client sends
+// on state changes.
+func BypassIdentity(csrf string) *Identity {
+	return &Identity{User: User{Username: BypassUsername, Role: RoleUser}, CSRF: csrf, Bypass: true}
 }
 
 // Actor is who an audit entry is about: a signed-in account, or "cli" or
@@ -100,10 +114,19 @@ type Actor struct {
 	ID   string
 	Name string
 	Addr string
+	// Via is "bypass" when the local-network bypass acted; it is recorded in the
+	// entry's detail.
+	Via string
 }
 
 // Actor returns the identity as an audit actor.
-func (i *Identity) Actor(addr string) Actor { return Actor{ID: i.ID, Name: i.Username, Addr: addr} }
+func (i *Identity) Actor(addr string) Actor {
+	a := Actor{ID: i.ID, Name: i.Username, Addr: addr}
+	if i.Bypass {
+		a.Via = "bypass"
+	}
+	return a
+}
 
 // ClientMeta is what is recorded about the client of a login.
 type ClientMeta struct {

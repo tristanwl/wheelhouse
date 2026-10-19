@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -83,6 +84,17 @@ func (d deps) audit(r *http.Request, action, target string, detail map[string]an
 	a := auth.Actor{Name: "system", Addr: clientAddr(r)}
 	if id := IdentityOf(r.Context()); id != nil {
 		a = id.Actor(clientAddr(r))
+		if id.Bypass {
+			// Who the bypass principal really was: the TCP peer, which differs from
+			// the address when a trusted proxy forwarded the request.
+			detail = maps.Clone(detail)
+			if detail == nil {
+				detail = map[string]any{}
+			}
+			if c := ClientOf(r.Context()); c.Peer.IsValid() {
+				detail["peer"] = c.Peer.String()
+			}
+		}
 	}
 	if d.auth != nil {
 		d.auth.Record(r.Context(), a, action, target, detail)

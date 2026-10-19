@@ -15,6 +15,7 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/features"
 	"github.com/tristanwl/wheelhouse/server/internal/instances"
 	"github.com/tristanwl/wheelhouse/server/internal/middleware"
+	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/ui"
@@ -49,8 +50,11 @@ type Options struct {
 	// (tests of the routes themselves) every route that is not public answers
 	// 503, so nothing is ever served unprotected.
 	Auth *auth.Service
-	// TrustedProxies are the proxies whose X-Forwarded-Proto is believed when
-	// deciding whether the session cookie is Secure (WHEELHOUSE_TRUSTED_PROXIES).
+	// Network holds the bypass and trusted-proxy settings. Without one (tests) the
+	// bypass is off and cannot be turned on through the API's storage.
+	Network *netaccess.Service
+	// TrustedProxies are the proxies from WHEELHOUSE_TRUSTED_PROXIES; used to
+	// build an in-memory Network when none is given.
 	TrustedProxies []netip.Prefix
 }
 
@@ -72,6 +76,7 @@ type deps struct {
 	// that build an app without accounts.
 	auth  *auth.Service
 	guard *Guard
+	net   *netaccess.Service
 	// cfg is the stored configuration; nil in tests that build an app without it.
 	cfg *instances.Source
 }
@@ -125,14 +130,18 @@ func Routes(o Options) *Router {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	guard := &Guard{Auth: o.Auth, TrustedProxies: o.TrustedProxies}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard, cfg: o.Config}
+	if o.Network == nil {
+		o.Network = netaccess.NewMemory(o.TrustedProxies)
+	}
+	guard := NewGuard(o.Auth, o.Network)
+	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard, cfg: o.Config}
 
 	r := NewRouter(guard)
 	r.wrap = d.featureGate
 	registerCore(r, d)
 	registerAuth(r, d)
 	registerUsers(r, d)
+	registerNetwork(r, d)
 	registerConfig(r, d)
 	registerStack(r, d)
 	registerCodecs(r, d)

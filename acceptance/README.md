@@ -109,7 +109,7 @@ responses"). The suite imports nothing from `server/` or `web/`.
 | `TMDB_API_KEY`, `TMDB_BASE_URL` | TMDB; `TMDB_BASE_URL` is the API root including `/3` (default `https://api.themoviedb.org/3`) |
 | `WHEELHOUSE_MEDIA_ROOTS` | the folders conversion may touch (the hard-link scenario points it at a scratch directory) |
 | `WHEELHOUSE_CONFIG_DIR`, `WHEELHOUSE_DB` | the config directory (database, master key, setup token) and database file; one empty directory per server |
-| `WHEELHOUSE_TRUSTED_PROXIES` | set by the cookie scenarios (the harness connects from `127.0.0.1`) |
+| `WHEELHOUSE_TRUSTED_PROXIES` | set by the cookie scenarios and `auth-bypass.test.ts` (the harness connects from `127.0.0.1`, which is also how the bypass scenarios make a request "come from" a range: they store `127.0.0.1/32`, or a range that excludes it, with `PUT /api/admin/network`) |
 
 ## Files and what they guarantee
 

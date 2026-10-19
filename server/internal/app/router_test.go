@@ -78,6 +78,8 @@ var wantLevels = map[string]Level{
 	"POST /api/admin/instances/{id}/import": Admin,
 	"GET /api/admin/features":               Admin,
 	"PUT /api/admin/features":               Admin,
+	"GET /api/admin/network":                Admin,
+	"PUT /api/admin/network":                Admin,
 }
 
 // Every route the app registers has an explicit, valid access level. This is
