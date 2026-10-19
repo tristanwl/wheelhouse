@@ -573,8 +573,8 @@ Server settings: `PORT` (3000; 3050 in the image), `WHEELHOUSE_LISTEN`
 `WHEELHOUSE_CONFIG_DIR` (`/config`), `WHEELHOUSE_DB` (default
 `/config/wheelhouse.db`), `WHEELHOUSE_SECRET_KEY_FILE` / `WHEELHOUSE_SECRET_KEY`
 (the master key; otherwise `/config/secret.key` is generated at the first start)
-and `WHEELHOUSE_TRUSTED_PROXIES` (reverse proxies whose `X-Forwarded-Proto` is
-believed; default none). The server keeps its state in `/config`: the database,
+and `WHEELHOUSE_TRUSTED_PROXIES` (reverse proxies whose forwarded headers are
+believed, together with the list stored in the database; default none). The server keeps its state in `/config`: the database,
 the key, `settings.json` and, until the first account exists, `setup-token`.
 
 ### Accounts and sessions
@@ -623,6 +623,18 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   `GET /api/auth/session`, never set in a script-readable cookie. A request with
   neither `Origin` nor `Sec-Fetch-Site` is a non-browser client and still needs
   the token. `GET` never changes state (a test walks the router).
+- **Local-network bypass** (`internal/netaccess`, table `network_settings`,
+  `GET/PUT /api/admin/network`). The guard resolves the client address once per
+  request (`netaccess.Service.Resolve`: the TCP peer, or, for a trusted proxy,
+  the right-most untrusted forwarded address; unknown when headers are malformed
+  or disagree) and keeps it in the request context for the audit log and
+  throttling. With the bypass on, a request that has no valid session and whose
+  client address is inside a range is `auth.BypassIdentity`: role `user`, no
+  session, `Bypass: true`, CSRF token = HMAC of the address under a per-process
+  key, returned by `GET /api/auth/session` (`"bypass": true`). It is refused
+  (401) on logout, password change and the session routes, 403 on admin routes;
+  a real session always wins. The settings are cached in memory and replaced on
+  each update, so a request never reads the database for them.
 - **Login throttling.** In memory (a failed login causes no database write, a
   restart is the only thing that forgets it, and the locks are short): the first 4
   failures for a name are free, the 5th locks it for 30 s and each further failure

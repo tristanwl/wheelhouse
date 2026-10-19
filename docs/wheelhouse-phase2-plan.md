@@ -94,8 +94,8 @@ done; this is the road from 0.2.x to 1.0.0.
   They cannot see or change configuration, users or secrets. Only the `admin`
   role gates configuration.
 - The match uses the TCP peer address. Forwarded headers are ignored unless the
-  peer is in an explicit trusted-proxy list, and only then is the left-most
-  untrusted entry used.
+  peer is in an explicit trusted-proxy list, and only then is the right-most
+  entry that is not itself a trusted proxy used (right to left walk).
 - The bypass never grants `admin`. Opening the admin pages from the local network
   asks for the admin's login; everything else stays login-free.
 - Setup itself is never covered by the bypass; it needs the setup token.
@@ -146,7 +146,7 @@ without a release; the release after item 6 is 0.3.0.
 | 2 | Users, sessions and login (done) | Argon2id, session store, CSRF, throttling, `authorize` middleware enforcing levels, audit log; acceptance suite gets an authenticated mode (setup then login helper; no server backdoor) |
 | 3 | First-run setup and recovery | the setup token flow, 503 until set up and `reset-password` landed with item 2; left: the setup wizard routes' polish (wizard steps, import of environment services), the upgrade path for 0.2.x installs in the UI |
 | 4 | Stored configuration | `DatabaseConfigSource`, environment seed and import, instance CRUD and test-connection routes, feature toggles, runtime reload |
-| 5 | Local-network bypass | CIDRs, trusted proxies, role cap, tests for header spoofing |
+| 5 | Local-network bypass (done) | CIDRs, trusted proxies, role cap, tests for header spoofing; `GET/PUT /api/admin/network`, migration 0004. Decided: the client is the right-most address that is not a trusted proxy (the "left-most untrusted" wording above was wrong: that is the spoofable end); bypass requests keep the same-origin check and carry a stateless CSRF token from `GET /api/auth/session` |
 | 6 | Web: login, setup wizard, account, route guards | session handling, CSRF header, 401 handling, user menu |
 | 7 | Web: admin pages | services (add provider from JSON Schema forms, test, import from environment), users, sessions, features, settings, audit |
 | 8 | Converter settings and fixes | media roots from the database (#31), HDR and Dolby Vision excluded by default with an explicit override (#32), queue persisted in SQLite with a documented recovery policy for interrupted jobs (#33), job owner recorded |

@@ -48,7 +48,7 @@ answers a generic 500 and never logs the panic value.
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
 | `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
 | `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
-| `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose `X-Forwarded-Proto: https` makes the session cookie `Secure` (default none; an unparsable entry is fatal) |
+| `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose forwarded headers are believed: `X-Forwarded-Proto: https` makes the session cookie `Secure`, `X-Forwarded-For`/`Forwarded`/`X-Real-IP` give the client address (right-most untrusted entry). Added to the trusted proxies stored via `PUT /api/admin/network` (default none; an unparsable entry is fatal) |
 | `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
 | `WHEELHOUSE_SECRET_KEY` | | The master key, base64 of 32 bytes; second choice |
 
