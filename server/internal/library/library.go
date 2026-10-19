@@ -96,15 +96,35 @@ type StorageEntry struct {
 	LibraryUsedBytes int64  `json:"libraryUsedBytes"`
 }
 
-// StorageResponse is the body of GET /api/storage.
+// Unplaced is the library an instance holds outside every root folder it
+// reports (a path mapping that differs between the instance and the folder it
+// lists, or a root folder that was removed). Such bytes cannot be attributed to
+// a disk, so they are not added to any root's libraryUsedBytes; they are listed
+// here so the figures can be explained.
+type Unplaced struct {
+	InstanceID string `json:"instanceId"`
+	Label      string `json:"label"`
+	Items      int    `json:"items"`
+	Bytes      int64  `json:"bytes"`
+}
+
+// StorageResponse is the body of GET /api/storage. Unplaced is left out unless an
+// instance has items outside its reported root folders.
 type StorageResponse struct {
 	Entries   []StorageEntry `json:"entries"`
+	Unplaced  []Unplaced     `json:"unplaced,omitempty"`
 	Instances []mm.Summary   `json:"instances"`
 }
 
 type rootUse struct {
 	root mm.RootFolder
 	used int64
+}
+
+type instanceUse struct {
+	roots         []rootUse
+	unplacedItems int
+	unplacedBytes int64
 }
 
 type sized struct {
@@ -120,10 +140,11 @@ func isWithin(root, itemPath string) bool {
 
 // Storage reports free space and library size per root folder. An item counts
 // toward the deepest root folder that contains it. An item without its own path
-// is placed by its root folder path.
+// is placed by its root folder path. An item inside no root folder counts toward
+// none of them (it cannot be tied to a disk) and is reported under Unplaced.
 func Storage(ctx context.Context, entries []mm.Entry) StorageResponse {
 	results, problems := mm.CollectFromManagers(ctx, entries,
-		func(ctx context.Context, client mm.Manager, _ mm.Entry) ([]rootUse, error) {
+		func(ctx context.Context, client mm.Manager, _ mm.Entry) (instanceUse, error) {
 			var (
 				roots    []mm.RootFolder
 				items    []sized
@@ -143,11 +164,12 @@ func Storage(ctx context.Context, entries []mm.Entry) StorageResponse {
 			roots, rootsErr = client.RootFolders(ctx)
 			<-done
 			if rootsErr != nil {
-				return nil, rootsErr
+				return instanceUse{}, rootsErr
 			}
 			if itemsErr != nil {
-				return nil, itemsErr
+				return instanceUse{}, itemsErr
 			}
+			var use instanceUse
 
 			used := make(map[string]int64, len(roots))
 			for _, item := range items {
@@ -160,13 +182,16 @@ func Storage(ctx context.Context, entries []mm.Entry) StorageResponse {
 				}
 				if owner != nil {
 					used[owner.Path] += item.size
+				} else {
+					use.unplacedItems++
+					use.unplacedBytes += item.size
 				}
 			}
-			out := make([]rootUse, len(roots))
+			use.roots = make([]rootUse, len(roots))
 			for i, r := range roots {
-				out[i] = rootUse{root: r, used: used[r.Path]}
+				use.roots[i] = rootUse{root: r, used: used[r.Path]}
 			}
-			return out, nil
+			return use, nil
 		})
 
 	perKind := map[mm.Kind]int{}
@@ -174,12 +199,16 @@ func Storage(ctx context.Context, entries []mm.Entry) StorageResponse {
 		perKind[e.Kind]++
 	}
 	storage := []StorageEntry{}
+	var unplaced []Unplaced
 	for _, r := range results {
 		label := mm.KindLabel[r.Entry.Kind]
 		if perKind[r.Entry.Kind] > 1 {
 			label = r.Entry.Name // the name tells instances of one kind apart
 		}
-		for _, v := range r.Value {
+		if r.Value.unplacedItems > 0 {
+			unplaced = append(unplaced, Unplaced{InstanceID: r.Entry.InstanceID, Label: label, Items: r.Value.unplacedItems, Bytes: r.Value.unplacedBytes})
+		}
+		for _, v := range r.Value.roots {
 			storage = append(storage, StorageEntry{
 				InstanceID:       r.Entry.InstanceID,
 				Label:            label,
@@ -189,7 +218,7 @@ func Storage(ctx context.Context, entries []mm.Entry) StorageResponse {
 			})
 		}
 	}
-	return StorageResponse{Entries: storage, Instances: mm.Summarize(entries, problems)}
+	return StorageResponse{Entries: storage, Unplaced: unplaced, Instances: mm.Summarize(entries, problems)}
 }
 
 func listSized(ctx context.Context, client mm.Manager) ([]sized, error) {
@@ -311,6 +340,9 @@ type Meta struct {
 	InstanceName    string    `json:"instanceName"`
 	QualityProfiles []Profile `json:"qualityProfiles"`
 	RootFolderPath  *string   `json:"rootFolderPath"`
+	// Instances are the ready instances of this kind: the choices of an
+	// instance picker (more than one means the user should choose).
+	Instances []mm.Ref `json:"instances"`
 }
 
 // Profile is a quality profile.

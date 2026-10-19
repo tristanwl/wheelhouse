@@ -330,7 +330,11 @@ describe.skipIf(inContainer)("a restart mid-conversion (fake ffmpeg)", () => {
           (await first.request(`/api/codec-analysis/convert/${ids[0]}`)).json.status === "running"
       );
       // The slow fake wrote partial output next to the original.
-      expect(readdirSync(root).some((n) => n.startsWith(".wheelhouse-convert-"))).toBe(true);
+      // ("running" is reported a moment before the fake's first write lands.)
+      await waitFor(
+        async () => readdirSync(root).some((n) => n.startsWith(".wheelhouse-convert-")),
+        "partial output"
+      );
       await first.stop();
 
       tools.set("ok");

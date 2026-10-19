@@ -155,6 +155,11 @@ describe("full stack with healthy fakes", () => {
       // Codecs also needs ffmpeg on the machine running the server.
       const codecs = byId.get("codecs")!;
       expect(codecs.available).toBe(codecs.missing.length === 0);
+      // The encoder list agrees: without ffmpeg nothing (software included) is available.
+      const { encoders } = await get("/api/codec-analysis/encoders");
+      if (!codecs.available) {
+        for (const e of encoders) expect(e.available, e.label).toBe(false);
+      }
     });
   });
 
@@ -262,6 +267,19 @@ describe("full stack with healthy fakes", () => {
         .map((e: { label: string }) => e.label);
       expect(new Set(labels).size).toBe(2);
     });
+
+    it("explains library outside the reported root folders instead of hiding it", async () => {
+      // The shared fixtures keep radarr-4k's movies under /movies-4k but its root folder
+      // is /movies: nothing can be tied to that disk, so its libraryUsedBytes is 0 and the
+      // bytes are listed as "unplaced" (never added to another root).
+      const body = await get("/api/storage");
+      const fourK = body.entries.find((e: { instanceId: string }) => e.instanceId === "radarr-4k");
+      expect(fourK.libraryUsedBytes).toBe(0);
+      expect(body.unplaced).toHaveLength(1);
+      expect(body.unplaced[0]).toMatchObject({ instanceId: "radarr-4k", label: "Radarr 4K" });
+      expect(body.unplaced[0].items).toBeGreaterThan(0);
+      expect(body.unplaced[0].bytes).toBeGreaterThan(0);
+    });
   });
 
   describe("explore", () => {
@@ -279,6 +297,12 @@ describe("full stack with healthy fakes", () => {
           true,
           false,
         ]);
+        // ...and says which instance has it.
+        expect(
+          body.results.map((r: { libraryInstances: { instanceId: string }[] }) =>
+            r.libraryInstances.map((i) => i.instanceId)
+          )
+        ).toEqual([["radarr"], ["radarr-4k"], []]);
         for (const r of body.results) {
           expect(r.title).toBeTypeOf("string");
           expect(r.year).toBe(2024);
@@ -296,6 +320,9 @@ describe("full stack with healthy fakes", () => {
     it("gives a movie's detail", async () => {
       const d = await get(`/api/explore/${IN_RADARR_4K}`);
       expect(d).toMatchObject({ id: IN_RADARR_4K, alreadyAdded: true, year: 2024 });
+      expect(d.libraryInstances.map((i: { instanceId: string }) => i.instanceId)).toEqual([
+        "radarr-4k",
+      ]);
       expect(d.genres).toEqual(["Drama"]);
       expect(d.runtime).toBe(100);
       expect(d.trailerKey).toBeNull();
@@ -344,6 +371,10 @@ describe("full stack with healthy fakes", () => {
           expect(p.name).toBeTypeOf("string");
         }
         expect(meta.rootFolderPath).toMatch(/^\//);
+        // The picker's choices: every ready instance of that kind.
+        const kind = meta.instanceId.startsWith("radarr") ? "radarr" : "sonarr";
+        const ids = meta.instances.map((i: { instanceId: string }) => i.instanceId);
+        expect(ids, path).toEqual(kind === "radarr" ? ["radarr", "radarr-4k"] : ["sonarr"]);
       }
       await get("/api/add-meta?instanceId=nope", 404);
     });

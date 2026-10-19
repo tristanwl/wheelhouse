@@ -406,7 +406,7 @@ func TestConvertEndToEnd(t *testing.T) {
 	if _, list, _ := c.do("GET", "/api/codec-analysis/convert", ""); len(list["jobs"].([]any)) != 1 {
 		t.Errorf("%v", list)
 	}
-	if code, body, _ := c.do("POST", "/api/codec-analysis/convert/"+id+"/cancel", ""); code != 400 || body["error"] != "job not found or not cancelable" {
+	if code, body, _ := c.do("POST", "/api/codec-analysis/convert/"+id+"/cancel", ""); code != 400 || body["error"] != "job is not cancelable" {
 		t.Errorf("%d %v", code, body)
 	}
 }
@@ -443,7 +443,7 @@ func TestConvertCancelAndUnknownJobs(t *testing.T) {
 			t.Errorf("%s: %d %v", p, code, body)
 		}
 	}
-	if code, body, _ := c.do("POST", "/api/codec-analysis/convert/nope/cancel", ""); code != 400 || body["error"] == nil {
+	if code, body, _ := c.do("POST", "/api/codec-analysis/convert/nope/cancel", ""); code != 404 || body["error"] != "job not found" {
 		t.Errorf("%d %v", code, body)
 	}
 }
@@ -475,6 +475,23 @@ func TestCodecRoutesDoNotLeakConfiguredSecrets(t *testing.T) {
 		c.h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
 		if strings.Contains(rec.Body.String(), canary) || strings.Contains(fmt.Sprint(rec.Header()), canary) {
 			t.Errorf("%s leaks the key", p)
+		}
+	}
+}
+
+// With no working ffmpeg nothing can be encoded, so no encoder is offered
+// (software included): the same answer /api/features gives for Codecs.
+func TestEncodersWithoutFfmpegOffersNone(t *testing.T) {
+	c := newCodecEnv(t, env{}, "exit 127")
+	code, body, raw := c.do("GET", "/api/codec-analysis/encoders", "")
+	encoders, _ := body["encoders"].([]any)
+	if code != 200 || len(encoders) != 6 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	for _, e := range encoders {
+		m := e.(map[string]any)
+		if m["available"] != false || m["reason"] == nil {
+			t.Errorf("no encoder may be available without ffmpeg: %v", m)
 		}
 	}
 }

@@ -132,7 +132,7 @@ database and key at start; users, Argon2id passwords, sessions, CSRF, login
 throttling, the `Guard` that enforces the route levels, the audit log, a minimal
 `POST /api/auth/setup` with the setup token, the user and audit API, `wheelhouse
 reset-password` and `forget-secrets`, [docs/operations.md](operations.md), and an
-authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Item 6 (web login, setup wizard, account, route guards): the UI has its own session handling and the browser smoke test drives the real login and setup flows. **Item 8 is done:** media roots and the HDR switch in the database (`GET/PUT /api/admin/converter`, migration 0005), HDR and Dolby Vision excluded by default with a server-enforced acknowledgement, and the conversion queue persisted in SQLite with the recovery policy in [operations.md](operations.md#media-roots-hdr-and-the-conversion-queue); the admin settings page is item 7. Items 3 and 7 to 10 (except 8) are open.
+authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Item 6 (web login, setup wizard, account, route guards): the UI has its own session handling and the browser smoke test drives the real login and setup flows. **Item 8 is done:** media roots and the HDR switch in the database (`GET/PUT /api/admin/converter`, migration 0005), HDR and Dolby Vision excluded by default with a server-enforced acknowledgement, and the conversion queue persisted in SQLite with the recovery policy in [operations.md](operations.md#media-roots-hdr-and-the-conversion-queue); the admin settings page is item 7. **Item 9 (bugs and polish) is done:** the acceptance harness start race, the Explore instance picker (#30), the API inconsistencies of #42 and the multi-arch image (#14). Items 3, 7 and 10 are open.
 
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`
@@ -148,7 +148,7 @@ without a release; the release after item 6 is 0.3.0.
 | 6 | Web: login, setup wizard, account, route guards | session handling, CSRF header, 401 handling, user menu |
 | 7 | Web: admin pages | services (add provider from JSON Schema forms, test, import from environment), users, sessions, features, settings, audit |
 | 8 | Converter settings and fixes | media roots from the database (#31), HDR and Dolby Vision excluded by default with an explicit override (#32), queue persisted in SQLite with a documented recovery policy for interrupted jobs (#33), job owner recorded |
-| 9 | Bugs and polish | Explore instance picker (#30), API inconsistencies (#42), arm64 image (#14: buildx with QEMU in the release workflow, drivers per architecture) |
+| 9 | Bugs and polish (done) | Explore instance picker (#30), API inconsistencies (#42), arm64 image (#14: buildx with QEMU in the release workflow, drivers per architecture) |
 | 10 | Security review and release candidate | independent adversarial reviews (auth, injection, path handling, SSRF through provider URLs, header handling), fuzz tests on parsers, dependency audit, full `govulncheck`/`npm audit`, update `SECURITY.md`, final docs |
 
 Releases: **0.3.0** after item 8 (feature complete behind auth), **1.0.0-rc.1**

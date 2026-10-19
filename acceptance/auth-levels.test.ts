@@ -152,7 +152,7 @@ describe("route levels, enforced", () => {
       method: "POST",
       headers: { origin: server.baseUrl, "sec-fetch-site": "same-origin" },
     });
-    expect(post.status).toBe(400); // past the guard: the job does not exist
+    expect(post.status).toBe(404); // past the guard: the job does not exist
   });
 
   it("never changes state on a GET, whoever asks", async () => {

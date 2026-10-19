@@ -218,16 +218,27 @@ func finish(o EncoderOption, code int, stderr string) EncoderOption {
 	return o
 }
 
-func software(f Family) EncoderOption {
-	label := "Software (x265)"
+// probeSoftware confirms the software encoder with a real one-second encode as
+// well: without ffmpeg (or with a build that lacks libx264 or libx265) it is
+// not available, which keeps this list consistent with /api/features marking
+// Codecs unavailable when ffmpeg is missing.
+func (d *Detector) probeSoftware(ctx context.Context, f Family) EncoderOption {
+	label, enc := "Software (x265)", "libx265"
 	if f == FamilyH264 {
-		label = "Software (x264)"
+		label, enc = "Software (x264)", "libx264"
 	}
-	return EncoderOption{Backend: BackendSoftware, Family: f, Label: label, Available: true}
+	o := EncoderOption{Backend: BackendSoftware, Family: f, Label: label}
+	code, stderr := run(ctx, d.ffmpeg(), []string{
+		"-y", "-hide_banner",
+		"-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=5",
+		"-c:v", enc, "-preset", "ultrafast",
+		"-f", "null", "-",
+	})
+	return finish(o, code, stderr)
 }
 
 // Detect returns the encoders in a fixed order: software first, then VAAPI and
-// NVENC for each family. The first call probes; later calls return the cached
+// NVENC for each family. Every entry is confirmed by a real probe. The first call probes; later calls return the cached
 // result. The probes are not tied to ctx, so a client that gives up does not
 // cache a half-finished result; it only stops waiting.
 func (d *Detector) Detect(ctx context.Context) []EncoderOption {
@@ -235,14 +246,16 @@ func (d *Detector) Detect(ctx context.Context) []EncoderOption {
 		bg := context.WithoutCancel(ctx)
 		families := []Family{FamilyH264, FamilyHEVC}
 		hw := make([]EncoderOption, 4)
+		sw := make([]EncoderOption, 2)
 		var wg sync.WaitGroup
 		for i, f := range families {
+			wg.Go(func() { sw[i] = d.probeSoftware(bg, f) })
 			wg.Go(func() { hw[i] = d.probeVAAPI(bg, f) })
 			wg.Go(func() { hw[2+i] = d.probeNVENC(bg, f) })
 		}
 		wg.Wait()
 		// Same order as the Next app: vaapi h264, vaapi hevc, nvenc h264, nvenc hevc.
-		d.result = append([]EncoderOption{software(FamilyH264), software(FamilyHEVC)}, hw...)
+		d.result = append(sw, hw...)
 	})
 	return d.result
 }

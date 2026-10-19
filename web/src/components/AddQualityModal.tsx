@@ -8,6 +8,8 @@ interface AddQualityModalProps {
   qualityProfiles: QualityProfile[];
   busy?: boolean;
   error?: string | null;
+  /** Name of the instance being added to; shown only when the user has a choice. */
+  target?: string | null;
   onConfirm: (qualityProfileId: number) => void;
   onCancel: () => void;
 }
@@ -18,6 +20,7 @@ export function AddQualityModal({
   qualityProfiles,
   busy,
   error,
+  target,
   onConfirm,
   onCancel,
 }: AddQualityModalProps) {
@@ -48,6 +51,7 @@ export function AddQualityModal({
           <ModalCloseButton onClose={onCancel} className="-mr-1 -mt-1 shrink-0" />
         </div>
 
+        {target && <p className="mb-3 text-xs text-slate-400">Adding to {target}</p>}
         <label className="mb-1 block text-xs text-slate-400">Quality</label>
         <select
           value={qualityProfileId ?? ""}

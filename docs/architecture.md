@@ -194,6 +194,16 @@ Radarr 4K), the search covers all of them and each hit is one instance's
 answer, labeled with the instance name; Add posts to that instance, and its
 quality profiles and root folder load when you click it.
 
+With more than one ready movie instance, the Explore pages (`ExplorePage.tsx`,
+`ExploreCategoryPage.tsx`) show an "Add to" picker (`InstancePicker.tsx`, hidden
+with one instance). `useAddMeta` loads `GET /api/add-meta?kind=movies` (the
+first instance that answers, plus the list of every ready one in `instances`)
+and, when the user picks another, `?instanceId=`; the add dialog says which
+instance it adds to, and `POST /api/add` carries that `instanceId`. The "In
+library" badge names the instances that have the movie (`libraryInstances` in
+the Explore answers); a movie that is only in another instance keeps its Add
+button, with a note saying where it is (`web/src/lib/explore-library.ts`).
+
 Quality profile is **not** an always-visible control. Clicking Add (here, on
 Explore, or in the TMDB detail card) opens `AddQualityModal.tsx`, a small
 confirm dialog (poster, title, a "Quality" select, Cancel/Add), and the actual
@@ -341,9 +351,11 @@ anyway".
 
 **Hardware encoding.** `converter.Detector` decides, per (backend, family)
 pair, whether this box can really hardware-encode: VAAPI-H.264, VAAPI-HEVC,
-NVENC-H.264 and NVENC-HEVC are probed independently (software is always
-available for both families) and returned by `GET
-/api/codec-analysis/encoders`. Nothing is inferred from device presence or
+NVENC-H.264 and NVENC-HEVC are probed independently, and so are the software
+encoders (libx264 and libx265), and the six results are returned by `GET
+/api/codec-analysis/encoders`. Without a working ffmpeg nothing is available,
+software included, which agrees with `/api/features` marking Codecs unavailable.
+Nothing is inferred from device presence or
 `ffmpeg -encoders`, since both can be true while the path is broken (missing
 driver, permissions, GPU too old). Each is confirmed with a real 1-second
 throwaway encode, cached for the process's lifetime. The modal lists the
@@ -463,13 +475,18 @@ left alone.
   overlays the still-active history entries onto the matching queue slot by
   `nzo_id` (`state: "postprocessing"`, phase in `stateDetail`). It is an
   enrichment of the queue list, never a second list, so nothing is counted twice.
-- `GET /api/storage` — `{ entries, instances }`. For every media manager its
+- `GET /api/storage` — `{ entries, unplaced?, instances }`. For every media manager its
   `/api/v3/rootfolder` entries (`freeSpace`) plus the `sizeOnDisk` of the
   library items inside it (placed by `path ?? rootFolderPath` in the deepest
   root folder that contains them, matched on whole path segments). The API has
   no `totalSpace`, so this reports free space plus library-used space rather
   than a true used/total percentage. An instance that cannot be read is listed
-  in `instances` with `up: false` and the others are still returned.
+  in `instances` with `up: false` and the others are still returned. An item
+  that lies inside none of the instance's reported root folders (a path mapping
+  that differs from the folder it lists, or a removed root folder) cannot be
+  tied to a disk, so it is not added to any root's `libraryUsedBytes`; per
+  instance, `unplaced: [{ instanceId, label, items, bytes }]` says how much
+  there is (the field is left out when nothing is unplaced).
 - `GET /api/library` — `{ items, instances }` where an item is `{ instanceId,
   instanceName, kind, id, title, sizeOnDisk, monitored, rootFolderPath, added }`
   and `instances` lists every configured media manager with `up`/`error`. Ids
@@ -500,17 +517,20 @@ left alone.
   At most 8 results per instance, so a movie in two Radarrs shows up once per
   instance. An instance that fails goes to `problems`; if all fail the answer is
   502. A missing term answers `{"results": []}`.
-- `GET /api/add-meta?instanceId=` (or `?kind=movies|series` for the first ready
-  instance of that kind, which Explore uses) — `{ instanceId, instanceName,
-  qualityProfiles: [{id, name}], rootFolderPath }`. The first root folder is
-  used rather than offered as a choice.
+- `GET /api/add-meta?instanceId=` (or `?kind=movies|series`, which Explore uses,
+  for the first instance of that kind that answers: one that is misconfigured or
+  down is skipped while another works, and the first error is reported only when
+  none does; an explicit `instanceId` reports its own error) — `{ instanceId,
+  instanceName, qualityProfiles: [{id, name}], rootFolderPath, instances: [{
+  instanceId, name }] }`. `instances` lists every ready instance of the kind, for
+  a picker. The first root folder is used rather than offered as a choice.
 - `POST /api/add` — body `{ instanceId, id, qualityProfileId, rootFolderPath,
   monitored, searchNow, minimumAvailability? }`; see "Add to library".
 - `GET /api/explore?category=theaters|bluray|popular[&limit=N][&page=P]` —
   `limit` defaults to 20 (max 60); `page` is 1-based in units of `limit`.
-  `{ results: [{ id, alreadyAdded, title, year, overview, posterUrl,
-  voteAverage }], hasMore }`. Without `TMDB_API_KEY` it is a 502 (not a 404).
-- `GET /api/explore/{id}` — `{ id, alreadyAdded, title, overview, year, genres,
+  `{ results: [{ id, alreadyAdded, libraryInstances: [{ instanceId, name }],
+  title, year, overview, posterUrl, voteAverage }], hasMore }`. Without `TMDB_API_KEY` it is a 502 (not a 404).
+- `GET /api/explore/{id}` — `{ id, alreadyAdded, libraryInstances, title, overview, year, genres,
   runtime, voteAverage, posterUrl, backdropUrl, trailerKey }`.
 - `GET /api/codec-analysis?kind=movies|series` — across every instance of that
   kind: `{ totalCount, totalSize, preferences: { hd, uhd }, buckets: { h264,
@@ -544,7 +564,8 @@ left alone.
   (absolute, no `..`, no system folder, must exist as directories, no
   duplicates or nesting) and an empty list removes the saved roots.
 - `POST /api/codec-analysis/convert/{jobId}/cancel` — cancels a queued job, or
-  kills the running ffmpeg. A job that does not exist or has finished is a 4xx.
+  kills the running ffmpeg. A job that does not exist is a 404; one that has
+  already finished is a 400.
 
 The acceptance suite (`acceptance/`) lists every route in `routes.ts` and checks
 its status with nothing configured and with the full fake stack.
@@ -841,9 +862,20 @@ The image is built in three stages (Dockerfile): Node builds `web/`, Go builds
 the static binary with the UI embedded and the version stamped in from the root
 `package.json`, and an Alpine runtime adds ffmpeg, the VA-API drivers,
 `ca-certificates` and `tzdata`. Base images are pinned by tag and digest.
-The build stages cross-compile, so a multi-arch `buildx` build works; the release
-workflow publishes linux/amd64 until the arm64 image has been verified on
-hardware (issue #14).
+The image is multi-arch (linux/amd64 and linux/arm64, one tag, issue #14). The
+UI and Go stages run on the build machine (`--platform=$BUILDPLATFORM`) and the
+Go stage cross-compiles the static binary with `GOOS`/`GOARCH` from buildx, so
+no compiler is emulated. Only the runtime stage runs on the target
+architecture, and that is just `apk add`: ffmpeg, `mesa-va-gallium`,
+`ca-certificates` and `tzdata` exist on both, while the two Intel VAAPI drivers
+are installed only where `apk --print-arch` is `x86_64`. The release workflow
+sets up QEMU (`docker/setup-qemu-action`, with its binfmt image pinned by
+digest) for that one layer, publishes both platforms under the same tag and then
+fails if the pushed manifest lacks either. CI's `docker` job builds both: the
+amd64 image gets the full container smoke test and acceptance suite, the arm64
+image is loaded and run under QEMU (version, ffmpeg and ffprobe present, the
+same container smoke test). Hardware encoding on arm64 is out of scope; the
+software encoders work.
 
 The converter stays a role inside the server, behind an interface, so it can
 later move to a separate worker (see the phase 2 spec).
