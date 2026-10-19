@@ -3,15 +3,19 @@ import { useRef, useState } from "react";
 import useSWR from "swr";
 import { Link } from "react-router";
 import { fetcher } from "@/lib/fetcher";
-import type { ExploreHit } from "@/lib/types";
+import type { ExploreHit, InstanceRef } from "@/lib/types";
 import { TmdbDetailModal } from "@/components/TmdbDetailModal";
 import { AddQualityModal } from "@/components/AddQualityModal";
 import type { QualityProfile } from "@/lib/quality";
+import { libraryStatus } from "@/lib/explore-library";
 
 interface ExploreSectionProps {
   category: "theaters" | "bluray" | "popular";
   label: string;
   instanceId: string | null;
+  /** Ready movie instances (the picker's choices) and the name of the chosen one. */
+  instances?: InstanceRef[];
+  instanceName?: string | null;
   qualityProfiles: QualityProfile[];
   rootFolderPath: string | null;
   monitored: boolean;
@@ -25,6 +29,8 @@ export function ExploreSection({
   category,
   label,
   instanceId,
+  instances = [],
+  instanceName = null,
   qualityProfiles,
   rootFolderPath,
   monitored,
@@ -111,7 +117,13 @@ export function ExploreSection({
             className="scrollbar-hide flex gap-3 overflow-x-auto scroll-smooth pb-2"
           >
             {results.map((hit) => {
-              const added = hit.alreadyAdded || addedIds.has(hit.id);
+              const lib = libraryStatus(
+                hit.alreadyAdded,
+                hit.libraryInstances,
+                instanceId,
+                instances
+              );
+              const added = lib.inTarget || addedIds.has(hit.id);
               return (
                 <div key={hit.id} className="w-36 shrink-0">
                   <button onClick={() => setViewingId(hit.id)} className="block w-full text-left">
@@ -138,16 +150,21 @@ export function ExploreSection({
                   </button>
                   {added ? (
                     <span className="mt-1 block rounded bg-emerald-900 px-1.5 py-1 text-center text-xs text-emerald-300">
-                      {hit.alreadyAdded ? "In library" : "Added ✓"}
+                      {lib.inTarget ? lib.label : "Added ✓"}
                     </span>
                   ) : (
-                    <button
-                      onClick={() => setPendingAdd(hit)}
-                      disabled={qualityProfiles.length === 0}
-                      className="mt-1 w-full rounded bg-emerald-700 px-1.5 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-                    >
-                      Add
-                    </button>
+                    <>
+                      <button
+                        onClick={() => setPendingAdd(hit)}
+                        disabled={qualityProfiles.length === 0}
+                        className="mt-1 w-full rounded bg-emerald-700 px-1.5 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+                      >
+                        Add
+                      </button>
+                      {lib.elsewhere && (
+                        <p className="mt-1 text-center text-xs text-slate-500">{lib.elsewhere}</p>
+                      )}
+                    </>
                   )}
                 </div>
               );
@@ -168,6 +185,7 @@ export function ExploreSection({
           id={viewingHit.id}
           fallbackTitle={viewingHit.title}
           instanceId={instanceId}
+          instances={instances}
           qualityProfiles={qualityProfiles}
           rootFolderPath={rootFolderPath}
           monitored={monitored}
@@ -183,6 +201,7 @@ export function ExploreSection({
           title={pendingAdd.title}
           posterUrl={pendingAdd.posterUrl}
           qualityProfiles={qualityProfiles}
+          target={instances.length > 1 ? instanceName : null}
           busy={adding}
           error={addError}
           onConfirm={confirmAdd}

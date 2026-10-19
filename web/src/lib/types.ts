@@ -202,8 +202,17 @@ export interface StorageEntry {
   libraryUsedBytes: number;
 }
 
+/** Library an instance holds outside every root folder it reports. */
+export interface UnplacedStorage {
+  instanceId: string;
+  label: string;
+  items: number;
+  bytes: number;
+}
+
 export interface StorageResponse {
   entries: StorageEntry[];
+  unplaced?: UnplacedStorage[];
   instances: ManagerSummary[];
 }
 
@@ -256,6 +265,13 @@ export interface AddMeta {
   instanceName: string;
   qualityProfiles: { id: number; name: string }[];
   rootFolderPath: string | null;
+  /** Every ready instance of this kind: the choices of the instance picker. */
+  instances?: InstanceRef[];
+}
+
+export interface InstanceRef {
+  instanceId: string;
+  name: string;
 }
 
 // ---- explore
@@ -264,6 +280,8 @@ export interface ExploreHit {
   /** tmdbId */
   id: number;
   alreadyAdded: boolean;
+  /** The movie instances that have it. */
+  libraryInstances?: InstanceRef[];
   title: string;
   year: number | null;
   overview: string;
@@ -274,6 +292,7 @@ export interface ExploreHit {
 export interface ExploreDetail {
   id: number;
   alreadyAdded: boolean;
+  libraryInstances?: InstanceRef[];
   title: string;
   overview: string;
   year: number | null;

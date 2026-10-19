@@ -1,10 +1,12 @@
 import { apiFetch } from "@/lib/http";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWRInfinite from "swr/infinite";
 import { Link, useParams } from "react-router";
 import { fetcher } from "@/lib/fetcher";
-import type { AddMeta } from "@/lib/types";
 import type { ExploreHit } from "@/lib/types";
+import { useAddMeta } from "@/lib/use-add-meta";
+import { libraryStatus } from "@/lib/explore-library";
+import { InstancePicker } from "@/components/InstancePicker";
 import { TmdbDetailModal } from "@/components/TmdbDetailModal";
 import { AddQualityModal } from "@/components/AddQualityModal";
 import { TmdbAttribution } from "@/components/TmdbAttribution";
@@ -40,8 +42,7 @@ export default function ExploreCategoryPage() {
     { revalidateFirstPage: false }
   );
 
-  const [meta, setMeta] = useState<AddMeta | null>(null);
-  const [metaError, setMetaError] = useState<string | null>(null);
+  const { meta, instances, selectedId, error: metaError, choose } = useAddMeta("movies");
   const [monitored, setMonitored] = useState(true);
   const [searchNow, setSearchNow] = useState(true);
   const [minimumAvailability, setMinimumAvailability] = useState("released");
@@ -51,12 +52,6 @@ export default function ExploreCategoryPage() {
   const [addedIds, setAddedIds] = useState<Set<number>>(new Set());
   const [addError, setAddError] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<number | null>(null);
-
-  useEffect(() => {
-    fetcher<AddMeta>("/api/add-meta?kind=movies")
-      .then(setMeta)
-      .catch((err) => setMetaError(err instanceof Error ? err.message : "Failed to load options."));
-  }, []);
 
   if (!label) {
     return (
@@ -120,6 +115,7 @@ export default function ExploreCategoryPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 p-3">
+        <InstancePicker instances={instances} value={selectedId} onChange={choose} />
         <select
           value={minimumAvailability}
           onChange={(e) => setMinimumAvailability(e.target.value)}
@@ -157,7 +153,9 @@ export default function ExploreCategoryPage() {
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
         {results.map((hit) => {
-          const added = hit.alreadyAdded || addedIds.has(hit.id);
+          const lib = libraryStatus(hit.alreadyAdded, hit.libraryInstances, selectedId, instances);
+          const justAdded = addedIds.has(hit.id);
+          const added = lib.inTarget || justAdded;
           return (
             <div key={hit.id}>
               <button onClick={() => setViewingId(hit.id)} className="block w-full text-left">
@@ -184,16 +182,21 @@ export default function ExploreCategoryPage() {
               </button>
               {added ? (
                 <span className="mt-1 block rounded bg-emerald-900 px-1.5 py-1 text-center text-xs text-emerald-300">
-                  {hit.alreadyAdded ? "In library" : "Added ✓"}
+                  {lib.inTarget ? lib.label : "Added ✓"}
                 </span>
               ) : (
-                <button
-                  onClick={() => setPendingAdd(hit)}
-                  disabled={!meta}
-                  className="mt-1 w-full rounded bg-emerald-700 px-1.5 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  Add
-                </button>
+                <>
+                  <button
+                    onClick={() => setPendingAdd(hit)}
+                    disabled={!meta}
+                    className="mt-1 w-full rounded bg-emerald-700 px-1.5 py-1 text-xs font-medium text-white hover:bg-emerald-600 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                  {lib.elsewhere && (
+                    <p className="mt-1 text-center text-xs text-slate-500">{lib.elsewhere}</p>
+                  )}
+                </>
               )}
             </div>
           );
@@ -219,6 +222,7 @@ export default function ExploreCategoryPage() {
           id={viewingHit.id}
           fallbackTitle={viewingHit.title}
           instanceId={meta?.instanceId ?? null}
+          instances={instances}
           qualityProfiles={meta?.qualityProfiles ?? []}
           rootFolderPath={meta?.rootFolderPath ?? null}
           monitored={monitored}
@@ -234,6 +238,7 @@ export default function ExploreCategoryPage() {
           title={pendingAdd.title}
           posterUrl={pendingAdd.posterUrl}
           qualityProfiles={meta?.qualityProfiles ?? []}
+          target={instances.length > 1 ? (meta?.instanceName ?? null) : null}
           busy={adding}
           error={addError}
           onConfirm={confirmAdd}

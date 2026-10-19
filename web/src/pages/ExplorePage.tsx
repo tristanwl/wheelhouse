@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { fetcher } from "@/lib/fetcher";
-import type { AddMeta } from "@/lib/types";
+import { useState } from "react";
+import { useAddMeta } from "@/lib/use-add-meta";
 import { ExploreSection } from "@/components/ExploreSection";
+import { InstancePicker } from "@/components/InstancePicker";
 import { TmdbAttribution } from "@/components/TmdbAttribution";
 
 const MIN_AVAILABILITY_OPTIONS = [
@@ -11,23 +11,15 @@ const MIN_AVAILABILITY_OPTIONS = [
 ];
 
 export default function ExplorePage() {
-  const [meta, setMeta] = useState<AddMeta | null>(null);
-  const [metaError, setMetaError] = useState<string | null>(null);
+  const { meta, instances, selectedId, error: metaError, choose } = useAddMeta("movies");
   const [monitored, setMonitored] = useState(true);
   const [searchNow, setSearchNow] = useState(true);
   const [minimumAvailability, setMinimumAvailability] = useState("released");
 
-  useEffect(() => {
-    fetcher<AddMeta>("/api/add-meta?kind=movies")
-      .then(setMeta)
-      .catch((err) =>
-        setMetaError(err instanceof Error ? err.message : "Failed to load quality profiles.")
-      );
-  }, []);
-
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 p-3">
+        <InstancePicker instances={instances} value={selectedId} onChange={choose} />
         <select
           value={minimumAvailability}
           onChange={(e) => setMinimumAvailability(e.target.value)}
@@ -63,6 +55,8 @@ export default function ExplorePage() {
         category="theaters"
         label="In Theaters"
         instanceId={meta?.instanceId ?? null}
+        instances={instances}
+        instanceName={meta?.instanceName ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}
@@ -73,6 +67,8 @@ export default function ExplorePage() {
         category="bluray"
         label="Recent Blu-ray / Digital Releases"
         instanceId={meta?.instanceId ?? null}
+        instances={instances}
+        instanceName={meta?.instanceName ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}
@@ -83,6 +79,8 @@ export default function ExplorePage() {
         category="popular"
         label="Popular"
         instanceId={meta?.instanceId ?? null}
+        instances={instances}
+        instanceName={meta?.instanceName ?? null}
         qualityProfiles={meta?.qualityProfiles ?? []}
         rootFolderPath={meta?.rootFolderPath ?? null}
         monitored={monitored}
