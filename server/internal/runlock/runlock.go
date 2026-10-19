@@ -56,6 +56,9 @@ func Acquire(configDir string) (*Lock, error) {
 		var rerr error
 		f, rerr = os.Open(path) //nolint:gosec // same file
 		if rerr != nil {
+			if _, serr := os.Stat(configDir); errors.Is(serr, os.ErrNotExist) { //nolint:gosec // the operator-configured config directory
+				return nil, fmt.Errorf("the directory %s does not exist (is the config volume mounted?)", configDir)
+			}
 			return nil, fmt.Errorf("cannot open the lock file %s: %w", path, err)
 		}
 	}

@@ -50,6 +50,7 @@ describe("the library response cap", () => {
       expect(text).toContain("an administrator can raise the limit (see the documentation)");
       expect(text).not.toMatch(/WHEELHOUSE|_MIB|environment variable/);
       // The administrator's line is in the log: the setting, the limit and the size.
+      await expect.poll(() => small.output(), { timeout: 5000 }).toContain("percentOfLimit=");
       const log = small.output();
       expect(log).toContain("setting=WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB");
       expect(log).toMatch(/limitMiB=16 .*responseMiB=1[89]/);

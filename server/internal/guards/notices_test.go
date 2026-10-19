@@ -1,6 +1,7 @@
 package guards
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -117,7 +118,7 @@ func TestEveryConfigurationProblemIsWrittenWithLabels(t *testing.T) {
 				continue
 			}
 			refused++
-			ve, ok := err.(*core.ValidationError)
+			ve, ok := errors.AsType[*core.ValidationError](err)
 			if !ok {
 				t.Errorf("%s %s: %T", def.ID, name, err)
 				continue

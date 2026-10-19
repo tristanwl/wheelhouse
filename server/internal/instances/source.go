@@ -470,13 +470,6 @@ func normalizeDestination(raw string) string {
 	return scheme + "://" + host + strings.TrimRight(u.EscapedPath(), "/")
 }
 
-func clip(s string) string {
-	if len(s) > 40 {
-		return s[:40] + "..."
-	}
-	return s
-}
-
 // splitRaw separates an already-stored raw config (an environment instance being
 // imported) without validating it: a half-configured service is imported as it
 // is and shows as invalid.

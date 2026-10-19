@@ -166,9 +166,9 @@ func TestHelperHoldLock(t *testing.T) {
 		t.Skip("helper")
 	}
 	if _, err := Acquire(dir); err != nil {
-		os.Stdout.WriteString("error " + err.Error() + "\n")
+		_, _ = os.Stdout.WriteString("error " + err.Error() + "\n")
 		os.Exit(1)
 	}
-	os.Stdout.WriteString("held\n")
+	_, _ = os.Stdout.WriteString("held\n")
 	time.Sleep(time.Minute)
 }
