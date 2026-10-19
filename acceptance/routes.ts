@@ -189,4 +189,74 @@ export const MUTATING_ROUTES: MutatingRoute[] = [
   { method: "POST", pattern: "/api/codec-analysis/convert/{jobId}/cancel" },
 ];
 
+export type Level = "public" | "authenticated" | "admin";
+
+/**
+ * Every route the server registers with its access level, as the server's own
+ * router test lists them (a Go test parses this table, so the two cannot
+ * drift). The enumerating tests in auth-levels.test.ts walk it:
+ *   - an unauthenticated request to a non-public route is 401,
+ *   - a `user` gets 403 on every admin route,
+ *   - a mutating route refuses a request without the CSRF token and one from a
+ *     foreign origin.
+ * Keep one entry per line, in this exact shape.
+ */
+export const ROUTE_LEVELS: { route: string; level: Level }[] = [
+  { route: "GET /healthz", level: "public" },
+  { route: "GET /api/auth/setup", level: "public" },
+  { route: "POST /api/auth/setup", level: "public" },
+  { route: "POST /api/auth/login", level: "public" },
+  { route: "/api", level: "public" },
+  { route: "/api/", level: "public" },
+  { route: "/", level: "public" },
+  { route: "GET /api/features", level: "authenticated" },
+  { route: "GET /api/status", level: "authenticated" },
+  { route: "GET /api/downloads", level: "authenticated" },
+  { route: "GET /api/library", level: "authenticated" },
+  { route: "GET /api/storage", level: "authenticated" },
+  { route: "GET /api/search", level: "authenticated" },
+  { route: "GET /api/add-meta", level: "authenticated" },
+  { route: "POST /api/add", level: "authenticated" },
+  { route: "GET /api/library/{instanceId}/{id}/details", level: "authenticated" },
+  { route: "GET /api/library/{instanceId}/{id}/seasons", level: "authenticated" },
+  { route: "DELETE /api/library/{instanceId}/{id}", level: "authenticated" },
+  { route: "DELETE /api/library/{instanceId}/{id}/seasons/{season}", level: "authenticated" },
+  { route: "GET /api/explore", level: "authenticated" },
+  { route: "GET /api/explore/{id}", level: "authenticated" },
+  { route: "GET /api/codec-analysis", level: "authenticated" },
+  { route: "GET /api/codec-analysis/settings", level: "authenticated" },
+  { route: "PUT /api/codec-analysis/settings", level: "admin" },
+  { route: "GET /api/codec-analysis/encoders", level: "authenticated" },
+  { route: "GET /api/codec-analysis/convert", level: "authenticated" },
+  { route: "POST /api/codec-analysis/convert", level: "authenticated" },
+  { route: "GET /api/codec-analysis/convert/{jobId}", level: "authenticated" },
+  { route: "POST /api/codec-analysis/convert/{jobId}/cancel", level: "authenticated" },
+  { route: "POST /api/auth/logout", level: "authenticated" },
+  { route: "GET /api/auth/session", level: "authenticated" },
+  { route: "POST /api/auth/password", level: "authenticated" },
+  { route: "GET /api/auth/sessions", level: "authenticated" },
+  { route: "DELETE /api/auth/sessions/{id}", level: "authenticated" },
+  { route: "GET /api/users", level: "admin" },
+  { route: "POST /api/users", level: "admin" },
+  { route: "PATCH /api/users/{id}", level: "admin" },
+  { route: "POST /api/users/{id}/password", level: "admin" },
+  { route: "DELETE /api/users/{id}", level: "admin" },
+  { route: "GET /api/users/{id}/sessions", level: "admin" },
+  { route: "DELETE /api/users/{id}/sessions", level: "admin" },
+  { route: "GET /api/audit", level: "admin" },
+];
+
+/** A concrete request for a route pattern; the values only need to be well formed. */
+export function sampleRequest(route: string): { method: string; path: string } {
+  const [method, path] = route.includes(" ") ? route.split(" ") : ["GET", route];
+  return {
+    method,
+    path: path
+      .replace("{instanceId}", "radarr")
+      .replace("{jobId}", "nope")
+      .replace("{season}", "1")
+      .replace(/\{id\}/g, "0".repeat(32)),
+  };
+}
+
 export const ALL_GET_CASES: GetCase[] = GET_ROUTES.flatMap((r) => r.cases);

@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/features"
 	"github.com/tristanwl/wheelhouse/server/internal/middleware"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
@@ -37,6 +39,13 @@ type Options struct {
 	Context context.Context
 	// Converter configures the codec routes; the zero value uses the defaults.
 	Converter ConverterOptions
+	// Auth is the account service that enforces the route levels. Without one
+	// (tests of the routes themselves) every route that is not public answers
+	// 503, so nothing is ever served unprotected.
+	Auth *auth.Service
+	// TrustedProxies are the proxies whose X-Forwarded-Proto is believed when
+	// deciding whether the session cookie is Secure (WHEELHOUSE_TRUSTED_PROXIES).
+	TrustedProxies []netip.Prefix
 }
 
 // emptySource configures nothing.
@@ -51,8 +60,12 @@ type deps struct {
 	now    func() time.Time
 	ctx    context.Context
 	conv   ConverterOptions
-	// log receives audit entries; never nil.
+	// log receives operational messages; never nil.
 	log *slog.Logger
+	// auth records audit entries and serves the account routes; nil in tests
+	// that build an app without accounts.
+	auth  *auth.Service
+	guard *Guard
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -101,10 +114,13 @@ func Routes(o Options) *Router {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter}
+	guard := &Guard{Auth: o.Auth, TrustedProxies: o.TrustedProxies}
+	d := deps{rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard}
 
-	r := NewRouter()
+	r := NewRouter(guard)
 	registerCore(r, d)
+	registerAuth(r, d)
+	registerUsers(r, d)
 	registerStack(r, d)
 	registerCodecs(r, d)
 	registerLibrary(r, d)

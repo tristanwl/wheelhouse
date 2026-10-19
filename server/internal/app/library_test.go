@@ -200,8 +200,11 @@ func TestDeleteNeedsServerSideConfirmation(t *testing.T) {
 			}
 		}
 	}
-	if !strings.Contains(logs.String(), "library.delete") {
-		t.Errorf("no audit entry: %s", logs)
+	// The delete is in the audit log, with the acting account and the target, and no query string.
+	_, _, auditRaw := send(t, h, "GET", "/api/audit", "")
+	if !strings.Contains(auditRaw, `"action":"library.delete"`) || !strings.Contains(auditRaw, `"actor":"`+testAdminName+`"`) ||
+		!strings.Contains(auditRaw, `"target":"radarr/1"`) || strings.Contains(auditRaw, "confirm") {
+		t.Errorf("audit entry: %s", auditRaw)
 	}
 	if strings.Contains(logs.String(), "?") {
 		t.Errorf("a query string reached the log: %s", logs)

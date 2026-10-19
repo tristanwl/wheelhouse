@@ -6,11 +6,70 @@ import (
 	"go/token"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 )
+
+// wantLevels is the table of every route and its access level, spelled out on
+// purpose: adding, removing or re-levelling a route is a visible change here,
+// and a reviewer sees each decision. acceptance/routes.ts holds the same table
+// (TestAcceptanceRouteTableMatches keeps the two equal).
+var wantLevels = map[string]Level{
+	// Public: health, setup, login, the UI and the JSON 404s.
+	"GET /healthz":         Public,
+	"GET /api/auth/setup":  Public,
+	"POST /api/auth/setup": Public,
+	"POST /api/auth/login": Public,
+	"/api":                 Public,
+	"/api/":                Public,
+	"/":                    Public,
+
+	// Any signed-in account: what the app shows, library management (users
+	// manage media, so deletes and conversions are here), and the own account.
+	"GET /api/features":                                      Authenticated,
+	"GET /api/status":                                        Authenticated,
+	"GET /api/downloads":                                     Authenticated,
+	"GET /api/library":                                       Authenticated,
+	"GET /api/storage":                                       Authenticated,
+	"GET /api/search":                                        Authenticated,
+	"GET /api/add-meta":                                      Authenticated,
+	"POST /api/add":                                          Authenticated,
+	"GET /api/library/{instanceId}/{id}/details":             Authenticated,
+	"GET /api/library/{instanceId}/{id}/seasons":             Authenticated,
+	"DELETE /api/library/{instanceId}/{id}":                  Authenticated,
+	"DELETE /api/library/{instanceId}/{id}/seasons/{season}": Authenticated,
+	"GET /api/explore":                                       Authenticated,
+	"GET /api/explore/{id}":                                  Authenticated,
+
+	"GET /api/codec-analysis":                         Authenticated,
+	"GET /api/codec-analysis/settings":                Authenticated,
+	"GET /api/codec-analysis/encoders":                Authenticated,
+	"GET /api/codec-analysis/convert":                 Authenticated,
+	"POST /api/codec-analysis/convert":                Authenticated,
+	"GET /api/codec-analysis/convert/{jobId}":         Authenticated,
+	"POST /api/codec-analysis/convert/{jobId}/cancel": Authenticated,
+
+	"POST /api/auth/logout":          Authenticated,
+	"GET /api/auth/session":          Authenticated,
+	"POST /api/auth/password":        Authenticated,
+	"GET /api/auth/sessions":         Authenticated,
+	"DELETE /api/auth/sessions/{id}": Authenticated,
+
+	// Administrators: configuration, accounts, other people's sessions, the audit log.
+	"PUT /api/codec-analysis/settings": Admin,
+	"GET /api/users":                   Admin,
+	"POST /api/users":                  Admin,
+	"PATCH /api/users/{id}":            Admin,
+	"POST /api/users/{id}/password":    Admin,
+	"DELETE /api/users/{id}":           Admin,
+	"GET /api/users/{id}/sessions":     Admin,
+	"DELETE /api/users/{id}/sessions":  Admin,
+	"GET /api/audit":                   Admin,
+}
 
 // Every route the app registers has an explicit, valid access level. This is
 // the enumerating test the security requirements ask for: a route added without
@@ -28,46 +87,41 @@ func TestEveryRouteHasAnAccessLevel(t *testing.T) {
 		}
 		seen[r.Pattern] = r.Level
 	}
-	// Spelled out on purpose: adding or removing a route is a visible change here,
-	// and Phase 2 reviews each level. Everything is public until authentication exists.
-	want := map[string]Level{
-		"GET /healthz":       Public,
-		"GET /api/features":  Public,
-		"GET /api/status":    Public,
-		"GET /api/downloads": Public,
-		"GET /api/library":   Public,
-		"GET /api/storage":   Public,
-		"GET /api/search":    Public,
-		"GET /api/add-meta":  Public,
-		"POST /api/add":      Admin,
-		"GET /api/library/{instanceId}/{id}/details":             Public,
-		"GET /api/library/{instanceId}/{id}/seasons":             Public,
-		"DELETE /api/library/{instanceId}/{id}":                  Admin,
-		"DELETE /api/library/{instanceId}/{id}/seasons/{season}": Admin,
-		"GET /api/explore":      Public,
-		"GET /api/explore/{id}": Public,
-		"/api":                  Public,
-		"/api/":                 Public,
-		"/":                     Public,
-
-		// Codecs.
-		"GET /api/codec-analysis":                         Public,
-		"GET /api/codec-analysis/settings":                Public,
-		"PUT /api/codec-analysis/settings":                Public,
-		"GET /api/codec-analysis/encoders":                Public,
-		"GET /api/codec-analysis/convert":                 Public,
-		"POST /api/codec-analysis/convert":                Public,
-		"GET /api/codec-analysis/convert/{jobId}":         Public,
-		"POST /api/codec-analysis/convert/{jobId}/cancel": Public,
-	}
-	for p, l := range want {
+	for p, l := range wantLevels {
 		if seen[p] != l {
 			t.Errorf("route %q: level %q, want %q", p, seen[p], l)
 		}
 	}
 	for p := range seen {
-		if _, ok := want[p]; !ok {
+		if _, ok := wantLevels[p]; !ok {
 			t.Errorf("route %q is registered but not listed in this test; list it with its level", p)
+		}
+	}
+}
+
+// acceptance/routes.ts lists every route with its level for the black-box
+// suite's enumerating tests. It is parsed here so the two tables cannot drift.
+func TestAcceptanceRouteTableMatches(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "acceptance", "routes.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	re := regexp.MustCompile(`\{ route: "([^"]+)", level: "([a-z]+)" \}`)
+	found := map[string]Level{}
+	for _, m := range re.FindAllStringSubmatch(string(raw), -1) {
+		found[m[1]] = Level(m[2])
+	}
+	if len(found) == 0 {
+		t.Fatal("no ROUTE_LEVELS entries found in acceptance/routes.ts")
+	}
+	for p, l := range wantLevels {
+		if found[p] != l {
+			t.Errorf("acceptance/routes.ts ROUTE_LEVELS: %q has level %q, the server says %q", p, found[p], l)
+		}
+	}
+	for p := range found {
+		if _, ok := wantLevels[p]; !ok {
+			t.Errorf("acceptance/routes.ts lists %q, which the server does not register", p)
 		}
 	}
 }
@@ -80,10 +134,10 @@ func TestRegisteringWithoutALevelPanics(t *testing.T) {
 					t.Errorf("level %q was accepted", l)
 				}
 			}()
-			NewRouter().HandleFunc("GET /api/x", l, func(http.ResponseWriter, *http.Request) {})
+			NewRouter(nil).HandleFunc("GET /api/x", l, func(http.ResponseWriter, *http.Request) {})
 		}()
 	}
-	r := NewRouter()
+	r := NewRouter(nil)
 	r.HandleFunc("GET /api/x", Public, func(http.ResponseWriter, *http.Request) {})
 	defer func() {
 		if recover() == nil {
@@ -96,7 +150,8 @@ func TestRegisteringWithoutALevelPanics(t *testing.T) {
 // Every request reaches its handler through the authorization hook, which knows
 // the route's level.
 func TestHandlersSeeTheirLevel(t *testing.T) {
-	r := NewRouter()
+	acc := newAccounts(t)
+	r := NewRouter(&Guard{Auth: acc.Svc})
 	var got []Level
 	for i, l := range []Level{Public, Authenticated, Admin} {
 		path := "GET /api/level" + string(rune('a'+i))
@@ -105,7 +160,7 @@ func TestHandlersSeeTheirLevel(t *testing.T) {
 		})
 	}
 	for _, p := range []string{"/api/levela", "/api/levelb", "/api/levelc"} {
-		r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", p, nil))
+		acc.As(r).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", p, nil))
 	}
 	if !slices.Equal(got, []Level{Public, Authenticated, Admin}) {
 		t.Fatalf("levels seen by handlers: %v", got)

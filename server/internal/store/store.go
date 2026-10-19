@@ -9,9 +9,8 @@
 // foreign_keys on, a busy timeout and secure_delete on, so deleted secrets are
 // overwritten, not left in free pages.
 //
-// Nothing in the server opens the database yet; the commands in cmd/wheelhouse
-// and the tests are its only users until the accounts and stored-configuration
-// work lands (docs/wheelhouse-phase2-plan.md).
+// The server opens it at start for accounts, sessions and the audit log (package
+// auth); the stored configuration follows (docs/wheelhouse-phase2-plan.md).
 package store
 
 import (
@@ -199,6 +198,16 @@ func (db *DB) Close() error {
 		db.closeErr = errors.Join(db.r.Close(), db.w.Close())
 	})
 	return db.closeErr
+}
+
+// Health reports whether the database answers on both pools within ctx: the
+// readers (what every request uses) and the writer (what sessions and the audit
+// log need). It is what /healthz reports as "degraded" when it fails.
+func (db *DB) Health(ctx context.Context) error {
+	if err := db.r.PingContext(ctx); err != nil {
+		return err
+	}
+	return db.w.PingContext(ctx)
 }
 
 // Exec runs a statement that changes data, on the writer.

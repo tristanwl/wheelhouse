@@ -98,3 +98,45 @@ func TestDialAddr(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigDir(t *testing.T) {
+	if got := ConfigDir(func(string) string { return "" }); got != "/config" {
+		t.Errorf("default %q", got)
+	}
+	if got := ConfigDir(func(k string) string {
+		if k == "WHEELHOUSE_CONFIG_DIR" {
+			return "/srv/wheelhouse/"
+		}
+		return ""
+	}); got != "/srv/wheelhouse" {
+		t.Errorf("custom %q", got)
+	}
+}
+
+func TestTrustedProxies(t *testing.T) {
+	get := func(v string) func(string) string {
+		return func(k string) string {
+			if k == "WHEELHOUSE_TRUSTED_PROXIES" {
+				return v
+			}
+			return ""
+		}
+	}
+	if got, err := TrustedProxies(get("")); err != nil || len(got) != 0 {
+		t.Errorf("default list: %v %v", got, err)
+	}
+	got, err := TrustedProxies(get(" 192.0.2.0/24, 198.51.100.7 ,2001:db8::/32,"))
+	if err != nil || len(got) != 3 {
+		t.Fatalf("%v %v", got, err)
+	}
+	for i, want := range []string{"192.0.2.0/24", "198.51.100.7/32", "2001:db8::/32"} {
+		if got[i].String() != want {
+			t.Errorf("entry %d: %s, want %s", i, got[i], want)
+		}
+	}
+	for _, bad := range []string{"nonsense", "192.0.2.0/33", "192.0.2.1;192.0.2.2", "*"} {
+		if _, err := TrustedProxies(get(bad)); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

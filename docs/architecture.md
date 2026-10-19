@@ -9,23 +9,27 @@ which files are actually worth converting (based on your own preferred codec
 per resolution tier) and can run the conversion itself via ffmpeg, using
 hardware encoding when available.
 
-There is no authentication yet, so run it only on a trusted network. Auth,
-a setup wizard, and a database-backed configuration are planned — see
-[wheelhouse-spec.md](./wheelhouse-spec.md) and
-[wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md).
+The released 0.2.x has no authentication, so run it only on a trusted network.
+The development branch enforces it on the server (accounts, sessions, login,
+CSRF, throttling, an audit log; see "Accounts and sessions" below) while the web
+UI's login and setup screens, a setup wizard and a database-backed configuration
+are still to come — see [wheelhouse-spec.md](./wheelhouse-spec.md),
+[wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md) and
+[wheelhouse-phase2-plan.md](./wheelhouse-phase2-plan.md). Operating a server
+(backups, the master key, recovery) is in [operations.md](./operations.md).
 
 ## Stack
 
 One Go binary (`server/`, standard library plus the pure-Go SQLite driver) with the Vite single-page UI
 (`web/`: React 19, React Router, SWR, Tailwind CSS) embedded in it, shipped in
 one container image together with ffmpeg and the VA-API drivers. The server is a
-thin read/aggregate/proxy layer over the services' own APIs, and its only state
-today is `settings.json` in `/config` and, while a conversion runs, the queue in
-memory. A SQLite database and an encrypted-secrets layer (`internal/store`,
-`internal/secrets`) exist as a foundation for Phase 2 (accounts, stored
-configuration) but **the server does not open the database yet**; see "Storage
-and secrets" below. What is protected and from whom is in the
-[threat model](threat-model.md).
+thin read/aggregate/proxy layer over the services' own APIs. Its state is a
+SQLite database in `/config` (accounts, sessions and the audit log; stored
+configuration follows), `settings.json` in `/config`, the master key
+(`/config/secret.key`), and, while a conversion runs, the queue in memory. The
+server opens the database and the key at start and refuses to run without them;
+see "Accounts and sessions" and "Storage and secrets" below. What is protected
+and from whom is in the [threat model](threat-model.md).
 
 Since release 0.2.0 this is the whole product. Releases up to 0.1.x were a
 Next.js app with the same URLs, API and environment variables; the migration is
@@ -63,10 +67,18 @@ See [server/README.md](../server/README.md) for the server and
   runtime for the ready instances of a role and iterate them, so every route
   works with several instances (Radarr and Radarr 4K) and with none.
 - **Access levels.** Every route is registered through `app.Router.Handle(pattern,
-  level, handler)` with `Public`, `Authenticated` or `Admin` (all public until
-  Phase 2). The router's `authorize` is the single place a session check will go.
-  `router_test.go` lists every route with its level, and fails for a route that
-  is missing or not listed, or that builds its own mux.
+  level, handler)` with `Public`, `Authenticated` or `Admin`, and every request
+  passes the `Guard` (`guard.go`), which enforces it from the session: 401 JSON for
+  no or an invalid session, 403 for a user on an admin route, 503 `setup required`
+  while no account exists. `router_test.go` lists every route with its level in
+  one table, and fails for a route that is missing or not listed, or that builds
+  its own mux; a second test keeps that table equal to `acceptance/routes.ts`,
+  whose enumerating tests then check the behaviour over HTTP on the real binary
+  and image. Public: `/healthz`, the setup status and submit, login, the UI and
+  the JSON 404s. Everything the app shows (features, status, downloads, library
+  including adds and deletes, storage, search, Explore, codec analysis and
+  conversions) and the own account is `Authenticated`; saving codec settings, the
+  accounts and the audit log are `Admin`.
 - **Everything else is the UI.** Any non-`/api` path that is not a file gets
   `index.html` (client-side routing); an unknown `/api/...` path is a JSON 404.
 - **Listening.** `PORT` (default 3000; the image sets 3050) and, to choose the
@@ -557,36 +569,104 @@ Extra Sonarr/Radarr instances use `RADARR_<ID>_URL` and `RADARR_<ID>_API_KEY`
 configuration moves to a database.
 
 Server settings: `PORT` (3000; 3050 in the image), `WHEELHOUSE_LISTEN`
-(`host:port`, overrides `PORT`), `WHEELHOUSE_MEDIA_ROOTS` (`/movies:/tv`). The
-only file the running server keeps is `/config/settings.json`.
+(`host:port`, overrides `PORT`), `WHEELHOUSE_MEDIA_ROOTS` (`/movies:/tv`),
+`WHEELHOUSE_CONFIG_DIR` (`/config`), `WHEELHOUSE_DB` (default
+`/config/wheelhouse.db`), `WHEELHOUSE_SECRET_KEY_FILE` / `WHEELHOUSE_SECRET_KEY`
+(the master key; otherwise `/config/secret.key` is generated at the first start)
+and `WHEELHOUSE_TRUSTED_PROXIES` (reverse proxies whose `X-Forwarded-Proto` is
+believed; default none). The server keeps its state in `/config`: the database,
+the key, `settings.json` and, until the first account exists, `setup-token`.
 
-Read only by the storage commands for now: `WHEELHOUSE_DB` (default
-`/config/wheelhouse.db`), `WHEELHOUSE_SECRET_KEY_FILE` and `WHEELHOUSE_SECRET_KEY`
-(the master key; otherwise `/config/secret.key` is generated).
+### Accounts and sessions
+
+`server/internal/auth` owns the SQL for accounts (migration `0002_auth.sql`:
+`users`, `sessions`, `audit_log`); `internal/app` turns requests into calls on it
+and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)).
+
+- **Start.** `main` opens the database (a missing or world-writable directory, a
+  database with the wrong mode, a schema newer than the binary and a key that does
+  not match are each fatal with a message that says what to do), loads or
+  generates the master key, and, when no account exists, makes a one-time setup
+  token (logged once, written to `/config/setup-token`, mode 0600). `/healthz`
+  answers without the database but reports `degraded` (503) when the store does
+  not answer.
+- **Setup.** With zero accounts every non-public route answers 503 `setup
+  required`. `POST /api/auth/setup` creates the first administrator only while no
+  account exists, only with the token (compared in constant time, guesses are
+  throttled per address), inside one transaction that re-checks the count; it
+  deletes the token file and does not sign anyone in.
+- **Passwords.** Argon2id (`golang.org/x/crypto/argon2`; 64 MiB, 3 passes, 2
+  lanes), the parameters stored in each encoded hash and raised by a rehash at the
+  next login; at most 3 hashes at a time so a login flood cannot exhaust memory.
+  At least 12 characters, at most 1024 bytes, not on an embedded list of common
+  passwords, not the username, no composition rules. A login for a name that does
+  not exist verifies against a dummy hash made at start, so the work and the
+  answer do not tell whether an account exists. Passwords are hashed, never
+  encrypted: **accounts do not depend on the master key** (a test forbids
+  `internal/auth` from importing `internal/secrets`).
+- **Sessions.** A 256-bit random token from `crypto/rand`; only its SHA-256 is
+  stored. The cookie is `HttpOnly`, `SameSite=Strict`, `Path=/`, and `Secure` with
+  the name `__Host-wheelhouse` when the request arrived over HTTPS (directly, or
+  `X-Forwarded-Proto: https` from a peer in `WHEELHOUSE_TRUSTED_PROXIES`),
+  otherwise `wheelhouse`. Only the cookie that fits the transport is read. Idle
+  timeout 12 h and absolute 30 days; `last_seen` is written at most once a minute
+  per session. A new session at every login and at a password change, which also
+  ends the account's other sessions; an admin reset, disabling and deleting an
+  account end its sessions. The role is read from the account at every request,
+  so a demotion applies at once.
+- **CSRF.** Every state-changing request (not GET, HEAD or OPTIONS) must be
+  same-origin: a `Sec-Fetch-Site` other than `same-origin` or `none`, or an
+  `Origin` that is not the request's own host, is 403, on login and setup too. On
+  authenticated routes it must also send the session's token in `X-CSRF-Token`.
+  The token is derived as SHA-256 of the cookie value with a label, so nothing is
+  stored and a database copy does not reveal it; it is returned by login and
+  `GET /api/auth/session`, never set in a script-readable cookie. A request with
+  neither `Origin` nor `Sec-Fetch-Site` is a non-browser client and still needs
+  the token. `GET` never changes state (a test walks the router).
+- **Login throttling.** In memory (a failed login causes no database write, a
+  restart is the only thing that forgets it, and the locks are short): the first 4
+  failures for a name are free, the 5th locks it for 30 s and each further failure
+  doubles that up to 15 min; 20 failures lock a client address (an IPv6 address
+  counts as its /64); 10 wrong setup tokens lock an address for setup. Counters
+  exist for names that do not exist, a locked login answers like a wrong password,
+  and a password reset by an admin or the CLI lifts the lock. The table is bounded.
+- **Audit log.** `audit_log` is append-only (triggers refuse update and delete).
+  Setup, login ok / failure / lockout, logout, password change and reset, user
+  create / update / role change / delete, session revocation, library add and
+  delete, and conversion start and cancel are recorded with the acting account,
+  the address and a small JSON detail; never a password, token or request body. A
+  failed login for an unknown name records no name.
+- **Last administrator.** The last enabled administrator cannot be deleted,
+  demoted or disabled, checked in code inside the transaction and by two triggers.
+- **Recovery.** `wheelhouse reset-password <user>` (generated one-time password,
+  `must_change_password`, sessions ended, audited as `cli`); a flagged account can
+  call only the session, password and logout routes until it has changed it.
 
 ### Storage and secrets
 
-The foundation for Phase 2 ([plan](wheelhouse-phase2-plan.md), item 1). Not used
-by the server process yet: no route reads or writes the database, and starting
-the server creates neither the database nor a key. The `backup` and `rekey`
-commands and the tests are its only callers until the next items wire it in.
+The storage layer ([plan](wheelhouse-phase2-plan.md), item 1) under the accounts.
+No stored configuration uses the secret columns yet (item 4); the key is created
+and checked at start so that a wrong key is noticed at once.
 
-- **Database.** SQLite through `modernc.org/sqlite` (the first third-party
-  module; pure Go, so the binary stays static and cross-compiles). One file,
-  mode 0600, WAL, foreign keys on. A writer pool of one connection and a pool of
-  `query_only` readers, so writers queue in Go and readers never block. Embedded,
-  numbered, forward-only migrations are applied at open in a single transaction
-  and recorded with a hash in `schema_migrations`; a database newer than the
-  binary is refused. `meta` is the only table so far.
+- **Database.** SQLite through `modernc.org/sqlite` (pure Go, so the binary stays
+  static and cross-compiles). One file, mode 0600, WAL, foreign keys on. A writer
+  pool of one connection and a pool of `query_only` readers, so writers queue in
+  Go and readers never block. Embedded, numbered, forward-only migrations are
+  applied at open in a single transaction and recorded with a hash in
+  `schema_migrations`; a database newer than the binary is refused. Tables: `meta`
+  (0001), `users`, `sessions`, `audit_log` (0002).
 - **Secrets at rest.** `secrets.Cipher` seals each value with AES-256-GCM, a
   random nonce per value and the table, row id and field as associated data, in a
   versioned envelope (format byte, key version, nonce, ciphertext and tag). The
   master key comes from a key file, the environment or a generated
   `/config/secret.key`. A check value in `meta` says which key version the
-  database is under, so a wrong key fails immediately and `rekey` can re-encrypt
-  every secret column in one transaction.
+  database is under, so a wrong key fails immediately, `rekey` can re-encrypt
+  every secret column in one transaction, and `forget-secrets` is the recovery
+  when the key is gone for good.
 - **Backups** are `VACUUM INTO` snapshots taken while the server runs, mode 0600,
-  never overwriting; they contain ciphertext, not the key.
+  never overwriting; they contain ciphertext, **not the key**. Losing the key
+  loses the stored provider credentials for good; [operations.md](operations.md)
+  has the checklist.
 - **What this protects.** A copied database or backup. It does not protect a copy
   of the whole `/config` volume when the key is the generated file beside the
   database; see the residual risks in the [threat model](threat-model.md).

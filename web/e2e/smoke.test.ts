@@ -95,6 +95,26 @@ describe.skipIf(reason)("browser smoke test", () => {
   /** Opens a page, collecting everything that should never happen. */
   async function open(path: string): Promise<Visit> {
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+    // The server needs a login: the harness already set up and signed in the
+    // administrator through the API, so the browser starts with that session
+    // cookie. The UI does not send the CSRF header yet (the login screen and
+    // session handling arrive with the web auth work, plan item 6), so the header
+    // is added to the UI's own API calls here; the server requires it on mutations.
+    const session = server.admin.cookie!;
+    await context.addCookies([
+      {
+        name: session.name,
+        value: session.value,
+        url: server.baseUrl,
+        httpOnly: true,
+        sameSite: "Strict",
+      },
+    ]);
+    await context.route(`${server.baseUrl}/api/**`, (route) =>
+      route.continue({
+        headers: { ...route.request().headers(), "x-csrf-token": server.admin.csrf! },
+      })
+    );
     const page = await context.newPage();
     const problems: string[] = [];
     const hosts = new Set<string>();
@@ -298,7 +318,7 @@ describe.skipIf(reason)("browser smoke test", () => {
       );
 
     // The contract the UI relies on: no confirm, no delete, nothing sent upstream.
-    const bare = await fetch(`${server.baseUrl}/api/library/radarr/900001`, { method: "DELETE" });
+    const bare = await server.request("/api/library/radarr/900001", { method: "DELETE" });
     expect(bare.status).toBe(400);
     expect(radarrDeletes()).toHaveLength(0);
 

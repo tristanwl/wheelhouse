@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { startStack, type Mode, type Service, SERVICES, type StackOptions } from "./fakes";
-import { startServer, type ApiResponse } from "./harness";
+import { ADMIN, startServer, type ApiResponse } from "./harness";
 import { ALL_GET_CASES, PAGES } from "./routes";
 
 // Scenario 4: secrets never leave the server. Distinctive canary secrets are
@@ -99,6 +101,8 @@ const MUTATING_PROBES: Probe[] = [
     run: (r) => r("/api/codec-analysis/convert/nope/cancel", { method: "POST" }),
   },
 ];
+
+const WRONG_PASSWORD = "canary-wrong-password-4711";
 
 interface Scenario {
   name: string;
@@ -204,6 +208,48 @@ describe.each(SCENARIOS)("$name", (scenario) => {
       expect(findLeaks(haystacks, stack.secrets)).toEqual([]);
       // Whatever the server printed while handling all of that, and while booting.
       expect(findLeaks({ "server output": server.output() }, stack.secrets)).toEqual([]);
+
+      // The credentials of the server's own accounts: the setup token, the
+      // administrator's password, the session cookie and the CSRF token (and a
+      // wrong password a client tried). None may appear in any response above,
+      // in the log, or in the database files. The one exception is the
+      // setup-token line the server prints at start so the operator can find it.
+      server.plant(WRONG_PASSWORD);
+      const failed = await server.anon.request("/api/auth/login", {
+        method: "POST",
+        ...json({ username: ADMIN.username, password: WRONG_PASSWORD }),
+      });
+      expect(failed.status).toBe(401);
+      const planted = server.planted();
+      expect(planted.length).toBeGreaterThanOrEqual(5); // token, password, wrong password, cookie, csrf
+      expect(findLeaks({ ...haystacks, "failed login": failed.raw }, planted)).toEqual([]);
+
+      const lines = server.output().split("\n");
+      const tokenLines = lines.filter((l) => l.includes(server.setupToken!));
+      expect(tokenLines, "the setup token is logged exactly once").toHaveLength(1);
+      expect(tokenLines[0]).toContain("setup_token=");
+      expect(
+        findLeaks(
+          { "server output": lines.filter((l) => !l.includes(server.setupToken!)).join("\n") },
+          planted
+        )
+      ).toEqual([]);
+
+      const files: Record<string, string> = {};
+      for (const suffix of ["", "-wal", "-shm"]) {
+        const f = server.dbPath + suffix;
+        if (existsSync(f)) files[`database${suffix || " file"}`] = readFileSync(f, "latin1");
+      }
+      expect(Object.keys(files)).toContain("database file");
+      // The scan is not vacuous: what the database does hold is there, and only as hashes.
+      const everything = Object.values(files).join("");
+      expect(everything).toContain("$argon2id$");
+      const cookieHash = createHash("sha256")
+        .update(server.admin.cookie!.value)
+        .digest()
+        .toString("latin1");
+      expect(everything, "the SHA-256 of the session token is stored").toContain(cookieHash);
+      expect(findLeaks(files, [...planted, ...stack.secrets])).toEqual([]);
       expect(Object.keys(haystacks).length).toBeGreaterThanOrEqual(
         ALL_GET_CASES.length + PAGES.length + MUTATING_PROBES.length
       );

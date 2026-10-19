@@ -43,7 +43,7 @@ func param(req *http.Request, name, def string) string {
 
 // registerExplore registers the Explore routes (TMDB lists and details).
 func registerExplore(r *Router, d deps) {
-	r.HandleFunc("GET /api/explore", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/explore", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		cat, ok := explore.ParseCategory(req.URL.Query().Get("category"))
 		if !ok {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "category must be one of: theaters, bluray, popular"})
@@ -65,7 +65,7 @@ func registerExplore(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, list)
 	})
 
-	r.HandleFunc("GET /api/explore/{id}", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/explore/{id}", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		f, ok := number(req.PathValue("id"))
 		if !ok || !wholeNumber(f) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})

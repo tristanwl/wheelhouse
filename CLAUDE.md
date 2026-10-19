@@ -1,8 +1,10 @@
 # Wheelhouse
 
 A self-hosted dashboard and companion for the *arr media stack: status, library
-management, movie discovery and codec-aware conversion. Alpha: there is **no
-authentication yet**, so it is for trusted networks only.
+management, movie discovery and codec-aware conversion. Alpha: the released 0.2.x
+has **no authentication** (trusted networks only); `main` enforces accounts and
+sessions on the server and the web UI's login arrives later in Phase 2, so no
+release is cut until the Phase 2 items land.
 
 Read [docs/architecture.md](docs/architecture.md) for how things work and
 [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md) for decisions, positioning
@@ -10,7 +12,7 @@ and the roadmap. [CONTRIBUTING.md](CONTRIBUTING.md) covers the human workflow.
 
 ## Layout and commands
 
-A Go server (`server/`, standard library plus one justified dependency, the SQLite driver, Go 1.27+) with a Vite + React UI
+A Go server (`server/`, standard library plus two justified dependencies, the SQLite driver and `golang.org/x/crypto` for Argon2id, Go 1.27+) with a Vite + React UI
 (`web/`, own `package.json`) embedded in the binary, shipped as one Docker image
 with ffmpeg. The root `package.json` is only tooling for the black-box
 acceptance suite (`acceptance/`) and the **single source of the release
@@ -38,22 +40,30 @@ docker build -t wheelhouse:dev . && acceptance/docker-smoke.sh wheelhouse:dev
 page, so `go build` and `go test` work from a clean checkout. See
 `server/README.md`, `web/README.md` and `acceptance/README.md`.
 
-The built server must also boot with **no** environment variables (every page and
-API answers 200; only the Dashboard is enabled); the acceptance suite's boot
-scenario and `acceptance/docker-smoke.sh` check it. The acceptance suite is the
+The built server must also boot with **no** environment variables (every page
+answers 200, and once the administrator exists and is signed in every API route
+does too; only the Dashboard is enabled); the acceptance suite's boot scenario
+and `acceptance/docker-smoke.sh` check it. The harness starts every server with
+its own config directory, performs setup and login through the public API and
+sends the cookie and CSRF header on every request. The acceptance suite is the
 definition of "the API works": a new route must be added to `acceptance/routes.ts`
 (and to the Go router test, which lists every route with its access level).
 
 A UI change must keep the CSP (no inline script/style) and send `?confirm=true`
-on library deletes only after its confirm dialog.
+on library deletes only after its confirm dialog. The server now needs a session
+and an `X-CSRF-Token` on every state change; the browser smoke test (`web/e2e`)
+gets both from the acceptance harness until the UI has its own login (plan item 6).
 
 ## How it is built
 
-Today the server itself keeps no database (the config is the environment plus
-`/config/settings.json`); `internal/store` and `internal/secrets` are the tested
-foundation for Phase 2 and nothing in the server process opens them yet (only
-the `backup` and `rekey` commands and tests do). Everything that talks to
-another service goes through the provider layer in `server/internal/providers/`:
+The server opens a SQLite database in `/config` at start (`internal/store`, with
+`internal/secrets` for the master key) and keeps accounts, sessions and the audit
+log in it (`internal/auth`); the service configuration is still the environment
+plus `/config/settings.json` until Phase 2 item 4. Every route is enforced by
+`app.Guard` (`internal/app/guard.go`): sessions, the same-origin check, the CSRF
+token, roles. Commands: `backup`, `rekey`, `reset-password`, `forget-secrets`.
+Everything that talks to another service goes through the provider layer in
+`server/internal/providers/`:
 
 - **Roles:** `downloadClient`, `mediaManager`, `mediaServer`, `metadata`. Each
   role has a package with the normalized model and a reusable `contract.go`
@@ -66,7 +76,10 @@ another service goes through the provider layer in `server/internal/providers/`:
   for the ready instances of a role and iterate them, so every route works with
   several instances (Radarr and Radarr 4K) and with none. Every route is
   registered with an access level (`Public`, `Authenticated`, `Admin`) through
-  `app.Router`; `router_test.go` lists them all.
+  `app.Router`; `router_test.go` lists them all with their levels, and the same
+  table is in `acceptance/routes.ts` (`ROUTE_LEVELS`; a Go test keeps them equal)
+  for the enumerating 401 / 403 / CSRF tests. A state-changing route needs no
+  extra code to get the CSRF and origin checks; a GET must never change state.
 - **Features** (Dashboard, Library, Explore, Codecs) are gated by
   `internal/features`, which decides from the configured instances what the nav
   shows and which pages show a "not configured" stub.
@@ -116,8 +129,15 @@ another service goes through the provider layer in `server/internal/providers/`:
   plaintext (use `secrets.Secret`), and keep the plaintext-on-disk canary test
   (`TestPlaintextNeverReachesDisk`) covering any new secret column. Update
   `docs/threat-model.md` when a PR changes a boundary or a mitigation.
+- **Accounts** (`server/internal/auth`). Passwords are Argon2id hashes and session
+  tokens SHA-256 hashes: never store, log, audit or return a password, a token or
+  a CSRF token (the acceptance sweep plants them and scans responses, logs and the
+  raw database). Every failed login must look the same (status, body, work done).
+  `internal/auth` must not import `internal/secrets` (accounts must survive a lost
+  master key; a test checks it). The clock and the hash cost are constructor
+  options for tests, never environment variables or a "disable auth" switch.
 - **Dependencies:** the Go server is the standard library plus `modernc.org/sqlite`
-  and its pure-Go dependencies. Every added module needs a written reason in the
+  (and its pure-Go dependencies) and `golang.org/x/crypto` (Argon2id). Every added module needs a written reason in the
   PR (why not the standard library, why this one), the newest stable version
   (`go list -m -u all`; nothing published in the last two weeks), a clean
   `govulncheck`, a license that works with GPL-3.0 (`make -C server deps` checks

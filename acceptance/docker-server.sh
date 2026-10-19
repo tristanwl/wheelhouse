@@ -17,19 +17,36 @@
 #   docker ps -aq --filter name=wheelhouse-acceptance | xargs -r docker rm -f
 set -eu
 
-image="${1:?usage: docker-server.sh IMAGE}"
+image="${1:?usage: docker-server.sh IMAGE [SUBCOMMAND ARGS...]}"
+shift
 : "${PORT:?PORT must be set}"
 
 scratch="$(realpath "${TMPDIR:-/tmp}")"
 config="$(mktemp -d "$scratch/wheelhouse-config.XXXXXX")"
 name="wheelhouse-acceptance-$$-$PORT"
 
+# The variables the suite sets for the server, by name only (never their values).
+passthrough="$(env | cut -d= -f1 | grep -E '^(PORT|HOSTNAME|WHEELHOUSE_[A-Z_]+|SONARR_[A-Z0-9_]+|RADARR_[A-Z0-9_]+|SABNZBD_[A-Z0-9_]+|QBITTORRENT_[A-Z0-9_]+|PLEX_[A-Z0-9_]+|JELLYFIN_[A-Z0-9_]+|TMDB_[A-Z0-9_]+)$' || true)"
+
+# Arguments after the image are a subcommand (`reset-password alice`): run it
+# once in the foreground against the same configuration, the way an operator
+# would with `docker exec`, and stop.
+if [ "$#" -gt 0 ]; then
+	envargs=""
+	for var in $passthrough; do envargs="$envargs -e $var"; done
+	rm -rf "$config"
+	# shellcheck disable=SC2086
+	exec docker run --rm --network host --user "$(id -u):$(id -g)" \
+		--read-only --cap-drop ALL --security-opt no-new-privileges \
+		-v "$scratch:$scratch" $envargs "$image" "$@"
+fi
+
 # Pass on the variables the suite sets for the server, by name only.
 set -- --rm --name "$name" --network host \
 	--user "$(id -u):$(id -g)" \
 	--read-only --cap-drop ALL --security-opt no-new-privileges \
 	-v "$config:/config" -v "$scratch:$scratch"
-for var in $(env | cut -d= -f1 | grep -E '^(PORT|HOSTNAME|WHEELHOUSE_[A-Z_]+|SONARR_[A-Z0-9_]+|RADARR_[A-Z0-9_]+|SABNZBD_[A-Z0-9_]+|QBITTORRENT_[A-Z0-9_]+|PLEX_[A-Z0-9_]+|JELLYFIN_[A-Z0-9_]+|TMDB_[A-Z0-9_]+)$'); do
+for var in $passthrough; do
 	set -- "$@" -e "$var"
 done
 

@@ -24,17 +24,19 @@ var sabNow = time.Unix(1792300000, 0).Add(time.Hour)
 
 type env = map[string]string
 
-// stack serves the app over an injected environment source.
+// stack serves the app over an injected environment source, for a signed-in administrator.
 func stack(t *testing.T, e env, now time.Time) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	var logs bytes.Buffer
+	acc := newAccounts(t)
 	h := Handler(Options{
 		Logger: slog.New(slog.NewTextHandler(&logs, nil)),
 		Source: core.NewEnvConfigSource(e),
 		Ffmpeg: func() bool { return false },
 		Now:    func() time.Time { return now },
+		Auth:   acc.Svc,
 	})
-	return h, &logs
+	return acc.As(h), &logs
 }
 
 func getJSON(t *testing.T, h http.Handler, path string) (int, map[string]any, string) {

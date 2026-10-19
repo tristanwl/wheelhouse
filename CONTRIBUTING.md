@@ -15,7 +15,7 @@ focused pull requests.
 
 ## Development setup
 
-Wheelhouse is a Go server (`server/`, standard library plus the SQLite driver) with a Vite UI
+Wheelhouse is a Go server (`server/`, standard library plus the SQLite driver and `golang.org/x/crypto` for Argon2id) with a Vite UI
 (`web/`) embedded in the binary. You need Go 1.27+ and Node 22.12+ (24
 recommended, see `.nvmrc`); Docker only for the image.
 

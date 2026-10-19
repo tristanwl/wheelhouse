@@ -23,9 +23,27 @@ npm run test:acceptance
 ```
 
 The default command is `./server/wheelhouse`, started with `PORT`,
-`WHEELHOUSE_LISTEN=127.0.0.1:<port>` and a container-style `HOSTNAME` (which the
-server must ignore) and the service variables below, and a free port picked per
-server. Readiness is `GET /api/features` answering 200.
+`WHEELHOUSE_LISTEN=127.0.0.1:<port>`, a container-style `HOSTNAME` (which the
+server must ignore), the service variables below, and its own empty config
+directory (`WHEELHOUSE_CONFIG_DIR` and `WHEELHOUSE_DB`, under the temp
+directory), on a free port picked per server. Readiness is `GET /healthz`
+answering 200.
+
+### Authenticated mode
+
+The server enforces authentication and has no switch to turn it off, so the
+harness (`harness.ts`) does what a person does, through the public API only: it
+reads the one-time setup token from `<config dir>/setup-token`, calls
+`POST /api/auth/setup`, logs in with `POST /api/auth/login`, and keeps the cookie
+and CSRF token. `server.request` sends them with every request (the scenarios,
+the secret sweep and the mutating routes all use it); `server.anon` sends
+nothing; `server.newClient()` and `client.login()` make more sessions;
+`server.cli([...])` runs `wheelhouse <args>` against the same configuration.
+`startServer({ auth: "none" })` leaves the server fresh (setup required) and
+`{ auth: "existing", configDir }` signs in to an existing database (a restart).
+There is no test backdoor in the server; timeouts that need a clock (idle 12 h,
+absolute 30 d) are tested in the Go packages with an injected clock, and the
+suite checks the expiry the server reports.
 
 Against another server, give it a shell command that serves Wheelhouse on
 `$PORT`:
@@ -90,6 +108,8 @@ responses"). The suite imports nothing from `server/` or `web/`.
 | `JELLYFIN_URL`, `JELLYFIN_API_KEY` | Jellyfin, id `jellyfin` |
 | `TMDB_API_KEY`, `TMDB_BASE_URL` | TMDB; `TMDB_BASE_URL` is the API root including `/3` (default `https://api.themoviedb.org/3`) |
 | `WHEELHOUSE_MEDIA_ROOTS` | the folders conversion may touch (the hard-link scenario points it at a scratch directory) |
+| `WHEELHOUSE_CONFIG_DIR`, `WHEELHOUSE_DB` | the config directory (database, master key, setup token) and database file; one empty directory per server |
+| `WHEELHOUSE_TRUSTED_PROXIES` | set by the cookie scenarios (the harness connects from `127.0.0.1`) |
 
 ## Files and what they guarantee
 
@@ -99,7 +119,12 @@ responses"). The suite imports nothing from `server/` or `web/`.
 | `stack.test.ts` | 2. Full stack | With healthy fakes of every service (and two Radarrs): every GET route answers its `full` status; `/api/status` lists the seven instances with stable ids and none is down; `/api/downloads` normalizes rows from SABnzbd and qBittorrent (states from the shared enum, progress 0..1, sizes in bytes); `/api/library` merges all managers biggest first; details, seasons, storage, Explore (including the "in library" mark for either Radarr and `limit`), search, add-meta and the codec routes have the documented shapes. |
 | `failures.test.ts` | 3. Failure modes | Wrong keys read "API key incorrect", unreachable services read as down, each in `/api/status`, `/api/downloads`, `/api/library`, `/api/storage`, search and codec analysis (as `problems`), and in the 502 of routes addressed to the broken instance; healthy instances keep answering. With everything unreachable all aggregate routes still answer 200 within seconds. |
 | `failures-slow.test.ts` | 3. Hangs | Services that accept connections and never answer are down with a "timed out" reason; nothing takes longer than the 8 s upstream timeout plus 3 s; healthy instances are unaffected. |
-| `secrets.test.ts` | 4. Secret sweep | Canary secrets are planted in every key, password and token, and in `user:password@` URL credentials, in five situations (rejected keys, unreachable, credentials in URLs, credentials in unreachable URLs, working keys). Every case in `routes.ts`, every page, and the error paths of the mutating routes are requested. No secret (plain, URL-encoded or base64) appears in any status line, header or body, or in the server's stdout and stderr. The scan is itself tested. |
+| `secrets.test.ts` | 4. Secret sweep | Canary secrets are planted in every key, password and token, and in `user:password@` URL credentials, in five situations (rejected keys, unreachable, credentials in URLs, credentials in unreachable URLs, working keys). Every case in `routes.ts`, every page, and the error paths of the mutating routes are requested. No secret (plain, URL-encoded or base64) appears in any status line, header or body, or in the server's stdout and stderr. The same sweep plants the setup token, the administrator's password, a wrong password, the session cookie and the CSRF token: none may appear in those responses, in the log (except the one setup-token line printed at start) or in the raw database, its `-wal` and `-shm` files, which must hold only the Argon2id hash and the SHA-256 of the token. The scan is itself tested. |
+| `auth-setup.test.ts` | 6. First run | A fresh server serves the pages, `/healthz` and the setup status and answers 503 `setup required` everywhere else; the token file is mode 0600 and the token is logged once; setup refuses a missing or wrong token, a weak password and a foreign origin without spending the token; it works once, deletes the token file and then returns 409; a restart keeps accounts and sessions and makes no token; startup failures are fatal with a message (database mode, bad key file, bad proxy list, missing directory); a lost master key stops the server and `forget-secrets --yes` recovers it with the accounts intact. |
+| `auth-levels.test.ts` | 7. Levels | For every route in `ROUTE_LEVELS` (kept equal to the Go router test's table): an unauthenticated request to a non-public route is 401 JSON, never a redirect; a `user` gets 403 on every admin route and is let through the others; every mutating route refuses a missing, wrong or other session's CSRF token, a foreign or `null` Origin and cross-site fetch metadata, and login and setup refuse a foreign origin; GET routes never change state. |
+| `auth-sessions.test.ts` | 8. Sessions | Cookie flags (`HttpOnly`, `SameSite=Strict`, `Path=/`, no `Secure` over plain HTTP), `__Host-` and `Secure` only behind a trusted proxy that says HTTPS (and the header ignored from anyone else); 256-bit token never in a body; reported idle and absolute expiry; a new session at every login and no fixation; own session list and revoke; logout; a password change ends every session and rotates. |
+| `auth-throttle.test.ts` | 9. Throttling | Unknown user, wrong password and locked login answer byte-identically; both cost a password hash; an account locks after 5 failures even for the right password and a made-up name behaves the same; an address locks after many; audit rows exist and hold no password or unknown name. |
+| `auth-users.test.ts` | 10. Accounts | Create, rename, re-role, disable, delete, case-insensitive uniqueness, strict validation and size limits; the last administrator cannot be deleted, demoted or disabled; a user cannot escalate or read accounts and the audit log; an administrator lists and ends another user's sessions; an admin reset and `wheelhouse reset-password` force a new password (everything else is 403 until then) and lift a lockout; the audit log has the events, the acting user and no secret, newest first, paged. |
 | `mutations.test.ts` | 5. Mutations | `POST /api/add` validation and the add flow to both Radarrs and to Sonarr (checked on the fake upstream's received request, and in the library afterwards); `DELETE` of a movie and of a season (only the addressed instance is touched); settings validation; conversion validation, cancel of an unknown job, and the hard-link confirmation (409, `code: "hardlinked"`, `linkCount`, nothing queued). |
 
 Bodies are asserted by shape and invariants, never by exact content, where the
@@ -136,8 +161,10 @@ which the Go server reproduces, unless it says otherwise.
 
 ## Adding a route
 
-1. Add it to the server.
-2. Add it to `routes.ts`, once: a `GET_ROUTES` entry (its `pattern`, with
+1. Add it to the server, with its access level.
+2. Add it to `ROUTE_LEVELS` in `routes.ts` with that level (a Go test fails until
+   the two tables agree, and `auth-levels.test.ts` then checks 401 / 403 / CSRF /
+   origin for it), and to the table below, once: a `GET_ROUTES` entry (its `pattern`, with
    `{param}` placeholders) with one or more `cases` (concrete `path`, the status
    with nothing configured (`none`) and with the full stack (`full`)), or a
    `MUTATING_ROUTES` entry. The secret sweep and the boot and stack scans read

@@ -5,6 +5,8 @@
 //	wheelhouse version       print the version (also --version)
 //	wheelhouse backup FILE   write a consistent copy of the database to FILE
 //	wheelhouse rekey         re-encrypt every stored secret under a new master key
+//	wheelhouse reset-password USER   set a one-time password for USER (recovery)
+//	wheelhouse forget-secrets --yes  discard stored credentials after the master key is lost
 package main
 
 import (
@@ -21,10 +23,12 @@ import (
 	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/app"
-	"github.com/tristanwl/wheelhouse/server/internal/codecs"
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
 	"github.com/tristanwl/wheelhouse/server/internal/converter"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
+	"github.com/tristanwl/wheelhouse/server/internal/secrets"
+	"github.com/tristanwl/wheelhouse/server/internal/store"
 	"github.com/tristanwl/wheelhouse/server/internal/version"
 )
 
@@ -40,14 +44,19 @@ func main() {
 				os.Exit(1)
 			}
 			return
-		case "backup", "rekey":
+		case "backup", "rekey", "reset-password", "forget-secrets":
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-			e := cliEnv{getenv: os.Getenv, configDir: codecs.DefaultConfigDir, stdout: os.Stdout}
+			e := cliEnv{getenv: os.Getenv, configDir: config.ConfigDir(os.Getenv), stdout: os.Stdout}
 			var err error
-			if os.Args[1] == "backup" {
+			switch os.Args[1] {
+			case "backup":
 				err = runBackup(ctx, e, os.Args[2:])
-			} else {
+			case "rekey":
 				err = runRekey(ctx, e, os.Args[2:])
+			case "forget-secrets":
+				err = runForgetSecrets(ctx, e, os.Args[2:])
+			default:
+				err = runResetPassword(ctx, e, os.Args[2:])
 			}
 			stop()
 			if err != nil {
@@ -56,7 +65,7 @@ func main() {
 			}
 			return
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version | backup <file> | rekey]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version | backup <file> | rekey | reset-password <user> | forget-secrets --yes]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
@@ -97,9 +106,42 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
+	proxies, err := config.TrustedProxies(os.Getenv)
+	if err != nil {
+		return err
+	}
+	configDir := config.ConfigDir(os.Getenv)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// Storage first: a server that cannot open its database or key must not
+	// listen, because every route but health and setup needs accounts. Each of
+	// these errors names the problem and what to do (wrong file mode, missing
+	// volume, a database from a newer version, a key that does not match).
+	db, err := store.Open(ctx, config.DBPath(os.Getenv, configDir))
+	if err != nil {
+		return fmt.Errorf("database: %w", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Warn("closing the database", "error", err)
+		}
+	}()
+	loaded, err := secrets.Load(secrets.LoadOptions{Getenv: os.Getenv, ConfigDir: configDir, Generate: true})
+	if err != nil {
+		return fmt.Errorf("secret key: %w", err)
+	}
+	if _, err := db.UnlockSecrets(ctx, loaded, true); err != nil { // the Cipher is used from Phase 2 item 4 on
+		if errors.Is(err, store.ErrWrongKey) {
+			return fmt.Errorf("secret key: %w. Put the original key back (%s). If it is lost for good, `wheelhouse forget-secrets --yes` discards the stored provider credentials and keeps the accounts; see docs/operations.md, \"Key loss\"", err, loaded.Source)
+		}
+		return fmt.Errorf("secret key: %w", err)
+	}
+	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log})
+	if err := accounts.PrepareSetup(ctx); err != nil {
+		return fmt.Errorf("accounts: %w", err)
+	}
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.Addr())
 	if err != nil {
@@ -108,10 +150,12 @@ func run(log *slog.Logger) error {
 	log.Info("listening", "addr", ln.Addr().String(), "version", version.Version)
 
 	handler := app.Handler(app.Options{
-		Logger:    log,
-		Source:    core.NewProcessEnvConfigSource(),
-		Context:   ctx,
-		Converter: app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv)},
+		Logger:         log,
+		Source:         core.NewProcessEnvConfigSource(),
+		Context:        ctx,
+		Converter:      app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv), ConfigDir: configDir},
+		Auth:           accounts,
+		TrustedProxies: proxies,
 	})
 	return app.Serve(ctx, ln, handler, log)
 }

@@ -306,3 +306,72 @@ func stageKey(path string) (secrets.Key, error) {
 	}
 	return k, err
 }
+
+// ForgetSecrets is the recovery from a master key that is lost for good: every
+// registered secret column is set to NULL (the values cannot be decrypted by
+// anyone, so they are discarded, not guessed) and the key check is replaced by
+// one sealed under key, which becomes the database's key. The caller must have
+// seen ErrWrongKey first; this refuses to run when key already opens the
+// database, so it cannot be used to throw away secrets that are still readable.
+// It returns the new Cipher and how many stored values were discarded. Users,
+// sessions and the audit log are not touched: passwords are hashed, not
+// encrypted, so they never depended on the key.
+func (db *DB) ForgetSecrets(ctx context.Context, key secrets.Key) (*secrets.Cipher, int, error) {
+	return db.forgetSecrets(ctx, key, secretColumns)
+}
+
+func (db *DB) forgetSecrets(ctx context.Context, key secrets.Key, cols []SecretColumn) (*secrets.Cipher, int, error) {
+	for _, c := range cols {
+		if err := c.validate(); err != nil {
+			return nil, 0, err
+		}
+	}
+	var next *secrets.Cipher
+	count := 0
+	err := db.Tx(ctx, func(tx *sql.Tx) error {
+		count = 0
+		version := uint32(firstKeyVersion)
+		env, err := metaBlob(ctx, tx.QueryRowContext, metaKeyCheck)
+		switch {
+		case errors.Is(err, ErrNoMeta):
+			// Nothing was ever sealed: there is nothing to forget.
+		case err != nil:
+			return err
+		default:
+			if _, err := openCheck(key, env); err == nil {
+				return errors.New("the current key opens this database; there is nothing to forget")
+			}
+			old, err := secrets.EnvelopeVersion(env)
+			if err != nil {
+				return fmt.Errorf("the secret key record in this database is damaged: %w", err)
+			}
+			version = old + 1
+		}
+		for _, col := range cols {
+			q := fmt.Sprintf(`UPDATE "%s" SET "%s" = NULL WHERE "%s" IS NOT NULL`, col.Table, col.Column, col.Column) //nolint:gosec // identifiers are validated against ^[a-z][a-z0-9_]*$ by SecretColumn.validate
+			res, err := tx.ExecContext(ctx, q)
+			if err != nil {
+				return err
+			}
+			n, _ := res.RowsAffected()
+			count += int(n)
+		}
+		c, err := secrets.NewCipher(key, version)
+		if err != nil {
+			return err
+		}
+		sealed, err := c.Seal([]byte(keyCheckPlain), keyCheckAD)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", metaKeyCheck, sealed); err != nil {
+			return err
+		}
+		next = c
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return next, count, nil
+}
