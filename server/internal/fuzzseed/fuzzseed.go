@@ -123,6 +123,8 @@ func encode(t testing.TB, v any) string {
 		return fmt.Sprintf("int(%d)", x)
 	case int64:
 		return fmt.Sprintf("int64(%d)", x)
+	case float64:
+		return fmt.Sprintf("float64(%v)", x)
 	case uint8:
 		return fmt.Sprintf("uint8(%d)", x)
 	case uint16:
