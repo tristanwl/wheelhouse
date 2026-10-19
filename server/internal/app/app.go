@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
+	"github.com/tristanwl/wheelhouse/server/internal/converter"
 	"github.com/tristanwl/wheelhouse/server/internal/features"
 	"github.com/tristanwl/wheelhouse/server/internal/instances"
 	"github.com/tristanwl/wheelhouse/server/internal/middleware"
@@ -70,6 +71,8 @@ type deps struct {
 	now    func() time.Time
 	ctx    context.Context
 	conv   ConverterOptions
+	// convSet is the converter settings (media roots, HDR switch); never nil.
+	convSet *converter.Settings
 	// log receives operational messages; never nil.
 	log *slog.Logger
 	// auth records audit entries and serves the account routes; nil in tests
@@ -133,8 +136,11 @@ func Routes(o Options) *Router {
 	if o.Network == nil {
 		o.Network = netaccess.NewMemory(o.TrustedProxies)
 	}
+	if o.Converter.Settings == nil {
+		o.Converter.Settings = converter.NewMemorySettings(o.Converter.MediaRoots)
+	}
 	guard := NewGuard(o.Auth, o.Network)
-	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard, cfg: o.Config}
+	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, convSet: o.Converter.Settings, auth: o.Auth, guard: guard, cfg: o.Config}
 
 	r := NewRouter(guard)
 	r.wrap = d.featureGate
@@ -145,6 +151,7 @@ func Routes(o Options) *Router {
 	registerConfig(r, d)
 	registerStack(r, d)
 	registerCodecs(r, d)
+	registerConverterSettings(r, d)
 	registerLibrary(r, d)
 	registerExplore(r, d)
 

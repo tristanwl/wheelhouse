@@ -86,7 +86,7 @@ func TestResolveInRoots(t *testing.T) {
 	}
 }
 
-func TestRootsFromEnv(t *testing.T) {
+func TestEnvRoots(t *testing.T) {
 	get := func(v string) func(string) string {
 		return func(k string) string {
 			if k == RootsEnv {
@@ -95,14 +95,14 @@ func TestRootsFromEnv(t *testing.T) {
 			return ""
 		}
 	}
-	if got := RootsFromEnv(get("")); len(got) != 2 || got[0] != "/movies" || got[1] != "/tv" {
-		t.Errorf("default: %v", got)
+	if got := EnvRoots(get("")); got != nil {
+		t.Errorf("unset: %v", got)
 	}
-	if got := RootsFromEnv(get("/a/b:/c/../d:rel")); len(got) != 2 || got[0] != "/a/b" || got[1] != "/d" {
+	if got := EnvRoots(get("/a/b:/c/../d:rel")); len(got) != 2 || got[0] != "/a/b" || got[1] != "/d" {
 		t.Errorf("custom: %v", got)
 	}
-	if got := RootsFromEnv(get("rel")); len(got) != 2 {
-		t.Errorf("only relative paths fall back to the default: %v", got)
+	if got := EnvRoots(get("rel")); got != nil {
+		t.Errorf("only relative paths count as unset: %v", got)
 	}
 }
 

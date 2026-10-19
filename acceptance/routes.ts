@@ -255,6 +255,8 @@ export const ROUTE_LEVELS: { route: string; level: Level }[] = [
   { route: "PUT /api/admin/features", level: "admin" },
   { route: "GET /api/admin/network", level: "admin" },
   { route: "PUT /api/admin/network", level: "admin" },
+  { route: "GET /api/admin/converter", level: "admin" },
+  { route: "PUT /api/admin/converter", level: "admin" },
 ];
 
 /** A concrete request for a route pattern; the values only need to be well formed. */

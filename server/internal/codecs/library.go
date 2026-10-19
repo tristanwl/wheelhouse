@@ -43,6 +43,13 @@ func bitDepth(mi *mediamanager.MediaInfo) *int {
 	return mi.VideoBitDepth
 }
 
+func hdrOf(mi *mediamanager.MediaInfo) HDR {
+	if mi == nil {
+		return HDRNone
+	}
+	return ClassifyDynamicRange(mi.VideoDynamicRange, mi.VideoDynamicRangeType)
+}
+
 func resolution(mi *mediamanager.MediaInfo) *string {
 	if mi == nil || mi.Resolution == "" {
 		return nil
@@ -71,6 +78,7 @@ func movieFiles(ctx context.Context, client mediamanager.MovieManager, entry med
 			InstanceID: entry.InstanceID,
 			ItemID:     m.ID,
 			FilePath:   m.MovieFile.Path,
+			HDR:        hdrOf(mi),
 		})
 	}
 	return scan, nil
@@ -188,6 +196,7 @@ func tvFiles(ctx context.Context, client mediamanager.SeriesManager, entry media
 				InstanceID: entry.InstanceID,
 				ItemID:     d.series.ID,
 				FilePath:   f.Path,
+				HDR:        hdrOf(f.MediaInfo),
 			})
 		}
 	}
