@@ -210,11 +210,30 @@ risks), **out of scope**.
   addition needs a written justification, the newest stable version, a clean
   `govulncheck`, and a license compatible with GPL-3.0.
 - **CI:** `govulncheck` (pinned) and `npm audit` on every PR; a license check on
-  the Go module graph; Dependabot weekly for Go, npm, Actions and base images.
-- **Pinning:** GitHub Actions by commit SHA, base images by tag and digest,
-  `go.sum` and the npm lock files committed.
-- **Release artifacts:** signed images with provenance and an SBOM are an
-  acceptance criterion for 1.0 and are not in place yet.
+  the Go module graph; Dependabot weekly for Go, npm, Actions and base images,
+  with a 7-day cooldown on version updates (security updates are not delayed).
+- **Pinning:** GitHub Actions by commit SHA, base images and the QEMU binfmt
+  image by tag and digest, `go.sum` and the npm lock files committed.
+  `scripts/check-pins.sh` runs in the `check` job and fails a pull request that
+  adds an unpinned action or `FROM` (exceptions need a reason in
+  `scripts/check-pins.allow`). Not pinned by version: the Alpine packages (ffmpeg
+  and drivers) apk installs at build time, which the SBOM records, and the
+  `go run ...@version` tools, which `go.sum` and the module proxy checksum
+  database verify.
+- **Reproducibility:** the Go binary is built with `-trimpath` and a fixed
+  toolchain; building it twice from different directories gives identical bytes
+  (checked for linux/amd64 and linux/arm64). The image as a whole is not
+  bit-for-bit reproducible because of the apk layer.
+- **Release artifacts:** the release workflow publishes an SPDX SBOM and SLSA
+  provenance (BuildKit, `mode=max`) with the image and a signed (Sigstore,
+  keyless) GitHub build-provenance attestation of the image digest; users verify
+  them with [docs/verifying-releases.md](verifying-releases.md). The Docker Hub
+  token is meant to live in a `release` environment that only tag runs can use,
+  and tags are meant to be immutable, which are repository settings the owner
+  applies ([maintainer-settings.md](maintainer-settings.md)). The attestations
+  exist from the first release built by this workflow; they prove where an image
+  was built, not that the source is free of defects, and do not protect against a
+  compromised maintainer account or release environment.
 - **Residual:** `modernc.org/sqlite` is SQLite transpiled to Go. Its quality is
   that of its maintainers' tooling; a bug there is not caught by Go's memory
   safety in the same way as hand-written Go. The alternative (cgo SQLite) is not

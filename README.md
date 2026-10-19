@@ -53,7 +53,9 @@ image and hardware encoding is untested; software x264/x265 conversion works.
 There is no `latest` tag while Wheelhouse is
 alpha; pin a version, for example `tristanwl/wheelhouse:0.3.0`. To build from
 source instead, uncomment `build: .` in the compose file and run
-`docker compose up -d --build`.
+`docker compose up -d --build`. Release images from 1.0.0 on (earlier ones have
+none) carry signed build provenance and an SBOM; see
+[docs/verifying-releases.md](docs/verifying-releases.md) to verify what you pull.
 
 ### First run
 

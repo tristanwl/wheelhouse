@@ -151,7 +151,9 @@ Everything that talks to another service goes through the provider layer in
   `govulncheck`, a license that works with GPL-3.0 (`make -C server deps` checks
   an allow-list) and a tidy `go.mod`/`go.sum`. `modernc.org/libc` stays at the
   version the SQLite driver pins. Pin GitHub Actions by commit SHA and the Docker
-  base images by digest.
+  base images by digest (`scripts/check-pins.sh` in the `check` job enforces it).
+  Releases publish an SBOM and signed provenance ([docs/verifying-releases.md](docs/verifying-releases.md));
+  the repository settings the owner must apply are in [docs/maintainer-settings.md](docs/maintainer-settings.md).
 
 ## Adding a provider
 
