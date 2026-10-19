@@ -1,0 +1,4 @@
+go test fuzz v1
+string("2130706433")
+string("*.nas.example.lan")
+string("nas.example.lan")

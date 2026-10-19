@@ -1,0 +1,7 @@
+go test fuzz v1
+string("[fe80::1%eth0]:80")
+string("192.168.1.1")
+string("")
+string("")
+string("")
+bool(false)

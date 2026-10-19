@@ -1,0 +1,4 @@
+go test fuzz v1
+string("[fe80::1%25eth0]:1")
+string("")
+string("")
