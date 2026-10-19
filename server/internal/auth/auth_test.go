@@ -1306,7 +1306,9 @@ func TestVerificationQueueIsBounded(t *testing.T) {
 	}
 	cancel()
 	for range maxQueuedVerifies {
-		<-errs
+		if err := <-errs; err == nil {
+			t.Error("a queued verification of a stored hash succeeded after cancel")
+		}
 	}
 	if h.waiting.Load() != 0 {
 		t.Fatal("waiters leaked")
