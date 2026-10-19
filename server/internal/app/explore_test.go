@@ -150,7 +150,7 @@ func TestExploreTMDBFailuresAre502WithAMessage(t *testing.T) {
 		h, _ := stack(t, env{}, time.Now())
 		for _, p := range []string{"/api/explore?category=popular", "/api/explore/101"} {
 			code, body, raw := getJSON(t, h, p)
-			if code != 502 || body["error"] != "TMDB is not configured. Set TMDB_API_KEY." {
+			if code != 502 || body["error"] != "TMDB is not configured. An administrator can add it under Admin, Services." {
 				t.Errorf("%s: %d %s", p, code, raw)
 			}
 		}

@@ -277,6 +277,31 @@ describe.skipIf(reason)("browser smoke test", () => {
           window.innerWidth,
         ]);
         if (scroll > inner) wide.push(`${path}: ${scroll}px wide in ${inner}px`);
+        if (path.startsWith("/admin")) {
+          // Issue #86: the Administration tabs wrap; none may be cut off or hidden
+          // behind a sideways scroll (which gave no hint that it scrolls).
+          const tabs = await v.page.evaluate(() => {
+            const nav = document.querySelector('nav[aria-label="Administration"]');
+            const list = nav?.querySelector("ul");
+            const links = [...(nav?.querySelectorAll("a") ?? [])];
+            const rows = new Set(links.map((a) => Math.round(a.getBoundingClientRect().top)));
+            return {
+              count: links.length,
+              scrolls: list ? ["auto", "scroll"].includes(getComputedStyle(list).overflowX) : true,
+              outside: links
+                .filter((a) => {
+                  const r = a.getBoundingClientRect();
+                  return r.left < 0 || r.right > window.innerWidth;
+                })
+                .map((a) => a.textContent),
+              rows: rows.size,
+            };
+          });
+          if (tabs.count !== 7) wide.push(`${path}: ${tabs.count} admin tabs`);
+          if (tabs.scrolls) wide.push(`${path}: the admin tabs scroll sideways`);
+          if (tabs.outside.length) wide.push(`${path}: tabs outside the screen: ${tabs.outside}`);
+          if (tabs.rows < 2) wide.push(`${path}: the tabs did not wrap (${tabs.rows} row)`);
+        }
       } finally {
         await v.page.context().close();
       }

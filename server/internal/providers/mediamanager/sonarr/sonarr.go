@@ -53,7 +53,7 @@ func send[T any](ctx context.Context, c *Client, method, path string, query url.
 
 // Series lists the library (cached for a few seconds; any write clears it).
 func (c *Client) Series(ctx context.Context) ([]mm.Series, error) {
-	s, err := get[[]mm.Series](ctx, c, "series", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LargeListBytes})
+	s, err := get[[]mm.Series](ctx, c, "series", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LibraryListBytes(), SizeSetting: core.LibrarySizeSetting})
 	if s == nil {
 		s = []mm.Series{}
 	}

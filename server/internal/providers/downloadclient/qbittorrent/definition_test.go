@@ -74,7 +74,7 @@ func TestThroughTheRuntime(t *testing.T) {
 			t.Fatal(err)
 		}
 		if res[0].Status != core.StatusInvalidConfig ||
-			!strings.Contains(res[0].Error, "username") || !strings.Contains(res[0].Error, "password") {
+			res[0].Error != "Username is required; Password is required" {
 			t.Errorf("%+v", res[0])
 		}
 	})

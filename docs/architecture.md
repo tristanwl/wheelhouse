@@ -42,6 +42,7 @@ internal/app          the router (every route states its access level), middlewa
 internal/config       listen address, database path
 internal/store        SQLite: open (modes, WAL, pools), embedded migrations, backup, secret-column rekey
 internal/secrets      AES-256-GCM envelopes, master key loading, redacting key and secret types
+internal/runlock      the advisory lock a running server holds on <config>/wheelhouse.lock (rekey, forget-secrets refuse)
 internal/features     feature gating (what the nav shows)
 internal/status       GET /api/status
 internal/downloads    GET /api/downloads
@@ -100,7 +101,13 @@ See [server/README.md](../server/README.md) for the server and
   it (unknown keys ignored, empty strings rejected, optional `Validate()` hook)
   and builds a JSON Schema description of it (`Definition.Schema()`, with
   `writeOnly` and `x-secret` on credentials) for the future admin page.
-  Validation errors name the field and the rule, never the value.
+  Every field must have a `label` (a definition without one is refused). Validation
+  errors read `<label> <rule>` ("API key is required"), never the JSON key and
+  never the value; `FieldError.Field` keeps the key only so the admin form can put
+  the message next to its input (`fields` in the 400 response), and audit entries
+  record changed settings by label. `TestNoUserFacingStringNamesACamelCaseSettingKey`
+  and `TestEveryConfigurationProblemIsWrittenWithLabels` (`internal/guards`) fail
+  when text names a key or falls back to the `key: message` form.
 - **Config sources.** `ConfigSource.Instances(ctx)`. `EnvConfigSource` reads the
   environment variables (see Config below), including extra Sonarr and Radarr
   instances (`RADARR_4K_URL` gives `radarr-4k`). A database source comes in
@@ -115,7 +122,9 @@ See [server/README.md](../server/README.md) for the server and
   plus `apikey=`-style parameters and `user:pass@` URLs, `ProviderError` with a
   status, GET cache with TTL, in-flight de-duplication and `Invalidate()`. At
   most 8 MiB is read from upstream by default (an endpoint sets its own cap:
-  96 MiB for library and torrent lists, 2 MiB for status calls), the body is
+  96 MiB for library and torrent lists, 2 MiB for status calls; the Radarr and Sonarr
+  lists take their cap from `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB`, 16 to 512 MiB, through
+  `core.LibraryListBytes()`), the body is
   scanned before it is decoded (`core.DecodeJSON`: elements per array, values in
   total, nesting depth, string length, and a process-wide gate for large
   decodes, so a few bytes of `{}` cannot become gigabytes), redirects to another host (or from https to
@@ -724,7 +733,11 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   failure or release it afterwards, re-check the lock once the hash semaphore is
   held, skip Argon2 for locked keys, and shed load when more than 32 verifications
   are queued, so a parallel burst cannot exceed the allowance.
-- **Audit log.** `audit_log` is append-only (triggers refuse update and delete).
+- **Audit log.** `audit_log` is append-only: triggers refuse every update, and every
+  delete of a row younger than 30 days (migration 0008; the age is judged by SQLite's
+  clock). The only thing that deletes is `auth.Service.PruneAudit`, run at start and every
+  24 hours for rows older than `WHEELHOUSE_AUDIT_RETENTION_DAYS` (default 180, minimum 30,
+  the floor), in batches of 1000, followed by one `audit.prune` entry.
   Setup, login ok / failure / lockout, logout, password change and reset, user
   create / update / role change / delete, session revocation, library add and
   delete, and conversion start and cancel are recorded with the acting account,
@@ -859,6 +872,14 @@ created and checked at start so that a wrong key is noticed at once.
   database is under, so a wrong key fails immediately, `rekey` can re-encrypt
   every secret column in one transaction, and `forget-secrets` is the recovery
   when the key is gone for good.
+- **One owner of the key at a time.** The server takes an exclusive `flock` on
+  `<config>/wheelhouse.lock` before it opens the database and keeps it until it exits;
+  `rekey` and `forget-secrets` take the same lock and refuse while it is held (the kernel
+  frees it when the process dies, so nothing needs cleaning up after a crash). As a second
+  line of defence `store.DB.CheckKey` compares the database's key record with the key the
+  process unlocked, inside every transaction that seals a secret: a mismatch is
+  `ErrKeyChanged`, which the API answers with 503 and a restart instruction, and which the
+  services' status text reports (`core.Instance.Problem`) instead of "is required".
 - **Backups** are `VACUUM INTO` snapshots taken while the server runs, mode 0600,
   never overwriting; they contain ciphertext, **not the key**. Losing the key
   loses the stored provider credentials for good; [operations.md](operations.md)

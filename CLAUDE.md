@@ -107,7 +107,9 @@ Everything that talks to another service goes through the provider layer in
 - **Adapters normalize.** Sizes in bytes, progress 0..1, durations in seconds,
   states from the shared enums. An unreachable service returns a `ProviderError`
   (the caller reports it as down); a wrong key is a clear "API key incorrect".
-  User-facing notices never name configuration keys or env vars.
+  User-facing notices never name configuration keys or env vars: validation errors
+  carry the field's `label` (`core.FieldError.Text()`), every config field must have
+  a `label` tag, and `internal/guards` fails on a camelCase key in a message.
 - **Fixtures come from real responses**, sanitized. Each service answers
   errors differently (SABnzbd: HTTP 403 plain text; Plex: 401 with an HTML page;
   qBittorrent v4 and v5 differ on login), so don't invent shapes: run the real

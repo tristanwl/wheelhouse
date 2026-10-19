@@ -52,7 +52,7 @@ func send[T any](ctx context.Context, c *Client, method, path string, query url.
 
 // Movies lists the library (cached for a few seconds; any write clears it).
 func (c *Client) Movies(ctx context.Context) ([]mm.Movie, error) {
-	m, err := get[[]mm.Movie](ctx, c, "movie", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LargeListBytes})
+	m, err := get[[]mm.Movie](ctx, c, "movie", core.Request{CacheTTL: mm.LibraryCacheTTL, MaxBytes: core.LibraryListBytes(), SizeSetting: core.LibrarySizeSetting})
 	if m == nil {
 		m = []mm.Movie{}
 	}

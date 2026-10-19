@@ -9,10 +9,10 @@ import (
 const canary = "CANARY-secret-9f8e7d6c5b"
 
 type validatedConfig struct {
-	URL      string `json:"url" config:"required,url"`
-	Token    string `json:"token" config:"secret"`
-	Port     int    `json:"port"`
-	Insecure bool   `json:"insecure"`
+	URL      string `json:"url" label:"URL" config:"required,url"`
+	Token    string `json:"token" label:"Token" config:"secret"`
+	Port     int    `json:"port" label:"Port"`
+	Insecure bool   `json:"insecure" label:"Allow insecure"`
 }
 
 func (c validatedConfig) Validate() error {
@@ -54,15 +54,15 @@ func TestDecodeReportsEveryProblemInDeclarationOrder(t *testing.T) {
 	if !errors.As(err, &ve) {
 		t.Fatalf("err = %v", err)
 	}
-	want := "url: must be an http or https URL; token: must be a string; " +
-		"port: must be a whole number; insecure: must be true or false"
+	want := "URL must be an http or https URL; Token must be a string; " +
+		"Port must be a whole number; Allow insecure must be true or false"
 	if err.Error() != want {
 		t.Fatalf("err = %q", err)
 	}
 
 	// The zod test expects both fields named for {url: "not a url"}.
 	_, err = fakeDef(t).Decode(map[string]any{"url": "not a url"})
-	if err == nil || !strings.Contains(err.Error(), "url:") || !strings.Contains(err.Error(), "apiKey:") {
+	if err == nil || err.Error() != "URL must be an http or https URL; API key is required" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -80,17 +80,17 @@ func TestDecodeRequiredEmptyNilAndWrongShapes(t *testing.T) {
 		raw  map[string]any
 		want string
 	}{
-		{"nil map", nil, "url: is required; apiKey: is required"},
-		{"explicit nil", map[string]any{"url": nil, "apiKey": nil}, "url: is required; apiKey: is required"},
-		{"empty string", map[string]any{"url": "http://h", "apiKey": ""}, "apiKey: must not be empty"},
-		{"ftp scheme", map[string]any{"url": "ftp://h", "apiKey": "k"}, "url: must be an http or https URL"},
-		{"no host", map[string]any{"url": "http://", "apiKey": "k"}, "url: must be an http or https URL"},
-		{"relative", map[string]any{"url": "/x", "apiKey": "k"}, "url: must be an http or https URL"},
-		{"credentials", map[string]any{"url": "http://u:CANARY-PASS@h", "apiKey": "k"}, "url: must not contain a username or password"},
-		{"fragment swallows the path", map[string]any{"url": "http://h:7878#/x", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
-		{"empty fragment", map[string]any{"url": "http://h:7878/#", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
-		{"query", map[string]any{"url": "http://h:7878/radarr?apikey=x", "apiKey": "k"}, "url: must not contain a query string (?...) or a fragment (#...)"},
-		{"username only", map[string]any{"url": "http://CANARY-USER@h", "apiKey": "k"}, "url: must not contain a username or password"},
+		{"nil map", nil, "URL is required; API key is required"},
+		{"explicit nil", map[string]any{"url": nil, "apiKey": nil}, "URL is required; API key is required"},
+		{"empty string", map[string]any{"url": "http://h", "apiKey": ""}, "API key must not be empty"},
+		{"ftp scheme", map[string]any{"url": "ftp://h", "apiKey": "k"}, "URL must be an http or https URL"},
+		{"no host", map[string]any{"url": "http://", "apiKey": "k"}, "URL must be an http or https URL"},
+		{"relative", map[string]any{"url": "/x", "apiKey": "k"}, "URL must be an http or https URL"},
+		{"credentials", map[string]any{"url": "http://u:CANARY-PASS@h", "apiKey": "k"}, "URL must not contain a username or password"},
+		{"fragment swallows the path", map[string]any{"url": "http://h:7878#/x", "apiKey": "k"}, "URL must not contain a query string (?...) or a fragment (#...)"},
+		{"empty fragment", map[string]any{"url": "http://h:7878/#", "apiKey": "k"}, "URL must not contain a query string (?...) or a fragment (#...)"},
+		{"query", map[string]any{"url": "http://h:7878/radarr?apikey=x", "apiKey": "k"}, "URL must not contain a query string (?...) or a fragment (#...)"},
+		{"username only", map[string]any{"url": "http://CANARY-USER@h", "apiKey": "k"}, "URL must not contain a username or password"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestDecodeRequiredEmptyNilAndWrongShapes(t *testing.T) {
 func TestDecodeRunsTheValidateHookOnlyWhenFieldsPass(t *testing.T) {
 	d := validatedDef(t)
 	_, err := d.Decode(map[string]any{"url": "http://h", "port": 99})
-	if err == nil || err.Error() != "config: port 99 is reserved" {
+	if err == nil || err.Error() != "port 99 is reserved" {
 		t.Fatalf("err = %v", err)
 	}
 	_, err = d.Decode(map[string]any{"url": "bad", "port": 99})

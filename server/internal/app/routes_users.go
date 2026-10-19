@@ -174,6 +174,18 @@ func registerUsers(r *Router, d deps) {
 		if len(entries) == limit {
 			next = entries[len(entries)-1].ID
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"entries": out, "nextBefore": next})
+		writeJSON(w, http.StatusOK, map[string]any{"entries": out, "nextBefore": next, "retention": retentionView(svc.AuditRetention())})
 	})
+}
+
+// retentionView is how long audit rows are kept and what the last prune did.
+// Read-only: the retention is set in the environment, never through the API.
+func retentionView(r auth.AuditRetention) map[string]any {
+	out := map[string]any{"days": r.Days, "floorDays": r.FloorDays}
+	if !r.Last.At.IsZero() {
+		out["lastPrune"] = map[string]any{
+			"at": rfc3339(r.Last.At), "deleted": r.Last.Deleted, "cutoff": rfc3339(r.Last.Cutoff), "failed": r.Last.Failed,
+		}
+	}
+	return out
 }

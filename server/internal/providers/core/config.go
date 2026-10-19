@@ -54,13 +54,28 @@ type Field struct {
 }
 
 // FieldError is one problem with one setting. Message never contains the value.
+//
+// Field is the setting's key in the stored configuration (it is how the admin
+// form finds the input the problem belongs to, and is never shown). Label is
+// the human name the admin form shows ("API key"), and Text() is the sentence
+// to show ("API key is required"): user-facing text never names a key.
 type FieldError struct {
 	Field   string
+	Label   string
 	Message string
 }
 
+// Text is the problem as a sentence for people: the label, then the message.
+// A problem that is not about one setting (Label empty) is just the message.
+func (fe FieldError) Text() string {
+	if fe.Label == "" {
+		return fe.Message
+	}
+	return fe.Label + " " + fe.Message
+}
+
 // ValidationError lists everything wrong with a config. It is built from static
-// text and field names only, so it is safe to show and to log.
+// text and labels only, so it is safe to show and to log.
 type ValidationError struct {
 	Errors []FieldError
 }
@@ -68,7 +83,7 @@ type ValidationError struct {
 func (e *ValidationError) Error() string {
 	parts := make([]string, len(e.Errors))
 	for i, fe := range e.Errors {
-		parts[i] = fe.Field + ": " + fe.Message
+		parts[i] = fe.Text()
 	}
 	return strings.Join(parts, "; ")
 }
@@ -101,7 +116,8 @@ func newConfigSpec(proto any) (*configSpec, error) {
 		seen[name] = true
 		f := Field{Name: name, Label: sf.Tag.Get("label"), index: i}
 		if f.Label == "" {
-			f.Label = name
+			// Errors and notices name a setting by its label, never its key.
+			return nil, fmt.Errorf("config field %q needs a label tag (the name people see, such as label:\"API key\")", name)
 		}
 		switch sf.Type.Kind() {
 		case reflect.String:
@@ -145,13 +161,15 @@ type validator interface{ Validate() error }
 func (s *configSpec) decode(raw map[string]any) (any, error) {
 	out := reflect.New(s.typ).Elem()
 	var problems []FieldError
-	fail := func(name, msg string) { problems = append(problems, FieldError{name, msg}) }
+	fail := func(f Field, msg string) {
+		problems = append(problems, FieldError{Field: f.Name, Label: f.Label, Message: msg})
+	}
 
 	for _, f := range s.fields {
 		v, present := raw[f.Name]
 		if !present || v == nil {
 			if f.Required {
-				fail(f.Name, "is required")
+				fail(f, "is required")
 			}
 			continue
 		}
@@ -161,15 +179,15 @@ func (s *configSpec) decode(raw map[string]any) (any, error) {
 			str, ok := v.(string)
 			switch {
 			case !ok:
-				fail(f.Name, "must be a string")
+				fail(f, "must be a string")
 			case str == "":
-				fail(f.Name, "must not be empty")
+				fail(f, "must not be empty")
 			case f.Format == "url" && !validHTTPURL(str):
-				fail(f.Name, "must be an http or https URL")
+				fail(f, "must be an http or https URL")
 			case f.Format == "url" && hasQueryOrFragment(str):
-				fail(f.Name, "must not contain a query string (?...) or a fragment (#...)")
+				fail(f, "must not contain a query string (?...) or a fragment (#...)")
 			case f.Format == "url" && hasURLCredentials(str):
-				fail(f.Name, "must not contain a username or password")
+				fail(f, "must not contain a username or password")
 			default:
 				dst.SetString(str)
 			}
@@ -177,20 +195,20 @@ func (s *configSpec) decode(raw map[string]any) (any, error) {
 			if b, ok := v.(bool); ok {
 				dst.SetBool(b)
 			} else {
-				fail(f.Name, "must be true or false")
+				fail(f, "must be true or false")
 			}
 		case FieldInteger:
 			if n, ok := toInt(v); ok {
 				dst.SetInt(int64(n))
 			} else {
-				fail(f.Name, "must be a whole number")
+				fail(f, "must be a whole number")
 			}
 		}
 	}
 	if len(problems) == 0 {
 		if v, ok := out.Interface().(validator); ok {
 			if err := v.Validate(); err != nil {
-				fail("config", err.Error())
+				problems = append(problems, FieldError{Field: "config", Message: err.Error()})
 			}
 		}
 	}

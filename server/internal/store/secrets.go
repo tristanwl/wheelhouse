@@ -52,6 +52,14 @@ var (
 	ErrNoKeyCheck = errors.New("this database has no secret key record yet")
 )
 
+// ErrKeyChanged means the key record in the database is not the one this
+// process unlocked at start: another process ran `rekey` or `forget-secrets`
+// against the same database while the server was up (the configuration lock
+// prevents that, this is the second line of defence). Anything this process
+// sealed now would be sealed under a key the database no longer uses and lost
+// at the next start, so it must not seal until it is restarted.
+var ErrKeyChanged = errors.New("the secret key of the database was changed by another process while Wheelhouse was running (rekey or forget-secrets); restart Wheelhouse so it uses the new key")
+
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 func (c SecretColumn) validate() error {
@@ -128,6 +136,29 @@ func (db *DB) unlock(ctx context.Context, key secrets.Key, create bool) (*secret
 		return nil, err
 	}
 	return openCheck(key, env)
+}
+
+// CheckKey reports ErrKeyChanged when the key check in the database is no
+// longer the one c was unlocked from (a different key version, or one c does
+// not open). tx, when not nil, is the transaction to read in (the writer's, so
+// the answer is current and cannot change before the caller's write commits);
+// otherwise the read pool answers.
+func (db *DB) CheckKey(ctx context.Context, tx *sql.Tx, c *secrets.Cipher) error {
+	qr := db.r.QueryRowContext
+	if tx != nil {
+		qr = tx.QueryRowContext
+	}
+	env, err := metaBlob(ctx, qr, metaKeyCheck)
+	if err != nil {
+		return err
+	}
+	if v, verr := secrets.EnvelopeVersion(env); verr != nil || v != c.Version() {
+		return ErrKeyChanged
+	}
+	if _, err := currentOpens(c, env); err != nil {
+		return ErrKeyChanged
+	}
+	return nil
 }
 
 func openCheck(key secrets.Key, env []byte) (*secrets.Cipher, error) {

@@ -83,6 +83,11 @@ type Request struct {
 	Timeout time.Duration
 	// MaxBytes overrides the client's response size limit for this call.
 	MaxBytes int64
+	// SizeSetting, when set, names the operator setting that raises MaxBytes. A
+	// response over the limit then reads, to a user, as a library larger than
+	// Wheelhouse is set up to read (no setting named), and the server log line
+	// for the administrator says how large it was and which setting to change.
+	SizeSetting string
 	// Limits bound the shape of the JSON that JSON, DecodeJSON and the adapters
 	// decode (zero fields: the defaults of JSONLimits).
 	Limits JSONLimits
@@ -375,20 +380,40 @@ func (c *HTTPClient) request(parent context.Context, path string, r Request) (*R
 			c.label, pathOnly(path), resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 	if resp.ContentLength > limit {
-		return nil, c.tooLarge(path, limit)
+		return nil, c.tooLarge(path, limit, resp.ContentLength, r.SizeSetting)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, c.networkError(err, parent, timeout)
 	}
 	if int64(len(data)) > limit {
-		return nil, c.tooLarge(path, limit)
+		size := int64(len(data))
+		if r.SizeSetting != "" {
+			// A server that did not announce its length: count (never keep) up
+			// to one more cap's worth, so the log can say how far over it was.
+			n, _ := io.Copy(io.Discard, io.LimitReader(resp.Body, limit))
+			size += n
+		}
+		return nil, c.tooLarge(path, limit, size, r.SizeSetting)
 	}
 	return &Response{Status: resp.StatusCode, Header: resp.Header, Body: data}, nil
 }
 
-func (c *HTTPClient) tooLarge(path string, limit int64) error {
-	return c.errorf(0, "%s %s: response larger than %d bytes", c.label, pathOnly(path), limit)
+// tooLarge refuses a response over the limit. size is the length the server
+// announced, or, for one that did not, how much of it was seen (at least).
+func (c *HTTPClient) tooLarge(path string, limit, size int64, setting string) error {
+	if setting == "" {
+		return c.errorf(0, "%s %s: response larger than %d bytes", c.label, pathOnly(path), limit)
+	}
+	// What a user reads names no setting and no variable; the administrator's
+	// numbers and the setting to change go to the server log.
+	attrs := []any{"service", c.label, "path", pathOnly(path), "limitMiB", limit >> 20, "setting", setting}
+	attrs = append(attrs, "responseMiB", size>>20, "percentOfLimit", size*100/limit)
+	if size > 2*limit {
+		attrs = append(attrs, "note", "at least this large; the rest was not read")
+	}
+	diag().Warn("a library response is larger than Wheelhouse is set up to read; raise the setting (see docs/operations.md, \"Large libraries\")", attrs...)
+	return c.errorf(0, "%s: the library is larger than Wheelhouse is set up to read; an administrator can raise the limit (see the documentation)", c.label)
 }
 
 // errorf builds a redacted ProviderError.

@@ -255,7 +255,7 @@ Migration `0001_meta` creates the `meta` key/value table; `0002_auth` creates
 `users` (case-insensitive unique names, Argon2id hash, role, disabled and
 must-change flags, with triggers that keep the last enabled administrator),
 `sessions` (SHA-256 of the token, cascade on user delete) and the append-only
-`audit_log`; `0003_instances` creates `instances` (non-secret JSON `config` plus
+`audit_log`; `0008_audit_retention` replaces the delete trigger by one that only permits rows older than 30 days (the retention pruning); `0003_instances` creates `instances` (non-secret JSON `config` plus
 the sealed `secrets` BLOB, a registered secret column) and `feature_settings`. Never edit an applied
 migration: add a new one.
 
@@ -321,8 +321,9 @@ podman exec wheelhouse wheelhouse rekey
   (remove a leftover `-wal`/`-shm`).
 - `wheelhouse rekey` makes a new master key (version n+1) and re-encrypts every
   stored secret **in one transaction**; any failure leaves the database and the
-  old key untouched. Stop the server and take a backup first (the running server
-  holds the old key and cannot read the new data). For the generated
+  old key untouched. It refuses to run while a server is running (the server holds
+  an exclusive `flock` on `<config>/wheelhouse.lock`, see `internal/runlock` and
+  [operations.md](../docs/operations.md#locking)); stop it and take a backup first. For the generated
   `secret.key` it stages `secret.key.next`, commits, then renames it over the key;
   if the process dies in between, the next start finishes or discards the swap
   (the stored check value says which key is right). For a key you supply
@@ -336,8 +337,8 @@ podman exec wheelhouse wheelhouse rekey
   good. The server refuses to start when the key does not match the database;
   this discards every value in the secret columns (nothing can decrypt them),
   replaces the key check by one under the key configured now, and prints how many
-  values went. It refuses without `--yes`, and when the configured key does open
-  the database. Users, sessions and the audit log are untouched.
+  values went. It refuses without `--yes`, while a server is running (same lock as
+  `rekey`), and when the configured key does open the database. Users, sessions and the audit log are untouched.
 
 ## Container image
 
@@ -406,7 +407,9 @@ clients, err := rt.Clients(ctx, core.RoleMediaManager) // ready instances of a r
 ```
 
 A provider's settings are a struct; tags drive validation, secret masking and the
-JSON Schema the admin UI renders (`Definition.Schema()`):
+JSON Schema the admin UI renders (`Definition.Schema()`). The `label` tag is
+required: errors and notices say "API key is required", never `apiKey: is
+required`:
 
 ```go
 type SonarrConfig struct {
@@ -420,8 +423,10 @@ Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
 
 - 8 s timeout per request (body included), `Request.Timeout` overrides it.
 - At most 8 MiB read from upstream by default; an endpoint sets its own cap with
-  `Request.MaxBytes` (`core.LargeListBytes`, 96 MiB, for library and torrent
-  lists, `core.SmallResponseBytes`, 2 MiB, for status calls). `MaxResponseBytes`
+  `Request.MaxBytes` (`core.LargeListBytes`, 96 MiB, for torrent lists and,
+  with `core.LibraryListBytes()` set from `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB`, for the
+  Radarr and Sonarr lists, whose refusal reads "the library is larger than Wheelhouse is set
+  up to read" with the numbers and the setting in the server log, `core.SmallResponseBytes`, 2 MiB, for status calls). `MaxResponseBytes`
   set on the client is a ceiling no call may raise. A larger response is a
   `ProviderError`, and the stream is cut off at the limit.
 - The decoded shape is bounded too: decode with `core.DecodeJSON` (or

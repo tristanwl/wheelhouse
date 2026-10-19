@@ -36,17 +36,17 @@ How the evidence was produced, all on 2026-10-19:
 | 4 | Sessions: cookie flags; logout and password change end sessions; idle and absolute timeouts | verified | `TestSessionCookieFlags`, `TestSessionsEndWhenIdleOrOld`, `TestPasswordChangeRotatesAndRevokes`; `acceptance/auth-sessions.test.ts` (flags, expiry report, new token at each login, logout, password change ends every session, `Secure` and `__Host-` only behind a trusted proxy) | `HttpOnly; SameSite=Strict; Path=/`, no `Secure` over plain HTTP or from an untrusted `X-Forwarded-Proto`; an old cookie replayed after logout: 401; a user who must change the password gets 403 everywhere else until they do | 2026-10-19 |
 | 5 | CSRF: a state-changing request without the token or from a foreign origin is refused on every mutating route | verified | `TestEveryMutatingRouteRefusesMissingCSRFAndForeignOrigins`, `TestGETRoutesNeverChangeState`; `acceptance/auth-levels.test.ts` (c) | No token, foreign `Origin`, a `text/plain` body and a foreign-origin login: 403 or 400 | 2026-10-19 |
 | 6 | Login throttling and lockout work and do not reveal whether a user exists | verified | `TestEveryFailedLoginLooksTheSameAndComputesAHash`, `TestAccountLockoutBacksOffAndLiftsAfterTheTime`, `TestParallelGuessesCannotPassTheAccountLock`; `acceptance/auth-throttle.test.ts`, `acceptance/auth-hardening.test.ts` | Six wrong passwords: the same body each time | 2026-10-19 |
-| 7 | Provider secrets are encrypted in the database, never returned, never in logs, audit entries, errors or backups (canary sweep over the database file) | verified | `TestPlaintextNeverReachesDisk` (database, `-wal`, backup), `TestDeletedValuesAreOverwritten`, `TestKeyNeverPrints`, `TestSecretsAndKeysRedact`; provider and core canary tests; `acceptance/secrets.test.ts` and `acceptance/config.test.ts` ("keeps every secret out of responses, logs and the database files", "records every change in the audit log without a secret") | A saved key never appeared in any response; a key saved after a live `rekey` is lost, not leaked (see gap below and issue #83) | 2026-10-19 |
+| 7 | Provider secrets are encrypted in the database, never returned, never in logs, audit entries, errors or backups (canary sweep over the database file) | verified | `TestPlaintextNeverReachesDisk` (database, `-wal`, backup), `TestDeletedValuesAreOverwritten`, `TestKeyNeverPrints`, `TestSecretsAndKeysRedact`; provider and core canary tests; `acceptance/secrets.test.ts` and `acceptance/config.test.ts` ("keeps every secret out of responses, logs and the database files", "records every change in the audit log without a secret") | A saved key never appeared in any response; a live `rekey` is now refused (issue #83), and a key saved before the lock existed would have been lost, not leaked | 2026-10-19 |
 | 8 | The bypass never grants admin, ignores spoofed forwarded headers, respects the trusted-proxy list | verified | `TestBypassGrantsUserNeverAdmin`, `TestSpoofedForwardedHeadersAreIgnoredFromUntrustedPeers`, `TestBypassNeedsAnAcceptableHost`, `TestSpoofedHostAndOriginPairIsRefusedForTheBypass`, `server/internal/netaccess` tests; `acceptance/auth-bypass.test.ts`, `acceptance/auth-hardening.test.ts` | Range 10.0.0.0/8 and `X-Forwarded-For: 10.1.2.3`, `Forwarded`, `X-Real-IP` from the local peer: 401; range 127.0.0.0/8: users get 200, `/api/admin/*` and `/api/users` 403, a POST without the token 403, `Host: nas.example.lan` 401, `Host: nas` 200 | 2026-10-19 |
 | 9 | Environment-only installs keep working (read-only seed) and can be imported | verified | `TestEnvironmentPrecedenceReadOnlyAndImport`; `acceptance/config.test.ts` ("environment instances": shows them read-only, imports them, then ignores the environment; credentials in a URL are never shown or stored); `acceptance/stack.test.ts` runs the whole suite on environment configuration | A Compose quick start with the shipped `.env.example` | 2026-10-19 |
 | 10 | Converter: media roots configurable, HDR excluded by default, queue survives a restart | verified | `TestValidateRoots`, `TestSettingsPrecedencePersistenceAndRefusal`, `TestStaleRowOutsideTheRootsNeverRuns`, `TestStoredJobWithoutHDRAcknowledgementDoesNotRunHDRFile`, `TestRestartMarksInterruptedCleansUpAndResumesQueuedJobsInOrder`, `TestSwapRecordedByTheQueueSurvivesACrash`; `acceptance/converter.test.ts` (roots, "excludes HDR by default", "a restart mid-conversion", settings and jobs after a restart) | Not driven by hand: a real conversion needs real media and ffmpeg (acceptance uses a fake ffmpeg) | 2026-10-19 |
 | 11 | The acceptance suite passes in authenticated mode against the binary and the image; the Phase 1 and migration criteria still pass | verified | Binary: 175 of 175. Image: 173 passed, 2 skipped (fake ffmpeg scenarios), plus `acceptance/docker-smoke.sh`. Phase 1 criteria: see the next table | | 2026-10-19 |
 | 12 | No known vulnerabilities; signed images with provenance and an SBOM; `SECURITY.md` current; threat model published | **verified in the workflow, open until the first release** | `govulncheck`: code affected by 0 vulnerabilities (`GO-2026-5932`, the unmaintained `golang.org/x/crypto/openpgp` package, is in a module Wheelhouse requires but is not imported or called; only `argon2` and `blake2b` are used). `npm audit`: 0 in the root package and `web/`. `SECURITY.md` and `docs/threat-model.md` brought up to date in this PR. The release workflow (merged in #82) attaches an SPDX SBOM and BuildKit SLSA provenance and signs the provenance of the image digest with a GitHub artifact attestation (Sigstore keyless, not a cosign key pair; how to check it is in [verifying-releases.md](verifying-releases.md)), and its dry run checks that both attestations exist for each platform. **Not verifiable until a real release exists:** the first tagged release must be checked with those commands (`gh attestation verify`), and no release before it has attestations | | 2026-10-19 |
 
-Beyond the 12: a **gap** that does not block the criteria above but should be known before
-tagging: the audit-log retention (180 days, decided in the plan) is not enforced and rows are
-kept (issue #84); `rekey` and `forget-secrets` do not refuse to run against a live server (issue #83: the
-documentation now says to run them with the server stopped, in a throwaway container).
+Beyond the 12, the audit found two gaps that did not block the criteria but had to be closed
+before tagging: the audit-log retention (180 days, decided in the plan) was not enforced (issue #84),
+and `rekey` and `forget-secrets` did not refuse to run against a live server (issue #83). Both are
+fixed, with the other open issues, see "Fixes after the audit" below.
 
 ## Phase 1 acceptance criteria (docs/wheelhouse-spec.md)
 
@@ -85,13 +85,28 @@ named no test, the table says which test now enforces it.
 | I13 stored secret not sent to a changed destination | `TestStoredSecretIsNotSentToAChangedDestination`, `acceptance/config.test.ts` | verified |
 | D1 to D5, D8 to D10 | `TestHTTPClientRejectsOversizedResponses`, `TestHTTPClientStopsReadingAnEndlessStream`, `TestCheckRedirectRefusesHTTPSDowngrade`, `TestLimitListenerHoldsBackConnectionsPastTheLimitUntilOneCloses`, `TestPasswordResetLiftsTheLockout`, `TestOneInstanceFailingNeverAffectsTheOthers`, `TestConcurrentReadersAndWriters`, `TestEmptyObjectFloodIsRefusedBeforeItIsDecoded`, `TestCheckJSONLimits`, `TestHungDurationProbeTimesOut` | verified |
 | D6 queue survives a restart | `TestRestartMarksInterruptedCleansUpAndResumesQueuedJobsInOrder`, `acceptance/converter.test.ts` | verified (partly in place, as the row says) |
-| D7 the audit table grows | no enforcing code or test | **gap**, issue #84 (Known limitations) |
+| D7 the audit table grows | `TestPruneDeletesOnlyRowsOlderThanTheRetentionAndRecordsIt`, `TestAuditLogRowsYoungerThanTheFloorCannotBeDeleted` | fixed (issue #84) |
 | E1, E2, E3 | `acceptance/auth-levels.test.ts`, `TestUserManagementAPI`, `TestBypassGrantsUserNeverAdmin` | verified |
 | E4 SQL injection | bound parameters everywhere; **new** `TestSQLIsNeverBuiltFromStringsOutsideTheSecretColumnCode` (only `store/secrets.go` may format SQL, from the fixed `SecretColumns` list; no concatenated statements) | verified, test added |
 | E5 SSRF | `TestHTTPClientRefusesMetadataAddresses`, `TestMoreMetadataAddressesAreDeniedByDefault`, `TestNAT64IsJudgedByTheEmbeddedAddressUnderACustomList`, `acceptance/config.test.ts`; by hand: an instance at `169.254.169.254` can be saved but every request is refused with `address not allowed (link-local and cloud-metadata addresses are refused)` | verified |
 | E6, E7 | `TestFfmpegAndFfprobeOnlyReadLocalFilesAndNeverStdin`, `TestAccessLogQuotesControlCharactersInPath` | verified (E6 accepted risk) |
 | E8 supply chain | CI `govulncheck`, `npm audit`, licence check, Dependabot, `scripts/check-pins.sh` (actions by SHA, images by digest), SBOM and signed provenance in the release workflow | verified except the first real release (criterion 12) |
 | **New:** no switch turns security off | `TestThereIsNoSwitchToDisableAuthentication` (no environment variable, in code or in the README, named like a security switch) | verified, test added |
+
+## Fixes after the audit (branch `fix/pre-1.0-issues`)
+
+The audit left five open issues; each is fixed at its root, with a test shown to fail on the old
+code (mutations are listed in the PR).
+
+| Issue | Fix | Evidence |
+|---|---|---|
+| #83 `rekey` and `forget-secrets` against a live server lost secrets saved afterwards | The server holds an exclusive `flock` on `/config/wheelhouse.lock` for its whole life; both commands take it and refuse with what to do. A second server on the same directory is refused too. `backup` and `reset-password` stay online. A server that finds the database's key record changed refuses to seal, answers 503 and says so in the log and the service status | `TestKeyCommandsRefuseWhileAServerRuns`, `TestSecondServerOnTheSameDirectoryIsRefused`, `TestStaleLockFileAfterACrashBlocksNothing`, `TestKilledHolderFreesTheLock`, `TestAKeyChangedByAnotherProcessIsNoticedAndNothingIsSealedUnderTheOldKey`, `acceptance/config-lock.test.ts` (real server, real `rekey` refused, `backup` allowed) |
+| #84 audit retention not enforced | Migration 0008: the delete trigger refuses rows younger than 30 days (SQLite's clock); the server prunes rows older than `WHEELHOUSE_AUDIT_RETENTION_DAYS` (default 180, 30 to 3650) at start and daily in batches, recording `audit.prune`; `GET /api/audit` and the Audit log page show the retention | `TestAuditLogRowsYoungerThanTheFloorCannotBeDeleted`, `TestPruneDeletesOnlyRowsOlderThanTheRetentionAndRecordsIt`, `TestPruneWorksInBoundedBatches`, `TestRetentionBelowTheFloorIsRaisedAndTheDatabaseHasTheLastWord`, `TestInvalidAuditRetentionRefusesToStart`, `acceptance/audit-retention.test.ts` |
+| #85 "apiKey: is required" | Validation errors carry the field's label ("API key is required"); the key stays only in the form's `fields` map; audit entries record labels; a label is mandatory | `TestEveryConfigurationProblemIsWrittenWithLabels`, `TestNoUserFacingStringNamesACamelCaseSettingKey` (`internal/guards`), `TestFormErrorsMapToTheFieldKeyButReadAsHumanText`, `acceptance/notices.test.ts` |
+| #86 admin tabs scroll sideways at 400 px | The tabs wrap onto rows; order and semantics unchanged | web `sub-navigation wraps instead of scrolling` (Vitest); the 400 px browser check also fails on tabs that scroll, are cut off or do not wrap, besides page-level overflow |
+| #88 96 MiB library cap | `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (default 96, 16 to 512); every other limit unchanged; the notice says "the library is larger than Wheelhouse is set up to read" and the log line has the sizes and the setting | `TestAnOversizedLibraryIsRefusedWithAnActionableNoticeAndALogLine`, `TestARaisedCapKeepsEveryShapeLimit`, `TestInvalidLibraryResponseCapRefusesToStart`, `acceptance/library-limit.test.ts` |
+
+Still open, deliberately: #87 (arm64 hardware encoding).
 
 ## Documentation checks (done in this PR)
 
@@ -182,18 +197,27 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
   `WHEELHOUSE_SECRET_KEY_FILE` to avoid that. Losing the key loses the stored credentials for good
   ([operations.md](operations.md#key-loss)); users and sessions are unaffected.
 - **Environment variables are readable** by anyone who can inspect the container.
-- **`rekey` and `forget-secrets` must be run with the server stopped**; nothing enforces it yet
-  (issue #83).
-- **The audit log is not pruned** (rows are kept; issue #84), and it is only as trustworthy as the
-  database file.
+- **`rekey` and `forget-secrets` refuse to run while the server runs** (an advisory `flock` on
+  `/config/wheelhouse.lock`, [operations.md](operations.md#locking)). On a network share or
+  mount that cannot lock, the server and the commands only warn and stopping the server first
+  is up to you.
+- **The audit log is pruned, not kept forever:** entries older than 180 days (configurable, 30 to
+  3650, `WHEELHOUSE_AUDIT_RETENTION_DAYS`) are deleted at start and daily, and none younger than 30
+  days can ever be deleted ([operations.md](operations.md#audit-log-retention)). It is only as
+  trustworthy as the database file; keep a `wheelhouse backup` if you need a longer record.
 - **There is no downgrade** after a schema migration, and no built-in backup schedule: take
   backups yourself, and keep a copy of the key and of `settings.json` (not in the backup).
 
 **Media and conversion**
 
-- **Library responses are capped at 96 MiB of JSON** (about 25,000 movies at the usual 4 KB
-  each). A larger library gets an error instead of a list (issue #88). Other upstream
-  responses have smaller caps.
+- **Radarr and Sonarr list responses are capped at 96 MiB of JSON by default** (about 25,000
+  movies at the usual 4 KB each). A larger library gets a notice ("the library is larger than
+  Wheelhouse is set up to read") instead of a list; an administrator raises the cap with
+  `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (16 to 512 MiB, [operations.md](operations.md#large-libraries)).
+  The element, value, depth and string limits stay whatever the cap, so a library of more than
+  about 100,000 movies is still refused, and a raised cap costs memory (budget three to four
+  times the cap). A streaming decode would lift this later (issue #88). Other upstream responses
+  have smaller caps.
 - **Hardware encoding is untested on arm64**, and the arm64 image has no Intel VAAPI drivers;
   software x264/x265 works (issue #87). NVENC and other hardware paths are likewise only as
   tested as the amd64 VAAPI one.
@@ -211,5 +235,5 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
   connections; a reverse proxy is the place for broader limits.
 - **The image's `HEALTHCHECK`, memory limit and read-only root** are only as good as the options
   you pass; the example Compose file and unit file set them.
-- **Interface:** English only; on a phone the Administration tabs scroll sideways without a
-  visible hint (issue #86).
+- **Interface:** English only; on a phone the Administration tabs wrap onto several rows (issue
+  #86, fixed).

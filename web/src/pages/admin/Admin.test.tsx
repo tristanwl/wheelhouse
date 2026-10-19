@@ -164,7 +164,7 @@ describe("services: adding", () => {
       status: 400,
       body: {
         error: "invalid configuration",
-        fields: [{ field: "url", message: "must be an http or https URL with a host" }],
+        fields: [{ field: "url", message: "URL must be an http or https URL with a host" }],
       },
     };
     mockApi({ ...base, "POST /api/admin/instances": () => answer });
@@ -172,7 +172,7 @@ describe("services: adding", () => {
     await user.type(await screen.findByLabelText(/^URL/), "http://192.0.2.10:7878");
     await user.type(screen.getByLabelText(/^API key/), KEY);
     await user.click(screen.getByRole("button", { name: "Add service" }));
-    const message = await screen.findByText("must be an http or https URL with a host");
+    const message = await screen.findByText("URL must be an http or https URL with a host");
     expect(screen.getByLabelText(/^URL/)).toHaveAttribute("aria-describedby", message.id);
     expect(screen.getByLabelText(/^URL/)).toHaveAttribute("aria-invalid", "true");
 
@@ -798,14 +798,43 @@ describe("audit log", () => {
     detail,
   });
 
+  it("says how long entries are kept, and shows pruning as a plain entry", async () => {
+    mockApi({
+      ...base,
+      "GET /api/audit?limit=50": {
+        entries: [
+          entry(7, "audit.prune", "system", {
+            deleted: 12,
+            cutoff: "2026-04-01T00:00:00Z",
+            retentionDays: 180,
+          }),
+        ],
+        nextBefore: null,
+        retention: { days: 180, floorDays: 30 },
+      },
+    });
+    renderApp("/admin/audit");
+    expect(await screen.findByText("Entries are kept for 180 days, then removed.")).toBeVisible();
+    const row = await screen.findByRole("row", { name: /Old entries removed/ });
+    expect(row).toHaveTextContent("entries removed: 12; older than: 2026-04-01T00:00:00Z");
+    expect(screen.queryByText(/WHEELHOUSE/)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing about retention when the server does not say", async () => {
+    mockApi({ ...base, "GET /api/audit?limit=50": { entries: [], nextBefore: null } });
+    renderApp("/admin/audit");
+    await screen.findByText("Nothing recorded yet.");
+    expect(screen.queryByText(/Entries are kept/)).not.toBeInTheDocument();
+  });
+
   it("shows readable rows, filters by action and who, and pages back", async () => {
     const user = userEvent.setup();
     const first = Array.from({ length: 50 }, (_, i) =>
       i === 0
         ? entry(1000, "instance.update", "admin", {
             provider: "radarr",
-            fields: ["url"],
-            secrets: ["apiKey"],
+            fields: ["URL"],
+            secrets: ["API key"],
           })
         : entry(1000 - i, "login.ok", i % 2 ? "alice" : "admin")
     );
@@ -820,7 +849,7 @@ describe("audit log", () => {
     renderApp("/admin/audit");
     const row = await screen.findByRole("row", { name: /Service changed/ });
     expect(row).toHaveTextContent(
-      "type: radarr; settings changed: url; credentials replaced: apiKey"
+      "type: radarr; settings changed: URL; credentials replaced: API key"
     );
     expect(row).toHaveTextContent("instance.update");
 
@@ -908,6 +937,40 @@ describe("who can see the administration pages", () => {
       "aria-current",
       "page"
     );
+  });
+
+  // Issue #86: at phone width the tabs used to sit in a row that scrolled
+  // sideways with the last ones cut off and no hint. They wrap instead, so none is
+  // hidden; the order (which is the keyboard focus order) and the semantics stay.
+  it("sub-navigation wraps instead of scrolling, in a fixed order", async () => {
+    mockApi({ ...base, "GET /api/admin/features": { features: [] } });
+    renderApp("/admin/features");
+    const nav = await screen.findByRole("navigation", { name: "Administration" });
+    const list = within(nav).getByRole("list");
+    expect(list.className).toMatch(/\bflex-wrap\b/);
+    expect(list.className).not.toMatch(/overflow-/);
+    for (const item of within(list).getAllByRole("listitem")) {
+      expect(item.className).not.toMatch(/overflow-|\bshrink-0\b/);
+    }
+    expect(
+      within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent)
+    ).toEqual([
+      "Services",
+      "Features",
+      "Users",
+      "Sessions",
+      "Network",
+      "Media and converter",
+      "Audit log",
+    ]);
+    // The current page is the only one marked, with aria-current (not by colour alone).
+    expect(
+      within(list)
+        .getAllByRole("link")
+        .filter((a) => a.hasAttribute("aria-current"))
+    ).toHaveLength(1);
   });
 });
 

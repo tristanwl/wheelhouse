@@ -31,6 +31,7 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
+	"github.com/tristanwl/wheelhouse/server/internal/runlock"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
 	"github.com/tristanwl/wheelhouse/server/internal/version"
@@ -108,6 +109,10 @@ func healthcheck(getenv func(string) string, rt http.RoundTripper) error {
 	return nil
 }
 
+// acquireLock takes the configuration lock; a variable so a test can play a
+// filesystem that cannot lock.
+var acquireLock = runlock.Acquire
+
 // listen opens the listener; a variable only so a test can observe the moment.
 var listen = func(ctx context.Context, addr string) (net.Listener, error) {
 	return (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
@@ -129,9 +134,38 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	retention, err := config.AuditRetentionDays(os.Getenv)
+	if err != nil {
+		return err
+	}
+	libraryMiB, err := config.MaxLibraryResponseMiB(os.Getenv)
+	if err != nil {
+		return err
+	}
+	core.SetLibraryListBytes(int64(libraryMiB) << 20)
+	core.SetDiagnostics(log)
+	if libraryMiB != config.DefaultMaxLibraryResponseMiB {
+		log.Info("the cap on Radarr and Sonarr list responses is set", "mib", libraryMiB, "setting", config.EnvMaxLibraryResponseMiB)
+	}
 	configDir := config.ConfigDir(os.Getenv)
 
-	// Storage first: a server that cannot open its database or key must not
+	// The lock first: while this process lives, `rekey` and `forget-secrets`
+	// refuse to run, because they would change the key under our feet and make
+	// every credential saved afterwards unreadable (issue #83). A second server
+	// on the same directory is refused for the same reason.
+	lock, err := acquireLock(configDir)
+	if err != nil {
+		if errors.Is(err, runlock.ErrHeld) {
+			return fmt.Errorf("%w: is another Wheelhouse container using the same /config volume? Stop it first", err)
+		}
+		return err
+	}
+	defer func() { _ = lock.Release() }()
+	if why := lock.Degraded(); why != "" {
+		log.Warn("this server does not hold the configuration lock, so nothing stops `rekey` or `forget-secrets` from running against it; only run them with the server stopped (docs/operations.md, \"Locking\")", "reason", why)
+	}
+
+	// Storage next: a server that cannot open its database or key must not
 	// listen, because every route but health and setup needs accounts. Each of
 	// these errors names the problem and what to do (wrong file mode, missing
 	// volume, a database from a newer version, a key that does not match).
@@ -155,7 +189,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		}
 		return fmt.Errorf("secret key: %w", err)
 	}
-	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log})
+	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log, AuditRetentionDays: retention})
 	if err := accounts.PrepareSetup(ctx); err != nil {
 		return fmt.Errorf("accounts: %w", err)
 	}
@@ -199,5 +233,17 @@ func run(ctx context.Context, log *slog.Logger) error {
 		Auth:      accounts,
 		Network:   network,
 	})
-	return app.Serve(ctx, ln, handler, log)
+	// Old audit rows are pruned once at start and then daily, off the request
+	// path and after the listener is up. It is stopped (and waited for) before
+	// the database closes.
+	pruneCtx, stopPruning := context.WithCancel(ctx)
+	pruned := make(chan struct{})
+	go func() {
+		defer close(pruned)
+		accounts.RunAuditPruning(pruneCtx)
+	}()
+	err = app.Serve(ctx, ln, handler, log)
+	stopPruning()
+	<-pruned
+	return err
 }

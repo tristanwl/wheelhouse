@@ -225,6 +225,8 @@ environment variables only. This is the complete list of what the server reads
 | `WHEELHOUSE_TRUSTED_PROXIES` | empty | Comma-separated addresses and CIDR ranges of reverse proxies whose `X-Forwarded-Proto`, `X-Forwarded-For`, `Forwarded` and `X-Real-IP` are believed. Added to the proxies an admin stores. Empty: none trusted | read-only seed |
 | `WHEELHOUSE_ALLOWED_HOSTS` | empty | Host names (`nas.example.lan`, `*.example.lan`) that may use the local-network bypass besides IP addresses, `localhost` and single-label names (DNS rebinding protection). An admin can store more | read-only seed |
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders Convert may touch, separated like `PATH`. Roots an admin saves in the app take precedence | read-only seed |
+| `WHEELHOUSE_AUDIT_RETENTION_DAYS` | `180` | How long audit log entries are kept, in days: 30 to 3650 (an invalid value stops the server at start). Older entries are removed at start and daily; entries younger than 30 days can never be removed. See [operations.md](docs/operations.md#audit-log-retention) | setting |
+| `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` | `96` | The largest list (in MiB of JSON) Wheelhouse reads from one Radarr or Sonarr: 16 to 512 (an invalid value stops the server at start). About 25,000 movies fit in the default. Raise it for a bigger library; Wheelhouse may then need more memory ([operations.md](docs/operations.md#large-libraries)) | setting |
 | `WHEELHOUSE_DENIED_NETWORKS` | link-local and cloud-metadata addresses | Networks Wheelhouse refuses to connect to when it calls your services (includes `64:ff9b::/96`, `100.100.100.200`, `192.0.0.192`); `none` allows everything; private LAN ranges are always fine | setting |
 | `GOMEMLIMIT` | 80% of the container memory limit, when one is set | Go's soft memory limit; set it yourself to override | setting |
 | `SONARR_URL`, `SONARR_API_KEY` | none | TV library. Without it (and Radarr) Library and Codecs are hidden | read-only seed; the key is **secret** |
@@ -292,9 +294,9 @@ docker exec wheelhouse wheelhouse reset-password <user>                  # recov
 ```
 
 Two commands change the master key and **must run with the server stopped**, in a throwaway
-container that mounts the same volume (a running server keeps the old key in memory and
-would seal anything it saves afterwards with it; and if the server cannot start there is
-nothing to `exec` into):
+container that mounts the same volume (a running server holds a lock on `/config` and they
+refuse to run against it, because it keeps the old key in memory and would lose every
+credential saved afterwards; and if the server cannot start there is nothing to `exec` into):
 
 ```sh
 docker compose stop wheelhouse

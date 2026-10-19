@@ -38,6 +38,11 @@ type Instance struct {
 	// config struct when the instance is resolved. It holds secrets, so it is
 	// excluded from JSON, from fmt verbs and from slog output.
 	Config map[string]any `json:"-"`
+	// Problem, when set by the configuration source, is a sentence for the
+	// administrator saying why the stored settings cannot be used at all (the
+	// stored credentials cannot be decrypted). The instance is then reported as
+	// invalid with this text instead of a list of missing fields.
+	Problem string `json:"-"`
 }
 
 // String omits Config so `%v` and `%+v` cannot print secrets.

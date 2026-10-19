@@ -4,7 +4,7 @@ What to back up, what to protect, and how to recover. The commands run as the
 container's user; being able to run them is the proof that you own the server. Two
 ways to run one, depending on whether the server is up:
 
-- **Server running** (`backup`, `reset-password`): `docker exec wheelhouse wheelhouse <command>`
+- **Server running** (`backup`, `reset-password`; the others refuse): `docker exec wheelhouse wheelhouse <command>`
   (or `podman exec`).
 - **Server stopped or unable to start** (`rekey`, `forget-secrets`, and anything after a
   failed start, because there is no container to `exec` into): a throwaway container on
@@ -15,10 +15,85 @@ ways to run one, depending on whether the server is up:
   environment variable or `-v` for a key file). Podman: the same with `podman`, plus
   `--userns=keep-id` when rootless.
 
-`rekey` and `forget-secrets` change the key the database is sealed with; **never run them
-against a running server**: it keeps the old key in memory and would seal anything saved
-afterwards with a key the database no longer trusts (those credentials then have to be
-entered again).
+`rekey` and `forget-secrets` change the key the database is sealed with, so they **refuse to
+run while the server is running** (see [Locking](#locking)): the server keeps the old key in
+memory and would seal anything saved afterwards with a key the database no longer trusts.
+
+## Locking
+
+While it runs, the server holds an exclusive advisory lock (`flock`) on
+`/config/wheelhouse.lock`. `rekey` and `forget-secrets` take the same lock before they
+touch anything and stop with a message when they cannot (`refusing to run: a Wheelhouse
+server is running on ...`): stop the container first, or run the command in a throwaway
+container on the same volume while the server is stopped (above). A second server on the
+same `/config` is refused for the same reason. `backup` and `reset-password` do not need
+the lock and keep working while the server runs (`backup` uses SQLite's online backup).
+
+- **A stale lock file is harmless.** The lock belongs to the open file, not to the file's
+  existence or contents, so the kernel releases it when the server dies for any reason
+  (clean stop, crash, `kill -9`, the container removed). `wheelhouse.lock` stays in the
+  directory with the last PID in it, which is only a hint for the refusal message. Never
+  delete it to "unlock" anything; there is nothing to unlock.
+- **It works across containers** that mount the same local directory or volume (the lock is
+  in the host kernel), which is exactly the `docker compose run --rm` case.
+- **Network filesystems.** On NFS (v3 with lockd, v4) Linux forwards `flock` to the server,
+  and it works when the NFS locking service does. On a share or mount that cannot lock
+  (some SMB/CIFS, FUSE and older NFS setups) the server starts anyway and logs a warning
+  (`this server does not hold the configuration lock`), and the commands print a warning:
+  there the lock is not protecting you, and "stop the server first" is on you. Keep `/config`
+  on a local disk or volume, which SQLite's WAL mode needs anyway.
+- **Defence in depth.** If the key in the database changes under a running server anyway
+  (a lock that did not work, someone editing the database), the server notices on the next
+  save: it refuses to save, answers `503` with "restart Wheelhouse", logs that the secret key
+  changed while it was running, and shows the affected services as needing a restart instead
+  of "required". Restarting loads the new key.
+
+## Large libraries
+
+Wheelhouse reads a whole Radarr or Sonarr list in one request and refuses a response over a
+cap, so one hostile or broken service cannot use up the server's memory. The cap is **96 MiB**
+of JSON (about 25,000 movies at the usual 4 KB each). A library over it shows, on the Library
+page and the dashboard, "the library is larger than Wheelhouse is set up to read; an
+administrator can raise the limit (see the documentation)", and the server log has one line
+saying how large the response was against the limit and which setting to change:
+
+```
+level=WARN msg="a library response is larger than Wheelhouse is set up to read; raise the setting ..." service=radarr limitMiB=96 responseMiB=130 percentOfLimit=135 setting=WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB
+```
+
+Set `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (16 to 512, whole MiB; anything else stops the server
+at start) to a little above `responseMiB`, and restart. It is an environment setting on
+purpose: nothing in the web interface can raise it.
+
+- **Memory.** The response is held in memory while it is decoded, so budget three to four times
+  the cap for the decode on top of the usual use; with a container memory limit, Wheelhouse sets
+  its soft limit from it. Do not set a cap far above what your library needs.
+- **Other limits stay.** Only the byte cap moves. A list may still have at most 200,000 entries,
+  12 million values in all, nesting up to 32 levels and strings up to 1 MiB, however large the
+  cap, so a library of more than roughly 100,000 movies is refused by those limits instead.
+  The torrent list of qBittorrent keeps its own fixed 96 MiB cap.
+- The log line reports at most twice the limit for a service that does not announce its size
+  (it stops counting there; the real size can be larger).
+
+## Audit log retention
+
+The audit log (Admin, Audit log) keeps entries for **180 days** by default. Set
+`WHEELHOUSE_AUDIT_RETENTION_DAYS` (30 to 3650; anything else stops the server at start with a
+message naming the variable) to change it. It is an environment setting on purpose: nothing in
+the web interface or the API can shorten it.
+
+- At start, and then every 24 hours, the server deletes entries older than the retention, a
+  thousand at a time, and records one `audit.prune` entry (how many, and the cutoff) when it
+  removed any. A run that removes nothing writes nothing. The last run, and the retention, are
+  shown on the Audit log page (`GET /api/audit` has them under `retention`).
+- The database itself refuses to delete any entry younger than **30 days**, whatever any code
+  asks for (a trigger from migration 0008 judges the age with SQLite's own clock), and refuses
+  every edit. So the minimum retention is 30 days, and recent history cannot be erased even by a
+  compromised administrator session. Someone with the database file can still do anything
+  ([threat model](threat-model.md), T-3).
+- The retention counts from the time of each entry. Lowering it removes the older entries at
+  the next start or within a day; raising it cannot bring back entries already removed. Take a
+  `wheelhouse backup` first if you need a longer record than you have configured.
 
 ## Key loss
 

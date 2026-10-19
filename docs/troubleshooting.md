@@ -16,6 +16,7 @@ need the server stopped run in a throwaway container, see [operations.md](operat
 | "the database schema is newer than this version" | [Newer database](#the-database-is-newer-than-the-binary) |
 | Convert is slow or hardware encoding does not work (arm64) | [Hardware encoding](#hardware-encoding-does-not-work-or-is-missing-on-arm64) |
 | Codecs says ffmpeg is missing | [ffmpeg](#codecs-says-ffmpeg-is-missing) |
+| `rekey` or `forget-secrets` says "refusing to run: a Wheelhouse server is running" | [Refusing to run](#rekey-or-forget-secrets-refuses-to-run) |
 | Everything is 403 or I get logged out behind a proxy | [Reverse proxy](#behind-a-reverse-proxy-403-errors-and-logouts) |
 
 ## The setup token is not found
@@ -65,6 +66,29 @@ docker compose up -d
 Then add your services' keys again under Admin, Services. If you restored a **database
 backup** and the key came from a different time, restore the key that matches that backup
 instead. Details: [operations.md](operations.md#key-loss).
+
+## rekey or forget-secrets refuses to run
+
+`refusing to run: a Wheelhouse server is running on /config (process N)`: the server holds a
+lock on `/config/wheelhouse.lock`, and these two commands would change the key under it (it
+would then lose every credential saved afterwards). Stop it, run the command in a throwaway
+container on the same volume, start it again:
+
+```sh
+docker compose stop wheelhouse
+docker compose run --rm wheelhouse rekey
+docker compose up -d
+```
+
+If nothing is running, check for a second container, a systemd unit or a Podman pod that
+mounts the same directory (`docker ps`, `podman ps -a`). A lock file left by a crashed server
+does not block anything. The server itself says `another Wheelhouse process is using this
+configuration directory` when you start a second one on the same volume. On a network share
+that cannot lock, see [Locking](operations.md#locking).
+
+A service that shows "The stored credentials cannot be read because the secret key was
+changed while Wheelhouse was running" means the key changed under a running server anyway:
+restart Wheelhouse.
 
 ## /config permissions
 
