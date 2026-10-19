@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/mediamanager/mmtest"
@@ -262,14 +263,22 @@ func TestConvertOwnerAndAuditAreRecorded(t *testing.T) {
 	if done["owner"] != c.acc.Admin.ID {
 		t.Errorf("owner: %s", b)
 	}
-	entries, _ := c.acc.Svc.ListAudit(context.Background(), 50, 0)
-	actions := map[string]bool{}
-	for _, e := range entries {
-		if e.Target == job["id"] {
-			actions[e.Action] = true
-			if e.Action == "conversion.finish" && e.ActorID != c.acc.Admin.ID {
-				t.Errorf("finish actor %q", e.ActorID)
+	// A job's final state is visible a moment before its finish audit row is
+	// written (the queue reports it after publishing the state), so wait for it.
+	var actions map[string]bool
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		entries, _ := c.acc.Svc.ListAudit(context.Background(), 50, 0)
+		actions = map[string]bool{}
+		for _, e := range entries {
+			if e.Target == job["id"] {
+				actions[e.Action] = true
+				if e.Action == "conversion.finish" && e.ActorID != c.acc.Admin.ID {
+					t.Errorf("finish actor %q", e.ActorID)
+				}
 			}
+		}
+		if (actions["conversion.start"] && actions["conversion.finish"]) || time.Now().After(deadline) {
+			break
 		}
 	}
 	if !actions["conversion.start"] || !actions["conversion.finish"] {
