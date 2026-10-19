@@ -52,7 +52,10 @@ func TestSetupTokenIsWrittenBeforeListening(t *testing.T) {
 	}
 	cancel()
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Errorf("stopping: %v", err)
+		}
 	case <-time.After(30 * time.Second):
 		t.Fatal("the server did not stop")
 	}
