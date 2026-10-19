@@ -37,10 +37,13 @@
 # which a container sets to the machine's name under --network=host, is ignored;
 # to bind one address add WHEELHOUSE_LISTEN=host:port to the .env file.
 #
-# Optional hardening: the image only writes /config, the media mounts and /tmp,
-# so `--read-only --tmpfs /tmp --cap-drop=all --security-opt=no-new-privileges`
-# can be added to the podman run command. (Tested with Docker; with rootless
-# Podman, --device and keep-groups, try it before relying on it.)
+# Hardening: the image only guarantees a non-root user and that it works
+# read-only; --read-only, --tmpfs /tmp, --cap-drop=all and
+# --security-opt=no-new-privileges below are the operator's part and are on by
+# default (acceptance/docker-smoke.sh checks the same combination with Docker;
+# it has not been run under rootless Podman with --device and keep-groups here, so
+# if the container fails to start or VAAPI stops working, remove them one at a
+# time, starting with --cap-drop=all, and tell us which one it was).
 
 [Unit]
 Description=Podman container-wheelhouse.service
@@ -62,6 +65,10 @@ ExecStart=/usr/bin/podman run \
 	--name=wheelhouse \
 	--network=host \
 	--userns=keep-id \
+	--read-only \
+	--tmpfs /tmp \
+	--cap-drop=all \
+	--security-opt=no-new-privileges \
 	--user=%U:%G \
 	--env-file=%h/wheelhouse/.env \
 	-v /path/to/movies:/movies \

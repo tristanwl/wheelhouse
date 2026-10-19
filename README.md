@@ -128,9 +128,13 @@ mkdir -p config && docker run -d --name wheelhouse --restart unless-stopped \
   the render node is not accessible, `--group-add <render GID>` (`getent group
   render`). With rootless Podman use `--group-add keep-groups` instead; see the
   unit file below.
-- **Hardening.** It runs with `--read-only --cap-drop ALL --security-opt
-  no-new-privileges` as long as `/config` is writable and `/tmp` is a tmpfs
-  (`--tmpfs /tmp`, used for GPU driver caches). Nothing else is written.
+- **Hardening.** The image runs as a non-root user and works with `--read-only
+  --cap-drop ALL --security-opt no-new-privileges` as long as `/config` is
+  writable and `/tmp` is a tmpfs (`--tmpfs /tmp`, used for GPU driver caches);
+  nothing else is written. The image cannot enforce those options, you set them:
+  the example Compose file and unit file below have them on. Memory: the server
+  sets its soft limit to 80% of the container's memory limit (`mem_limit`) when
+  one is set, unless you set `GOMEMLIMIT` yourself.
 - **Network.** It listens on all interfaces on `PORT` (3050 in the image).
   `HOSTNAME`, which runtimes set to the container id, is ignored. To bind one
   address, set `WHEELHOUSE_LISTEN`, for example `WHEELHOUSE_LISTEN=127.0.0.1:3050`
@@ -161,7 +165,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `WHEELHOUSE_DB` | no | SQLite database file (accounts, sessions, audit log; default `/config/wheelhouse.db`). The server opens it at start and refuses to start if it cannot |
 | `WHEELHOUSE_CONFIG_DIR` | no | The config directory (default `/config`, which is what the image uses): database, master key, setup token, `settings.json`. Mainly for running outside a container |
 | `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated at first start. **Keep a copy: [docs/operations.md](docs/operations.md#key-loss)** |
-| `WHEELHOUSE_DENIED_NETWORKS` | no | Networks Wheelhouse refuses to connect to when it contacts your services (default: link-local and cloud-metadata addresses; `none` allows everything; private LAN ranges are always fine). Service URLs are trusted administrator input |
+| `WHEELHOUSE_DENIED_NETWORKS` | no | Networks Wheelhouse refuses to connect to when it contacts your services (default: link-local and cloud-metadata addresses, including the NAT64 prefix `64:ff9b::/96`, `100.100.100.200` and `192.0.0.192`; `none` allows everything; private LAN ranges are always fine). Service URLs are trusted administrator input |
 | `WHEELHOUSE_TRUSTED_PROXIES` | no | Comma-separated addresses and CIDR ranges of reverse proxies whose forwarded headers are believed (`X-Forwarded-Proto` makes the session cookie `Secure`; `X-Forwarded-For`, `Forwarded` and `X-Real-IP` give the client address, used by the audit log and the local-network bypass). Added to the proxies an admin stores in the database. Default empty: no proxy is trusted |
 
 The variable names are the same as in 0.1.x, so an existing `.env` keeps working.

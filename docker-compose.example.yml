@@ -21,14 +21,20 @@ services:
     # setup token: keep a copy of secret.key apart from your backups
     # (docs/operations.md).
     # user: "1000:1000"
-    # Optional hardening: nothing is written outside /config, the media mounts
-    # and /tmp (GPU driver caches).
-    # read_only: true
-    # cap_drop: [ALL]
-    # security_opt:
-    #   - no-new-privileges:true
-    # tmpfs:
-    #   - /tmp
+    # Hardening, on by default: the image writes only to /config, the media
+    # mounts and /tmp (GPU driver caches), needs no capabilities, and works with
+    # all of this (acceptance/docker-smoke.sh runs exactly this combination).
+    # The image itself only guarantees the non-root user; these four settings are
+    # yours. Hardware encoding through /dev/dri (below) works with them, since
+    # device access comes from group membership, not from a capability. If a
+    # driver cannot cache under /tmp, give it more room (`tmpfs: ["/tmp:size=256m"]`)
+    # rather than turning read_only off.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
     volumes:
       # Settings (codec preferences) live here so they survive rebuilds.
       - ./config:/config

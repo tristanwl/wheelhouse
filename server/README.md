@@ -111,8 +111,13 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
   linkCount}` until the body has `acknowledgeHardlink: true`.
 - The output is written to `.wheelhouse-convert-<id><ext>` next to the original,
   forced to 8-bit (`yuv420p`) with audio and subtitles copied; a non-empty result
-  replaces the original, which stays as `<file>.bak`. On start-up, leftover temp
-  files are removed and a `.bak` whose file is missing is renamed back.
+  replaces the original, which stays as `<file>.bak` (or `.bak.1`, `.bak.2`, ... when
+  that name is taken: a backup is never overwritten). The swap is recorded in the
+  database first; on start-up a swap that was recorded but not finished is
+  restored from its recorded paths, and leftover temp files are removed. A stray
+  `.bak` is never renamed back. Every ffmpeg and ffprobe call reads local files
+  only (`-protocol_whitelist file`), ffmpeg never reads stdin, and the duration
+  probe times out after 30 s.
 - Tests use fake `ffmpeg`/`ffprobe` shell scripts that print `-progress` output
   and exit with real codes (success, failure, cancel, empty output); a test runs
   the real ffmpeg when the machine has one (with `libx264`) and skips otherwise.
@@ -409,8 +414,20 @@ Adapters make requests through `core.NewHTTPClient(core.HTTPOptions{BaseURL,
 Label, Headers, Secrets})` and `Do`/`JSON`. Defaults and guarantees:
 
 - 8 s timeout per request (body included), `Request.Timeout` overrides it.
-- At most 64 MiB read from upstream (`MaxResponseBytes`, `Request.MaxBytes`); a
-  larger response is a `ProviderError`, and the stream is cut off at the limit.
+- At most 8 MiB read from upstream by default; an endpoint sets its own cap with
+  `Request.MaxBytes` (`core.LargeListBytes`, 96 MiB, for library and torrent
+  lists, `core.SmallResponseBytes`, 2 MiB, for status calls). `MaxResponseBytes`
+  set on the client is a ceiling no call may raise. A larger response is a
+  `ProviderError`, and the stream is cut off at the limit.
+- The decoded shape is bounded too: decode with `core.DecodeJSON` (or
+  `HTTPClient.JSON`), never `json.Unmarshal` on an upstream body. It refuses more
+  than 200,000 elements in an array or object (`Request.Limits` lowers or raises
+  it per call), 12 million values, nesting over 32 and strings over 1 MiB, and
+  lets 2 to 4 large decodes run at once process-wide. At start the server sets
+  the Go soft memory limit to 80% of the container's cgroup memory limit unless
+  `GOMEMLIMIT` is set.
+- Instance URLs must not carry a query string or fragment, and a stored secret is
+  filled in for a changed URL only when the secret is re-entered.
 - Redirects are followed only within the same host name, never from https to
   http; a redirect to another host is a `ProviderError` and is not followed.
 - TLS verification is always on. There is no insecure option (the 0.1.x

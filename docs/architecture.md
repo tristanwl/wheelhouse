@@ -114,7 +114,11 @@ See [server/README.md](../server/README.md) for the server and
   every form of a configured secret (plain, URL-encoded, base64, JSON-escaped)
   plus `apikey=`-style parameters and `user:pass@` URLs, `ProviderError` with a
   status, GET cache with TTL, in-flight de-duplication and `Invalidate()`. At
-  most 64 MiB is read from upstream, redirects to another host (or from https to
+  most 8 MiB is read from upstream by default (an endpoint sets its own cap:
+  96 MiB for library and torrent lists, 2 MiB for status calls), the body is
+  scanned before it is decoded (`core.DecodeJSON`: elements per array, values in
+  total, nesting depth, string length, and a process-wide gate for large
+  decodes, so a few bytes of `{}` cannot become gigabytes), redirects to another host (or from https to
   http) are refused, and TLS verification cannot be switched off. Upstream
   bodies and reason phrases never reach an error or a log line.
 - **Adapters normalize.** Sizes in bytes, progress 0..1, durations in seconds,
@@ -336,7 +340,7 @@ CPU-heavy and the host usually runs Sonarr/Radarr/a media server live, so
 further conversions queue. A file that already has an active job returns that
 job instead of starting a duplicate (a second job would rename whatever is
 *currently* at the path, possibly the first job's output, to `.bak` and clobber
-the true original); the same rule lets the UI reattach to a job after the modal
+the true original; and the backup itself is never overwritten, see File safety); the same rule lets the UI reattach to a job after the modal
 is closed. Each candidate row polls the job list every 2 s and shows a live
 progress bar. The modal shows the job's raw ffmpeg output (the last 8000 chars).
 Progress comes from ffmpeg's `-progress pipe:1` (`out_time_ms` against the
@@ -389,10 +393,15 @@ availability with the reason from the real test encode.
 **File safety.** ffmpeg writes to a dotfile temp path in the same directory
 (`.wheelhouse-convert-<jobId>.ext`), which Radarr/Sonarr scanners ignore, so a
 mid-conversion scan cannot pick up a half-written file as a second copy. Only
-after ffmpeg exits 0 *and* the output is non-empty is the original renamed to
+after ffmpeg exits 0 *and* the output is non-empty is the original kept as
 `<original>.bak` (a non-video extension so scanners do not treat it as an
-alternate version) and the temp file renamed into its place. **The `.bak` is
-never deleted automatically.** On failure or cancellation only the temp file is
+alternate version) and the temp file renamed into its place. **The backup never
+replaces an existing file:** it is made with a hard link (or, where the
+filesystem has none, a checked rename with a tiny race window), and a taken name
+moves on to `.bak.1`, `.bak.2`, so converting a file twice keeps both originals;
+the job's `backupPath` says which. The swap is first recorded in the database
+(`conversion_jobs.swap_path` and `swap_backup`) and the record is cleared when
+it finishes or is rolled back. **A backup is never deleted automatically.** On failure or cancellation only the temp file is
 removed. The path is resolved (`..` refused, symlinks evaluated, regular file,
 inside a media root) when the request arrives, when the job starts and just
 before the swap. After a successful swap the manager is asked to rescan the
@@ -417,11 +426,11 @@ shutdown does the same), queued jobs stay queued and run in the order they were
 added once the clean-up is done, and finished jobs are pruned (older than 30 days,
 or beyond the newest 200). Jobs read from the database are never trusted: the
 backend and codec are validated again and the path is resolved against the
-current media roots before a job runs. Once per process, at start, the media roots are walked: any
-`.wheelhouse-convert-*` temp file is deleted; a `<file>.bak` whose `<file>` is
-missing (the process died between the two renames of the swap) is renamed back
-to `<file>`. A `.bak` next to a live file is a normal post-success backup and is
-left alone.
+current media roots before a job runs. Once per process, at start, a job that still has a swap record (the process died
+during the swap) is restored from the recorded paths, which are checked against
+the roots in force; a stray `.bak` that no record names is never touched, and a
+row from before the record existed restores nothing. Then the media roots are
+walked and any `.wheelhouse-convert-*` temp file is deleted.
 
 ## API routes (all server-side proxies — API keys never reach the browser)
 
