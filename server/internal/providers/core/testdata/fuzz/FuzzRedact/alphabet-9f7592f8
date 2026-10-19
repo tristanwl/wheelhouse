@@ -1,0 +1,5 @@
+go test fuzz v1
+string("ÿÿÿ-key")
+string("token ")
+string(" ")
+uint8(10)

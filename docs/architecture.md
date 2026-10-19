@@ -149,6 +149,14 @@ new tab instead of an embedded frame. Library deletes send `?confirm=true`,
 and only after the UI's own confirm dialog (`web/README.md`, "Security
 constraints").
 
+Parsers and validators of untrusted input (upstream JSON, redaction, URLs and
+addresses, the forwarded-header walk, the Host allow-list, accounts, path
+containment, ffmpeg arguments, the secrets envelope, the whole HTTP surface) are
+covered by Go fuzz targets that assert invariants against independent oracles;
+their seed corpora (`testdata/fuzz`, from the fakes' fixtures and the hostile
+cases of the tests) run as ordinary tests, and `.github/workflows/fuzz.yml` runs
+every target weekly. See [server/README.md](../server/README.md#fuzz-tests).
+
 ## Pages
 
 - `/` — dashboard: one status card per configured instance, grouped under

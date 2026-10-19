@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("frame=100\nfps=25.0\nstream_0_0_q=-1.0\nbitrate=N/A\ntotal_size=N/A\nout_time_us=4000000\nout_time_ms=4000000\nout_time=00:00:04.000000\ndup_frames=0\ndrop_frames=0\nspeed=1.5x\nprogress=continue\nout_time_ms=8000000\nprogress=end\n")
+uint8(0)
+uint8(255)

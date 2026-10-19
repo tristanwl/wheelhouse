@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"warnings\": [\n    {\n      \"type\": \"ERROR\",\n      \"text\": \"Saving /config/Downloads/incomplete/Example.Movie.2024.1080p.WEB-DL.x264-GROUP/__ADMIN__/SABnzbd_nzo_aaa111 failed\",\n      \"time\": 1792297332,\n      \"origin\": \"filesystem.py1127\"\n    },\n    {\n      \"type\": \"WARNING\",\n      \"text\": \"Refused connection from: 192.0.2.10 (host.example.lan)\",\n      \"time\": 1792298000,\n      \"origin\": \"interface.py262\"\n    },\n    {\n      \"type\": \"WARNING\",\n      \"text\": \"Server news.example.com uses too many connections\",\n      \"time\": 1792299000,\n      \"origin\": \"downloader.py800\"\n    },\n    {\n      \"type\": \"INFO\",\n      \"text\": \"Pausing for 5 minutes\",\n      \"time\": 1792300000,\n      \"origin\": \"downloader.py900\"\n    }\n  ]\n}\n")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

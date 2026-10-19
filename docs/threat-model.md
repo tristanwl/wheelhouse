@@ -339,6 +339,25 @@ the other set.)
 | 6 | Low/Info | NAT64, Alibaba and Oracle metadata addresses were not denied; an instance URL with `#...` silently dropped the API path | See E5 | Fixed |
 | 7 | Info | This document said the container runs read-only with capabilities dropped, but the Dockerfile only sets `USER` | T2 now separates what the image guarantees from what the operator configures; the compose example and the systemd unit enable the options by default; timeouts and the connection cap: see D3 | Fixed (docs and examples) |
 
+## Fuzzing findings (road to 1.0.0)
+
+Every parser or validator that handles untrusted input has a native Go fuzz
+target (`func FuzzXxx`) with a seed corpus under `testdata/fuzz/` made from the
+real fixtures and the hostile cases of the existing tests; `go test` replays the
+seeds on every build, and the scheduled `fuzz.yml` workflow runs each target for
+a couple of minutes a week (see [CONTRIBUTING.md](../CONTRIBUTING.md#fuzz-tests)).
+Each target asserts invariants, not just "does not panic". What the fuzzing found,
+with the regression entry that fails on the old code:
+
+| # | Severity | Finding | Fix and regression test | Status |
+|---|---|---|---|---|
+| F1 | Low | A secret echoed percent-encoded in a mix of conventions was not redacted: a space as `%20` next to a mark (`! * ' ( )`) and a reserved character (`$ & + = : @`) matched none of the three encoders the redactor knew (`encodeURIComponent`, Go's query and path escapes). The same went for JSON written with `\uXXXX` escapes (Python, Java, .NET), PHP's `\/`, and HTML entities in an error page | `redact.go` now generates every combination of the three choices (and both hex cases), the ASCII-escaped and slash-escaped JSON forms, and both HTML entity styles. `FuzzRedact` seeds `bug_redact_*` | Fixed |
+| F2 | Low | `MaxValues` in the JSON scan counted commas, so the first element of every container was never counted: `[[1],[1],[1]]` has two commas and six values. Bodies made of many one-element containers got up to a nesting depth's multiple of the intended total (bounded in practice by the byte cap) | The scan also counts a container's first element when the container closes non-empty, and the comparison is now exactly "more than `MaxValues`". `FuzzDecodeJSON` seeds `bug_values_*` | Fixed |
+| F3 | Low | The Host allow-list matched a wildcard entry by suffix only: a Host header of `evil.example.com/.nas.example.lan`, `a..nas.example.lan`, `x y.nas.example.lan` or `.nas.example.lan` was granted the local-network bypass by `*.nas.example.lan`. A browser cannot send such a Host (it needs a name the attacker controls below the administrator's domain), so DNS rebinding was not reopened, but the allow-list is the control that stops it | A name from the lists must now be a valid domain (letters, digits and hyphens in dot-separated labels) before it is matched. `FuzzHostAllowed` seeds `bug_wildcard_labels` | Fixed |
+| F4 | Low | `WHEELHOUSE_TRUSTED_PROXIES` kept an IPv4-mapped IPv6 range (`::ffff:10.0.0.0/104`) as written, but every peer address is compared unmapped, so such an entry trusted nobody: the proxy's forwarded headers were ignored without a word (it failed closed, so clients behind it all looked like the proxy, shared one login lockout and the cookie was never marked Secure). The stored list already converted these | The environment list converts a mapped range to IPv4 like the stored one and refuses one wider than /96. `FuzzTrustedProxies` seeds `bug_mapped` | Fixed |
+| F5 | Low | qBittorrent's version is a plain-text answer, and whatever the address answered to `/api/v2/app/version` was shown as the version of the "successful" connection test and in `/api/status`: a reverse proxy's login page, an error page, up to 2 MiB of text. (Found against a hostile answer; it also meant a URL pointing at the wrong service tested as connected.) | The answer must look like a version (`5.0.1`, `4.6.7`, `5.0.0beta1`: dotted numbers, 32 bytes at most), else the call is a provider error that says the answer was unexpected. `FuzzUpstreamResponses` seeds `bug_qbit_version` | Fixed |
+| F6 | Info | An instance URL with a space or a backslash in it (a pasted trailing space: `http://192.0.2.10:7878/ `) passed validation, because `net/url` lets both into the path; every request then went to `/%20/api/...` with a confusing failure, and a backslash is a slash to browsers and some servers but not to Go | A setting of the URL kind containing white space or a backslash is refused ("must be an http or https URL"). `FuzzInstanceURL` seeds `bug_whitespace`, `bug_backslash` | Fixed |
+
 ## Phase 2 items and the threats they close
 
 | Item | Closes |
@@ -351,7 +370,7 @@ the other set.)
 | 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary. Done: the admin pages never receive a stored secret, secrets are not kept in browser storage or logged, one-time passwords live only in component state, and every destructive action asks first |
 | 8 Converter settings (merged) | T-7 for configurable roots, HDR handling (no silent loss of HDR: excluded by default, acknowledged when allowed), D6 persisted queue |
 | 9 Bugs and polish | arm64 image: no change to the model |
-| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit. Set 1 (auth, host allow-list, web): see "Security review findings" above |
+| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON: done, see "Fuzzing findings"), final dependency audit. Set 1 (auth, host allow-list, web): see "Security review findings" above |
 
 ## Residual risks (what stays true after Phase 2)
 

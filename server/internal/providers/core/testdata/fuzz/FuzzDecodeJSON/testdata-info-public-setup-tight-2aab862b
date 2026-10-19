@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"LocalAddress\": \"http://192.0.2.1:8096\",\n  \"ServerName\": \"example-host\",\n  \"Version\": \"12.2.0\",\n  \"ProductName\": \"Jellyfin Server\",\n  \"OperatingSystem\": \"\",\n  \"Id\": \"0123456789abcdef0123456789abcdef\",\n  \"StartupWizardCompleted\": false\n}\n")
+uint8(3)
+uint8(2)
+uint8(9)
+uint8(20)

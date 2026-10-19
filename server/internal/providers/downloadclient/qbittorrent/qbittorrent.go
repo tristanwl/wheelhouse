@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -353,8 +354,19 @@ func (c *client) version(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimPrefix(strings.TrimSpace(string(res.Body)), "v"), nil
+	v := strings.TrimPrefix(strings.TrimSpace(string(res.Body)), "v")
+	// The body is plain text, so whatever the address answers would be shown as
+	// the version: a reverse proxy's login page, an error page, megabytes. A
+	// version is a few dotted numbers.
+	if len(v) > 32 || !versionText.MatchString(v) {
+		return "", &core.ProviderError{Message: c.label + " /api/v2/app/version returned an unexpected answer"}
+	}
+	return v, nil
 }
+
+// versionText is what qBittorrent's plain-text version looks like once the
+// leading "v" is gone: "5.0.1", "4.6.7", "5.0.0beta1".
+var versionText = regexp.MustCompile(`^[0-9]+(\.[0-9A-Za-z_+-]+){0,4}$`)
 
 // TestConnection implements dc.Client.
 func (c *client) TestConnection(ctx context.Context) core.ConnectionResult {

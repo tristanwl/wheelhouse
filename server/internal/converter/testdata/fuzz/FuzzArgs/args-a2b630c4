@@ -1,0 +1,5 @@
+go test fuzz v1
+string("software")
+string("h264")
+string("file:/etc/passwd")
+string("pipe:1")

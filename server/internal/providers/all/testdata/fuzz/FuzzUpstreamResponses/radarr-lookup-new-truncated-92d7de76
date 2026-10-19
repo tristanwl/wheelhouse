@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(0)
+uint8(16)
+uint8(0)
+[]byte("{\n  \"title\": \"Example Movie 90\",\n  \"originalTitle\": \"Example Movie 90\",\n  \"originalLanguage\": {\n    \"id\": 1,\n    \"name\": \"English\"\n  },\n  \"alternateTitles\": [],\n  \"secondaryYearSourceId\": 0,\n  \"sortTitle\": \"example movie 90\",\n  \"status\": \"released\",\n  \"overview\": \"Placeholder overview for Example Movie 90.\",\n  \"inCinemas\": \"1999-03-31T00:00:00Z\",\n  \"physicalRelease\": \"1999-11-25T00:00:00Z\",\n  \"digitalRelease\": \"2001-03-19T00:00:00Z\",\n  \"releaseDate\": \"1999-03-31T00:00:00Z\",\n  \"images\": [\n    {\n      \"coverType\": \"poster\",\n      \"remoteUrl\": \"https://example.com/images/movie90/poster.jpg\"\n    },\n    {\n      \"coverType\": \"fanart\",\n      \"remoteUrl\": \"https://example.com/images/movie90/fanart.jpg\"\n    }\n  ],\n  \"website\": \"\",\n  \"year\": 1999,\n  \"youTubeTrailerId\": \"\",\n  \"studio\": \"Example Studio\",\n  \"qualityProfileId\": 0,\n  \"movieFileId\": 0,\n  \"monitored\": false,\n  \"minimumAvailability\": \"")

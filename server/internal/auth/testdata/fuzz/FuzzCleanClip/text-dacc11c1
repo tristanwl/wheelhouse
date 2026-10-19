@@ -1,0 +1,3 @@
+go test fuzz v1
+string("line\r\nbreak\tand\x00nul\x7f")
+uint8(64)

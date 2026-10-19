@@ -1,0 +1,4 @@
+go test fuzz v1
+string("")
+string("http://[::1]:3000")
+string("[::1]:3000")

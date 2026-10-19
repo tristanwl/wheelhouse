@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"MediaContainer\": {\n    \"size\": 0,\n    \"apiVersion\": \"1.2.2\",\n    \"claimed\": false,\n    \"machineIdentifier\": \"0123456789abcdef0123456789abcdef01234567\",\n    \"version\": \"1.43.3.10828-00f62d37d\"\n  }\n}\n")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

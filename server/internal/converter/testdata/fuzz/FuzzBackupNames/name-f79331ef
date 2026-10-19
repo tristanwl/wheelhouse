@@ -1,0 +1,4 @@
+go test fuzz v1
+string("/movies/a.mkv")
+string("/movies/a.mkv.bak")
+uint8(0)

@@ -1,0 +1,5 @@
+go test fuzz v1
+string("movie.mkv")
+string("root1/sub dir")
+string("root2")
+uint8(146)

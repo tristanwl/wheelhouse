@@ -1,0 +1,4 @@
+go test fuzz v1
+string("evil.example.com:80")
+string("")
+string("")

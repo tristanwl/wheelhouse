@@ -203,6 +203,14 @@ func Routes(o Options) *Router {
 
 // Handler returns the full handler: routes wrapped in the middleware chain.
 func Handler(o Options) http.Handler {
+	h, _ := buildHandler(o, true)
+	return h
+}
+
+// buildHandler is Handler with its router exposed, and with the panic-recovery
+// middleware optional: the HTTP fuzz test runs without it, so a handler that
+// panics fails the test instead of being answered with a 500 by the net.
+func buildHandler(o Options, recoverPanics bool) (http.Handler, *Router) {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
@@ -210,12 +218,16 @@ func Handler(o Options) http.Handler {
 		o.Network = netaccess.NewMemory(o.TrustedProxies)
 	}
 	g := &Guard{Net: o.Network}
-	return middleware.Chain(Routes(o),
+	rt := Routes(o)
+	mws := []middleware.Middleware{
 		middleware.WithRequestID(),
 		middleware.SecurityHeaders(g.secure),
 		middleware.AccessLog(o.Logger),
-		middleware.Recover(o.Logger),
-	)
+	}
+	if recoverPanics {
+		mws = append(mws, middleware.Recover(o.Logger))
+	}
+	return middleware.Chain(rt, mws...), rt
 }
 
 // shutdownTimeout is how long in-flight requests get to finish after SIGTERM.

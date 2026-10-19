@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\n\n\nout_time_ms=\n=\nout_time_ms=1=2\n")
+uint8(2)
+uint8(6)

@@ -1,0 +1,7 @@
+go test fuzz v1
+string("PUT")
+string("/api/admin/converter")
+string("Content-Type: application/json")
+[]byte("{\"mediaRoots\":[\"/proc\",\"/sys\",\"/dev\",\"/etc\",\"/config\",\"/\"]}")
+uint8(1)
+uint8(0)

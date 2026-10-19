@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(3)
+uint8(1)
+uint8(0)
+[]byte("[{\"size\":-5,\"progress\":-3,\"eta\":-1,\"downloaded\":-9,\"amount_left\":-7,\"num_seeds\":-2,\"ratio\":-1}]")

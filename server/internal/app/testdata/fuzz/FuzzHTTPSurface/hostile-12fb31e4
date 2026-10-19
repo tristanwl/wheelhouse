@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/users")
+string("Origin: HTTP://WHEELHOUSE.EXAMPLE.TEST")
+[]byte("{\"username\":\"x\",\"password\":\"a-fresh-long-passphrase-4\",\"role\":\"user\"}")
+uint8(1)
+uint8(0)

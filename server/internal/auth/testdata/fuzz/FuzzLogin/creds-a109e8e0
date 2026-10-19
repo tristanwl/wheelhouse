@@ -1,0 +1,5 @@
+go test fuzz v1
+string("fuzz-admin")
+string("correct-battery-staple-1")
+string("\r\nX-Injected: 1")
+string("line\r\nbreak\x00\x7f")

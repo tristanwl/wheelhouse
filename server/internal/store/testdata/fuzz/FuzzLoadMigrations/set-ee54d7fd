@@ -1,0 +1,6 @@
+go test fuzz v1
+string("0001_meta.sql")
+string("0002_auth.sql")
+string("0003_instances.sql")
+string("select 1;")
+bool(false)

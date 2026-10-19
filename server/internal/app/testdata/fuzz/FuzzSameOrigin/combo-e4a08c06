@@ -1,0 +1,4 @@
+go test fuzz v1
+string("")
+string("http://xn--nxasmq6b")
+string("xn--nxasmq6b")

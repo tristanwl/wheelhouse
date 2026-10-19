@@ -1,0 +1,5 @@
+go test fuzz v1
+string("software")
+string("hevc")
+string("/movies/Example Movie 1 (2025).mkv")
+string("/movies/.wheelhouse-convert-x.mkv")

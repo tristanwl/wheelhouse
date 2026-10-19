@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/auth/login")
+string("Content-Type: application/json")
+[]byte("{\"username\":[\"x\"],\"password\":{\"a\":1}}")
+uint8(2)
+uint8(2)

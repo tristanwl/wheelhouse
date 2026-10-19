@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(3)
+uint8(25)
+uint8(0)
+[]byte("{\n  \"v5\": {\n    \"version\": \"v5.2.4\",\n    \"webapiVersion\": \"2.15.1\"\n  },\n  \"v4\": {\n    \"version\": \"v4.6.7\",\n    \"webapiVersion\": \"2.9.3\"\n  }\n}\n")

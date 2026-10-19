@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"connection_status\": \"connected\",\n  \"dht_nodes\": 204,\n  \"dl_info_data\": 0,\n  \"dl_info_speed\": 0,\n  \"dl_rate_limit\": 0,\n  \"last_external_address_v4\": \"203.0.113.7\",\n  \"last_external_address_v6\": \"\",\n  \"up_info_data\": 0,\n  \"up_info_speed\": 0,\n  \"up_rate_limit\": 0\n}\n")
+uint8(3)
+uint8(2)
+uint8(9)
+uint8(20)

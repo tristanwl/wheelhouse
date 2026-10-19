@@ -1,0 +1,3 @@
+go test fuzz v1
+string("/tmp/ü/é.db")
+bool(true)

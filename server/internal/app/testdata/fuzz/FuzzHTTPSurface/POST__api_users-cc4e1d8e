@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/users")
+string("Content-Type: application/json")
+[]byte("{\"username\":\"local-network\",\"password\":\"x\",\"role\":\"admin\"}")
+uint8(2)
+uint8(1)

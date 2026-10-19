@@ -1,0 +1,7 @@
+go test fuzz v1
+string("GET")
+string("/api/codec-analysis?kind=movies&instanceId=radarr&page=-1&pageSize=99999999")
+string("")
+[]byte("")
+uint8(1)
+uint8(0)

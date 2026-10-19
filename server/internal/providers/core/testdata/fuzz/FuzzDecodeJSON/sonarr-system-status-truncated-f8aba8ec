@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"appName\": \"Sonarr\",\n  \"instanceName\": \"Sonarr\",\n  \"version\": \"4.0.15.2941\",\n  \"buildTime\": \"2025-06-20T17:18:49Z\",\n  \"isDebug\": false,\n  \"isProduction\": true,\n  \"isAdmin\": false,\n  \"isUserInteractive\": true,\n  \"startupPath\": \"/app/bin\",\n  \"appData\": \"/config\",\n  \"osName\": \"alpine\",\n  \"osVersion\": \"3.22.1\",\n  \"isNetCore\": true,\n  \"isLinux\": true,\n  \"isOsx\": false,\n  \"isWindows\": false,\n  \"isDocker\": false")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)
