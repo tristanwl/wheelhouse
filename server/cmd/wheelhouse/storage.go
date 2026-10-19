@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
@@ -39,7 +41,40 @@ func runBackup(ctx context.Context, e cliEnv, args []string) error {
 		return err
 	}
 	_, _ = fmt.Fprintf(e.stdout, "Backup written to %s (mode 0600).\n", args[0])
-	_, _ = fmt.Fprintln(e.stdout, "Provider secrets in it are encrypted; the master key is not included. Keep the key somewhere else.")
+	_, _ = fmt.Fprintln(e.stdout, "WARNING: the master key is NOT in this backup. Provider API keys and passwords in it are encrypted with that key")
+	_, _ = fmt.Fprintln(e.stdout, "and can never be recovered without it. Keep a copy of the key (secret.key in the config directory, or the key you")
+	_, _ = fmt.Fprintln(e.stdout, "supplied) somewhere safe and separate from your backups. See docs/operations.md, \"Key loss\".")
+	return nil
+}
+
+// runResetPassword implements `wheelhouse reset-password <user>`: the recovery
+// path for a locked-out administrator. Being able to run it means having a shell
+// in the container (and so the volume), which is the proof of ownership. It sets
+// a generated one-time password, which the account must change at its next
+// login, ends the account's sessions, records the reset in the audit log as
+// done by "cli", and prints the password once.
+func runResetPassword(ctx context.Context, e cliEnv, args []string) error {
+	if len(args) != 1 || args[0] == "" || args[0][0] == '-' {
+		return errors.New("usage: wheelhouse reset-password <user>")
+	}
+	path := e.dbPath()
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("no database at %s: has the server been started once, and is this the right container?", path)
+	}
+	db, err := store.Open(ctx, path)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+	pw, err := auth.New(db, auth.Options{}).ResetPasswordCLI(ctx, args[0])
+	if errors.Is(err, auth.ErrNotFound) {
+		return fmt.Errorf("there is no user named %q", args[0])
+	}
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(e.stdout, "The password of %q was reset. Sign in with this one-time password (shown once, not stored):\n\n    %s\n\n", args[0], pw)
+	_, _ = fmt.Fprintln(e.stdout, "Wheelhouse will ask for a new password at that login. The account's sessions were ended.")
 	return nil
 }
 

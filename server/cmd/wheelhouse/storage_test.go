@@ -6,10 +6,12 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
 )
@@ -36,7 +38,8 @@ func TestBackupCommand(t *testing.T) {
 	if err := runBackup(ctx, e, []string{dest}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "master key is not included") {
+	if !strings.Contains(out.String(), "master key is NOT in this backup") || !strings.Contains(out.String(), "can never be recovered") ||
+		!strings.Contains(out.String(), "docs/operations.md") {
 		t.Errorf("output: %q", out.String())
 	}
 	if runtime.GOOS != "windows" {
@@ -213,17 +216,86 @@ func TestRekeyCommandRefusals(t *testing.T) {
 	}
 }
 
-func TestStorageCommandsDoNotRunAtServerStart(t *testing.T) {
-	// The server does not open the database or create a key yet: nothing in
-	// run() references them. This guards the "no behaviour change" promise.
-	src, err := os.ReadFile("main.go")
+func TestResetPasswordCommand(t *testing.T) {
+	e, out := newEnv(t, nil)
+	ctx := context.Background()
+	db, err := store.Open(ctx, e.dbPath())
 	if err != nil {
 		t.Fatal(err)
 	}
-	run := string(src[strings.Index(string(src), "func run("):])
-	for _, forbidden := range []string{"store.", "secrets.", "cliEnv"} {
-		if strings.Contains(run, forbidden) {
-			t.Errorf("run() uses %s", forbidden)
+	svc := auth.New(db, auth.Options{Params: auth.Params{Memory: 8, Time: 1, Threads: 1}})
+	const old = "correct-battery-staple-1"
+	if _, err := svc.CreateUser(ctx, auth.Actor{Name: "test"}, auth.NewUser{Username: "alice", Password: old, Role: auth.RoleAdmin}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := svc.Login(ctx, "alice", old, auth.ClientMeta{Addr: "192.0.2.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	if err := runResetPassword(ctx, e, []string{"Alice"}); err != nil { // names are case-insensitive
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`\n    (\S{20})\n`).FindStringSubmatch(out.String())
+	if m == nil {
+		t.Fatalf("no one-time password in the output: %q", out.String())
+	}
+	if strings.Count(out.String(), m[1]) != 1 {
+		t.Error("the password is printed more than once")
+	}
+
+	db, err = store.Open(ctx, e.dbPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	svc = auth.New(db, auth.Options{Params: auth.Params{Memory: 8, Time: 1, Threads: 1}})
+	if _, err := svc.Authenticate(ctx, res.Token); err == nil {
+		t.Error("the old session survived the reset")
+	}
+	if _, err := svc.Login(ctx, "alice", old, auth.ClientMeta{Addr: "192.0.2.1"}); err == nil {
+		t.Error("the old password still works")
+	}
+	r, err := svc.Login(ctx, "alice", m[1], auth.ClientMeta{Addr: "192.0.2.1"})
+	if err != nil || !r.User.MustChangePassword {
+		t.Fatalf("login with the one-time password: %+v %v", r, err)
+	}
+	entries, _ := svc.ListAudit(ctx, 10, 0)
+	found := false
+	for _, en := range entries {
+		if en.Action == "password.reset" && en.ActorName == "cli" && en.Target == "alice" {
+			found = true
+		}
+		if strings.Contains(en.Action+en.Target+string(en.Detail), m[1]) {
+			t.Error("the audit log holds the password")
+		}
+	}
+	if !found {
+		t.Errorf("no password.reset audit row by cli: %+v", entries)
+	}
+}
+
+func TestResetPasswordCommandRefusals(t *testing.T) {
+	e, _ := newEnv(t, nil)
+	ctx := context.Background()
+	if err := runResetPassword(ctx, e, []string{"alice"}); err == nil || !strings.Contains(err.Error(), "no database") {
+		t.Errorf("no database: %v", err)
+	}
+	if _, err := os.Stat(e.dbPath()); err == nil {
+		t.Error("the command created a database")
+	}
+	db, err := store.Open(ctx, e.dbPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	if err := runResetPassword(ctx, e, []string{"nobody"}); err == nil || !strings.Contains(err.Error(), "no user named") {
+		t.Errorf("unknown user: %v", err)
+	}
+	for _, args := range [][]string{nil, {""}, {"-x"}, {"a", "b"}} {
+		if err := runResetPassword(ctx, e, args); err == nil || !strings.Contains(err.Error(), "usage") {
+			t.Errorf("%q: %v", args, err)
 		}
 	}
 }
