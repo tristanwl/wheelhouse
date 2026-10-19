@@ -2,7 +2,7 @@
 
 The Wheelhouse server: one static Go binary (standard library plus one
 dependency, the pure-Go SQLite driver; see [Dependencies](#dependencies)) that
-serves the API and the embedded UI. It replaced the Next.js app in release 0.2.0
+serves the API and the embedded UI. It replaced the Next.js app in release 0.3.0
 ([docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md), migration
 steps 2 to 8). Comments in the code that mention `lib/...` or `app/...` refer to
 that app, which is in git history (tag `0.1.1`).
@@ -155,7 +155,7 @@ are described under [Storage and secrets](#storage-and-secrets), and
 `wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
 this machine (at `WHEELHOUSE_LISTEN` or `PORT`) answers `/healthz`, for the
 image's `HEALTHCHECK`. `wheelhouse version` (or `--version`) prints the version,
-which `-ldflags "-X github.com/tristanwl/wheelhouse/server/internal/version.Version=0.2.0"`
+which `-ldflags "-X github.com/tristanwl/wheelhouse/server/internal/version.Version=0.3.0"`
 sets (the Dockerfile reads it from the root `package.json`; a plain `go build`
 says `dev`). The version is also in `/healthz` and the startup log line.
 

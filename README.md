@@ -51,7 +51,7 @@ amd64 only), so Raspberry Pi, ARM NAS boxes and Apple Silicon hosts pull the
 right one by themselves. On arm64, Intel VAAPI drivers are not part of the
 image and hardware encoding is untested; software x264/x265 conversion works.
 There is no `latest` tag while Wheelhouse is
-alpha; pin a version, for example `tristanwl/wheelhouse:0.2.0`. To build from
+alpha; pin a version, for example `tristanwl/wheelhouse:0.3.0`. To build from
 source instead, uncomment `build: .` in the compose file and run
 `docker compose up -d --build`.
 
@@ -111,7 +111,7 @@ One image, one process, one writable volume. Without Compose:
 mkdir -p config && docker run -d --name wheelhouse --restart unless-stopped \
   -p 3050:3050 --env-file .env --user "$(id -u):$(id -g)" \
   -v "$PWD/config:/config" -v /path/to/movies:/movies -v /path/to/tv:/tv \
-  tristanwl/wheelhouse:0.2.0
+  tristanwl/wheelhouse:0.3.0
 ```
 
 - **User.** The container runs as `1000:1000` by default and works as any

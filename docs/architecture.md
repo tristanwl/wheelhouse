@@ -31,7 +31,7 @@ server opens the database and the key at start and refuses to run without them;
 see "Accounts and sessions" and "Storage and secrets" below. What is protected
 and from whom is in the [threat model](threat-model.md).
 
-Since release 0.2.0 this is the whole product. Releases up to 0.1.x were a
+Since release 0.3.0 this is the whole product. Releases up to 0.1.x were a
 Next.js app with the same URLs, API and environment variables; the migration is
 described in the phase 2 spec. Comments in the Go code that mention `lib/...` or
 `app/...` refer to that code, which is in git history (tag `0.1.1`).
@@ -434,7 +434,7 @@ walked and any `.wheelhouse-convert-*` temp file is deleted.
 
 ## API routes (all server-side proxies — API keys never reach the browser)
 
-- `GET /healthz` — `{"status":"ok","version":"0.2.0"}`; the container's
+- `GET /healthz` — `{"status":"ok","version":"0.3.0"}`; the container's
   `HEALTHCHECK` runs `wheelhouse healthcheck`, which asks it.
 - `GET /api/features` — the feature registry's answer: which pages are available
   and what the others still need. No hosts, keys or instance names.
