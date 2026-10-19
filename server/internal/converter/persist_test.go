@@ -149,18 +149,118 @@ func TestRestartMarksInterruptedCleansUpAndResumesQueuedJobsInOrder(t *testing.T
 	}
 }
 
-func TestStrandedBackupOfAnInterruptedSwapIsRestored(t *testing.T) {
+func swapRow(id, file, backup string) Stored {
+	r := row(id, file, StatusRunning)
+	r.SwapPath, r.SwapBackup = file, backup
+	return r
+}
+
+func TestRecordedInterruptedSwapIsRestored(t *testing.T) {
 	root, file := library(t, "a.mkv", "x")
 	if err := os.Rename(file, file+".bak"); err != nil { // died between the two renames
 		t.Fatal(err)
 	}
 	db := openDB(t)
-	saveAll(t, db, row("job-a", file, StatusRunning))
-	ft := newFakeTools(t, "ok", probeTwoSeconds)
-	q, _ := startPersistent(t, db, root, ft, nil)
+	saveAll(t, db, swapRow("job-a", file, file+".bak"))
+	q, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
 	<-q.recovered
 	if got := read(t, file); got != "x" {
 		t.Errorf("restored content %q", got)
+	}
+	// The record is cleared, so a second restart does nothing more.
+	rows, _ := NewSQLStore(db).Load(context.Background())
+	if rows[0].SwapPath != "" || rows[0].SwapBackup != "" {
+		t.Errorf("swap record not cleared: %+v", rows[0])
+	}
+}
+
+func TestStrayBackupWithoutARecordIsNotRestored(t *testing.T) {
+	root, file := library(t, "a.mkv", "x")
+	if err := os.Rename(file, file+".bak"); err != nil {
+		t.Fatal(err)
+	}
+	db := openDB(t)
+	saveAll(t, db, row("job-a", file, StatusRunning)) // legacy row: no swap record
+	q, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	<-q.recovered
+	if _, err := os.Lstat(file); err == nil {
+		t.Error("a .bak was resurrected without a recorded swap")
+	}
+}
+
+func TestRecordedSwapWithBadPathsIsIgnored(t *testing.T) {
+	root, file := library(t, "a.mkv", "x")
+	_, secret := library(t, "s.mkv", "secret")
+	if err := os.Rename(secret, secret+".bak"); err != nil {
+		t.Fatal(err)
+	}
+	zz := filepath.Join(root, "zz")
+	if err := os.Rename(file, zz); err != nil {
+		t.Fatal(err)
+	}
+	db := openDB(t)
+	saveAll(t, db,
+		swapRow("outside", secret, secret+".bak"), // outside the roots
+		swapRow("odd-name", file, zz),             // not a backup name of the file
+	)
+	q, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	<-q.recovered
+	if _, err := os.Lstat(secret); err == nil {
+		t.Error("restored a file outside the roots")
+	}
+	if _, err := os.Lstat(file); err == nil {
+		t.Error("restored from a name that is not a backup of the file")
+	}
+}
+
+func TestSwapRecordedByTheQueueSurvivesACrash(t *testing.T) {
+	// The queue records the swap, the process dies after the first step, and the
+	// next process restores from what the first one wrote.
+	root, file := library(t, "a.mkv", "orig")
+	db := openDB(t)
+	q, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	<-q.recovered
+	enq := q.Enqueue(request(file))
+	wait(t, q, enq.ID, StatusSuccess)
+	// Re-create the crash window for a new job row.
+	j := &job{Job: row("crash", file, StatusRunning).Job, resolved: file}
+	if err := q.recordSwap(j, file, file+".bak.9"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(file, file+".bak.9"); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := NewSQLStore(db).Load(context.Background())
+	var found bool
+	for _, r := range rows {
+		if r.ID == "crash" {
+			found = r.SwapPath == file && r.SwapBackup == file+".bak.9"
+		}
+	}
+	if !found {
+		t.Fatalf("the swap was not persisted before the first rename: %+v", rows)
+	}
+	q2, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	<-q2.recovered
+	if got := read(t, file); got != "converted" {
+		t.Errorf("not restored: %q", got)
+	}
+}
+
+func TestInterruptedHardLinkSwapDropsTheDuplicateBackup(t *testing.T) {
+	root, file := library(t, "a.mkv", "orig")
+	if err := os.Link(file, file+".bak"); err != nil {
+		t.Skip(err)
+	}
+	db := openDB(t)
+	saveAll(t, db, swapRow("job-a", file, file+".bak"))
+	q, _ := startPersistent(t, db, root, newFakeTools(t, "ok", probeTwoSeconds), nil)
+	<-q.recovered
+	if read(t, file) != "orig" {
+		t.Error("original changed")
+	}
+	if _, err := os.Lstat(file + ".bak"); err == nil {
+		t.Error("duplicate backup link kept")
 	}
 }
 

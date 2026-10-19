@@ -162,6 +162,9 @@ type job struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 	canceled bool
+	// swapPath and swapBackup mirror Stored.SwapPath and SwapBackup: set while a
+	// swap is in progress, guarded by q.mu.
+	swapPath, swapBackup string
 }
 
 // JobQueue keeps the jobs (in memory, written through to a JobStore when one is
@@ -221,8 +224,12 @@ func NewQueue(ctx context.Context, cfg Config) *JobQueue {
 	for _, j := range interrupted {
 		q.notify(j)
 	}
+	pending := q.pendingSwaps()
 	go func() {
 		defer close(q.recovered)
+		for _, j := range pending {
+			q.restoreSwap(j)
+		}
 		CleanupOrphans(q.roots(), cfg.Logger)
 	}()
 	if q.hasQueued() {
@@ -287,7 +294,7 @@ func (q *JobQueue) load() []Job {
 	now := q.nowMS()
 	var done []Job
 	for _, r := range rows {
-		j := &job{Job: r.Job, resolved: r.Path}
+		j := &job{Job: r.Job, resolved: r.Path, swapPath: r.SwapPath, swapBackup: r.SwapBackup}
 		j.ctx, j.cancel = context.WithCancel(q.base)
 		if j.Status.active() {
 			switch reason := validJob(&j.Job, j.resolved); {
@@ -316,14 +323,20 @@ func (q *JobQueue) markFailed(j *job, now int64, msg string) {
 // save writes the job through to the store. A failure is logged, not fatal: the
 // conversion in progress matters more than its record.
 func (q *JobQueue) save(j *job) {
+	if err := q.persist(j); err != nil {
+		q.cfg.Logger.Error("could not save a conversion job", "job", j.ID, "error", err)
+	}
+}
+
+// persist writes the job through to the store and returns the error. The caller
+// holds q.mu (or the job is not yet shared).
+func (q *JobQueue) persist(j *job) error {
 	if q.cfg.Store == nil {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(q.base), 10*time.Second)
 	defer cancel()
-	if err := q.cfg.Store.Save(ctx, Stored{Job: j.Job, Path: j.resolved}); err != nil {
-		q.cfg.Logger.Error("could not save a conversion job", "job", j.ID, "error", err)
-	}
+	return q.cfg.Store.Save(ctx, Stored{Job: j.Job, Path: j.resolved, SwapPath: j.swapPath, SwapBackup: j.swapBackup})
 }
 
 // prune drops finished jobs older than the retention or beyond the cap, oldest
@@ -593,11 +606,10 @@ func (q *JobQueue) runJob(j *job) {
 		dir, ext := filepath.Dir(src), filepath.Ext(src)
 		// Leading dot: see TempPrefix.
 		tempPath = filepath.Join(dir, TempPrefix+j.ID+ext)
-		// Same-folder, non-video-extension backup rather than deleting the
-		// original: Radarr and Sonarr match known video extensions, so a trailing
-		// ".bak" keeps it from being picked up as an alternate version. Nothing
-		// deletes it automatically.
-		backupPath := src + bakSuffix
+		// The backup (see swap) is a same-folder, non-video-extension name
+		// rather than a deletion of the original: Radarr and Sonarr match known
+		// video extensions, so a trailing ".bak" keeps it from being picked up as
+		// an alternate version. Nothing deletes it automatically.
 
 		if q.isCanceled(j) {
 			return errCanceled
@@ -649,13 +661,9 @@ func (q *JobQueue) runJob(j *job) {
 		if again, err := ResolveInRoots(q.roots(), src); err != nil || again != src {
 			return fail("The file is no longer available inside the media folders")
 		}
-		if err := os.Rename(src, backupPath); err != nil {
-			return fail("Could not move the original to its backup")
-		}
-		if err := os.Rename(tempPath, src); err != nil {
-			// Put the original back rather than leave it stranded at the backup.
-			_ = os.Rename(backupPath, src)
-			return fail("Could not move the converted file into place")
+		backupPath, err := q.swap(j, src, tempPath)
+		if err != nil {
+			return err
 		}
 		q.logf(j, "Swapped in converted file; original kept at %s\n", backupPath)
 
@@ -789,18 +797,14 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// CleanupOrphans repairs what a killed process left in the media roots, once
-// per process. Job state is in memory only, so a restart mid-conversion loses
-// track of what was running. Two artifacts can remain:
+// CleanupOrphans removes what a killed process left in the media roots: the
+// ".wheelhouse-convert-*" files, an interrupted encode's partial output. They are
+// always safe to delete; nothing references them.
 //
-//  1. ".wheelhouse-convert-*" files, an interrupted encode's partial output.
-//     Always safe to delete; nothing references them.
-//  2. "<file>.bak" with no "<file>" next to it: the process died between the
-//     two renames of a swap, so the real content is stranded at the backup and
-//     the expected path is empty. It is renamed back. A ".bak" next to a live
-//     file is a normal backup and is left alone.
-//
-// Symlinks are never followed or touched.
+// It deliberately does not look at "*.bak" files. A stranded original is
+// restored only for a swap Wheelhouse recorded in its database before it began
+// (see JobQueue.restoreSwap): renaming any "X.bak" back to a missing "X" would
+// let a stray or planted file be resurrected. Symlinks are never followed.
 func CleanupOrphans(roots []string, log *slog.Logger) {
 	for _, root := range roots {
 		if !filepath.IsAbs(root) {
@@ -824,21 +828,9 @@ func walkAndClean(dir string, log *slog.Logger) {
 		if !e.Type().IsRegular() {
 			continue
 		}
-		name := e.Name()
-		switch {
-		case strings.HasPrefix(name, TempPrefix):
+		if strings.HasPrefix(e.Name(), TempPrefix) {
 			if err := os.Remove(full); err == nil {
 				log.Info("removed orphaned conversion temp file", "path", full)
-			}
-		case strings.HasSuffix(name, bakSuffix):
-			original := strings.TrimSuffix(full, bakSuffix)
-			if _, err := os.Lstat(original); err == nil {
-				continue
-			}
-			if err := os.Rename(full, original); err != nil {
-				log.Error("could not restore interrupted conversion", "path", full)
-			} else {
-				log.Info("restored interrupted conversion", "from", full, "to", original)
 			}
 		}
 	}

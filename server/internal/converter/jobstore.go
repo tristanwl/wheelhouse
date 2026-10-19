@@ -18,6 +18,12 @@ type Stored struct {
 	// job was queued. It is only a record: it is resolved against the roots in
 	// force again before anything runs.
 	Path string
+	// SwapPath and SwapBackup are set while a file swap is in progress: the file
+	// about to be replaced and the exact backup name chosen for it. They are what
+	// a restart may restore from, and the only thing it may restore (never a
+	// file found by name). Empty when no swap was recorded, which includes every
+	// row written before the column existed.
+	SwapPath, SwapBackup string
 }
 
 // JobStore persists the queue's jobs.
@@ -69,15 +75,16 @@ func (s *SQLStore) Save(ctx context.Context, j Stored) error {
 	return s.db.Tx(ctx, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO conversion_jobs
 			(id, instance_id, item_id, path, params, hdr, state, progress, error, new_size, backup_path, log,
-			 owner, owner_name, ack_hardlink, ack_hdr, created_at, started_at, finished_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 owner, owner_name, ack_hardlink, ack_hdr, created_at, started_at, finished_at, swap_path, swap_backup)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET hdr = excluded.hdr, state = excluded.state, progress = excluded.progress,
 			 error = excluded.error, new_size = excluded.new_size, backup_path = excluded.backup_path,
-			 log = excluded.log, started_at = excluded.started_at, finished_at = excluded.finished_at`,
+			 log = excluded.log, started_at = excluded.started_at, finished_at = excluded.finished_at,
+			 swap_path = excluded.swap_path, swap_backup = excluded.swap_backup`,
 			j.ID, j.InstanceID, j.ItemID, j.Path, string(params), string(hdr), string(j.Status),
 			clampPercent(j.ProgressPercent), j.Error, j.NewSize, j.BackupPath, j.Log,
 			j.Owner, j.OwnerName, b2i(j.AcknowledgedHardlink), b2i(j.AcknowledgedHDR),
-			j.CreatedAt, j.StartedAt, j.FinishedAt)
+			j.CreatedAt, j.StartedAt, j.FinishedAt, j.SwapPath, j.SwapBackup)
 		return err
 	})
 }
@@ -102,7 +109,7 @@ func (s *SQLStore) Delete(ctx context.Context, ids []string) error {
 // Load implements JobStore.
 func (s *SQLStore) Load(ctx context.Context) ([]Stored, error) {
 	rows, err := s.db.Query(ctx, `SELECT id, instance_id, item_id, path, params, hdr, state, progress, error,
-		new_size, backup_path, log, owner, owner_name, ack_hardlink, ack_hdr, created_at, started_at, finished_at
+		new_size, backup_path, log, owner, owner_name, ack_hardlink, ack_hdr, created_at, started_at, finished_at, swap_path, swap_backup
 		FROM conversion_jobs ORDER BY seq`)
 	if err != nil {
 		return nil, err
@@ -115,7 +122,7 @@ func (s *SQLStore) Load(ctx context.Context) ([]Stored, error) {
 		var ackH, ackD int
 		if err := rows.Scan(&j.ID, &j.InstanceID, &j.ItemID, &j.Path, &params, &hdr, &state, &j.ProgressPercent,
 			&j.Error, &j.NewSize, &j.BackupPath, &j.Log, &j.Owner, &j.OwnerName, &ackH, &ackD,
-			&j.CreatedAt, &j.StartedAt, &j.FinishedAt); err != nil {
+			&j.CreatedAt, &j.StartedAt, &j.FinishedAt, &j.SwapPath, &j.SwapBackup); err != nil {
 			return nil, err
 		}
 		j.Status, j.HDR = Status(state), codecs.HDR(hdr)
