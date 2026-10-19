@@ -98,7 +98,11 @@ func registerCodecs(r *Router, d deps) {
 		if conv.Store != nil {
 			cfg.Store = converter.NewSQLStore(conv.Store)
 		}
-		queue = converter.NewQueue(d.ctx, cfg)
+		jq := converter.NewQueue(d.ctx, cfg)
+		queue = jq
+		if d.drain != nil {
+			d.drain.Add(jq.Wait)
+		}
 	}
 
 	r.HandleFunc("GET /api/codec-analysis", Authenticated, func(w http.ResponseWriter, req *http.Request) {
