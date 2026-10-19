@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("out_time_ms=1000000")
+uint8(3)
+uint8(9)

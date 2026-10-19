@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"streams\":[{\"side_data_list\":[1,\"a\",{\"side_data_type\":3}]}]}")
