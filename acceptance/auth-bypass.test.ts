@@ -71,7 +71,8 @@ describe("local-network bypass", () => {
   it("honours a trusted proxy's forwarded client, right-most untrusted entry first", async () => {
     const set = await put(server, { enabled: true, cidrs: [OTHER], trustedProxies: ["127.0.0.1"] });
     expect(set.status, set.text).toBe(200);
-    const via = (xff: string) => server.anon.request("/api/status", { headers: { "x-forwarded-for": xff } });
+    const via = (xff: string) =>
+      server.anon.request("/api/status", { headers: { "x-forwarded-for": xff } });
     expect((await via("198.51.100.7")).status).toBe(200);
     expect((await via("203.0.113.9")).status).toBe(401);
     expect((await via("198.51.100.7, 203.0.113.9")).status).toBe(401);
@@ -104,13 +105,19 @@ describe("local-network bypass", () => {
       }
       for (const { route } of adminRoutes) {
         const { method, path } = sampleRequest(route);
-        const res = await c.request(path, { method, headers: { "x-csrf-token": s.json.csrfToken } });
+        const res = await c.request(path, {
+          method,
+          headers: { "x-csrf-token": s.json.csrfToken },
+        });
         expect(res.status, route).toBe(403);
         expect(res.json, route).toEqual({ error: "forbidden" });
       }
       for (const route of loginOnly) {
         const { method, path } = sampleRequest(route);
-        const res = await c.request(path, { method, headers: { "x-csrf-token": s.json.csrfToken } });
+        const res = await c.request(path, {
+          method,
+          headers: { "x-csrf-token": s.json.csrfToken },
+        });
         expect(res.status, route).toBe(401);
       }
     });
@@ -126,7 +133,9 @@ describe("local-network bypass", () => {
         });
       expect((await add({})).status).toBe(403);
       expect((await add({ "x-csrf-token": "x" })).status).toBe(403);
-      expect((await add({ "x-csrf-token": token, origin: "https://evil.example.com" })).status).toBe(403);
+      expect(
+        (await add({ "x-csrf-token": token, origin: "https://evil.example.com" })).status
+      ).toBe(403);
       const ok = await add({ "x-csrf-token": token });
       expect([401, 403]).not.toContain(ok.status);
       expect((await server.admin.request("/api/admin/network")).json.client.inRange).toBe(true);
@@ -201,9 +210,13 @@ describe("the bypass survives a restart", () => {
     const s = await startServer({ env: { WHEELHOUSE_TRUSTED_PROXIES: "127.0.0.1" } });
     try {
       expect((await put(s, { enabled: true, cidrs: [OTHER] })).status).toBe(200);
-      const res = await s.anon.request("/api/status", { headers: { "x-forwarded-for": "198.51.100.7" } });
+      const res = await s.anon.request("/api/status", {
+        headers: { "x-forwarded-for": "198.51.100.7" },
+      });
       expect(res.status).toBe(200);
-      expect((await s.admin.request("/api/admin/network")).json.envTrustedProxies).toEqual(["127.0.0.1/32"]);
+      expect((await s.admin.request("/api/admin/network")).json.envTrustedProxies).toEqual([
+        "127.0.0.1/32",
+      ]);
     } finally {
       await s.stop();
     }
