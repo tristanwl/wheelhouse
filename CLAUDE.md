@@ -183,8 +183,9 @@ Everything that talks to another service goes through the provider layer in
   version with no `v` prefix (`0.3.0`) and **must equal the root `package.json`'s
   `version`**: bump it in a PR first. `.github/workflows/release.yml` runs the
   CI checks, builds the Dockerfile (the binary reports that version), pushes
-  `tristanwl/wheelhouse:<version>` to Docker Hub and creates or updates the
-  GitHub release. Every `0.x` is a pre-release, and there is no `latest` tag
+  `tristanwl/wheelhouse:<version>` to Docker Hub (with an SBOM, provenance and a
+  signed attestation) and creates or updates the GitHub release. A manual
+  run of the workflow is always a dry run (`gh workflow run Release --ref <branch> -f dry_run=true`). Every `0.x` is a pre-release, and there is no `latest` tag
   until authentication ships. Branch protection requires the CI job named
   `check`, so don't rename the jobs.
 - Claude Code keeps isolated worktrees in `.claude/`; it is ignored by git. Never
