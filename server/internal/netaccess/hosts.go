@@ -197,7 +197,13 @@ func (s *Service) HostAllowed(hostport string) bool {
 	if !ok {
 		return false
 	}
-	return implicitHost(h) || matchHost(s.envHosts, h) || matchHost(s.cur.Load().AllowedHosts, h)
+	if implicitHost(h) {
+		return true
+	}
+	// A listed name must be a real name: a wildcard entry matches by suffix, and
+	// "x y.nas.lan", "a..nas.lan" or "evil.example.com/.nas.lan" end in the
+	// suffix without being a host below it.
+	return validDomain(h) && (matchHost(s.envHosts, h) || matchHost(s.cur.Load().AllowedHosts, h))
 }
 
 // BypassesHost is Bypasses for a request: the client must be in range and the
