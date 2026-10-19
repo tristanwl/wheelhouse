@@ -33,6 +33,7 @@ type reqOpts struct {
 	headers map[string]string
 	body    string
 	remote  string
+	host    string // overrides the Host header (httptest's default is example.com)
 	tls     bool
 	noType  bool
 }
@@ -69,6 +70,9 @@ func (x *harness) do(method, path string, o reqOpts) *httptest.ResponseRecorder 
 	}
 	for k, v := range o.headers {
 		req.Header.Set(k, v)
+	}
+	if o.host != "" {
+		req.Host = o.host
 	}
 	if o.remote != "" {
 		req.RemoteAddr = o.remote

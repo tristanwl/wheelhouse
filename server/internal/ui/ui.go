@@ -68,6 +68,12 @@ func NewHandler(fsys fs.FS) http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
+		if hasDotSegment(name) {
+			// Dot files in the embedded tree (.gitkeep, .gitignore) are build
+			// artefacts, never content.
+			http.NotFound(w, r)
+			return
+		}
 		if info, err := fs.Stat(fsys, name); err == nil && !info.IsDir() {
 			switch {
 			case name == "index.html":
@@ -85,6 +91,15 @@ func NewHandler(fsys fs.FS) http.Handler {
 		}
 		serveIndex(w, r, fsys)
 	})
+}
+
+func hasDotSegment(name string) bool {
+	for _, seg := range strings.Split(name, "/") {
+		if strings.HasPrefix(seg, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request, fsys fs.FS) {

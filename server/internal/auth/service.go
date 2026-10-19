@@ -237,8 +237,17 @@ func ValidateUsername(name string) error {
 	if !usernameRE.MatchString(name) {
 		return &PolicyError{"The username must be 3 to 64 characters: letters, digits and . _ @ - only."}
 	}
+	if _, bad := reservedUsernames[strings.ToLower(name)]; bad {
+		return &PolicyError{"That username is reserved. Choose another."}
+	}
 	return nil
 }
+
+// reservedUsernames are the names the audit log uses for actors that are not
+// accounts, so no account can impersonate one. Checked when a name is chosen
+// (create, rename), never at login: an existing account with such a name keeps
+// working.
+var reservedUsernames = map[string]struct{}{"local-network": {}, "cli": {}, "system": {}, "anonymous": {}}
 
 var usernameRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._@-]{2,63}$`)
 
@@ -320,7 +329,8 @@ func (s *Service) PrepareSetup(ctx context.Context) error {
 		}
 	}
 	// The one place the token is logged: the operator has to be able to find it.
-	s.log.Warn("setup required: open Wheelhouse in a browser and create the administrator with this one-time setup token",
+	s.log.Warn("setup required: open Wheelhouse in a browser and create the administrator with this one-time setup token. "+
+		"Anyone who can read this log line or the token file before setup completes can claim this instance",
 		"setup_token", token, "file", file)
 	return nil
 }
@@ -454,24 +464,42 @@ func (s *Service) Login(ctx context.Context, username, password string, cm Clien
 	if u != nil {
 		s.th.resetIfOlder(uKey, u.PasswordChangedAt)
 	}
-	lockedU, _ := s.th.locked(uKey)
-	lockedA, _ := s.th.locked(aKey)
-	blocked := lockedU || lockedA
-
+	// Reserve a verification slot on both keys before spending any work. A
+	// locked key, or one whose remaining allowance is already taken by
+	// attempts in flight, gets the same generic answer without an Argon2 run:
+	// nothing observable differs, and a flood against a locked account costs
+	// the server almost nothing.
+	if !s.th.reserve(uKey, accountThreshold) {
+		return nil, ErrInvalidCredentials
+	}
+	if !s.th.reserve(aKey, addressThreshold) {
+		s.th.release(uKey)
+		return nil, ErrInvalidCredentials
+	}
 	hash := s.dummy
 	if u != nil {
 		hash = u.hash
 	}
-	match, params, verr := s.h.Verify(ctx, hash, password)
-	if verr != nil && ctx.Err() != nil {
-		return nil, ctx.Err()
+	// Re-checked once the semaphore is ours, after any wait in the queue.
+	stillAllowed := func() bool {
+		lu, _ := s.th.locked(uKey)
+		la, _ := s.th.locked(aKey)
+		return !lu && !la
 	}
-	if u == nil || u.Disabled || !match || blocked {
-		if !blocked {
-			s.loginFailed(ctx, u, uKey, aKey, cm)
+	match, params, verr := s.h.Verify(ctx, hash, password, stillAllowed)
+	if verr != nil && !errors.Is(verr, errBadHash) { // a damaged stored hash counts as a wrong password
+		s.th.release(uKey)
+		s.th.release(aKey)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
 		}
+		return nil, ErrInvalidCredentials // busy or skipped after a lock: the generic answer
+	}
+	if u == nil || u.Disabled || !match {
+		s.loginFailed(ctx, u, uKey, aKey, cm)
 		return nil, ErrInvalidCredentials
 	}
+	s.th.release(aKey) // a success never counts against the address
 
 	if params.Weaker(s.h.params) {
 		if nh, herr := s.h.Hash(ctx, password); herr == nil {
@@ -479,6 +507,7 @@ func (s *Service) Login(ctx context.Context, username, password string, cm Clien
 		}
 	}
 	s.th.reset(uKey)
+	s.th.release(uKey)
 	res, err := s.startSession(ctx, u.User, cm, "login.ok")
 	if err != nil {
 		return nil, err
@@ -487,8 +516,9 @@ func (s *Service) Login(ctx context.Context, username, password string, cm Clien
 }
 
 func (s *Service) loginFailed(ctx context.Context, u *userRow, uKey, aKey string, cm ClientMeta) {
-	startedU, untilU := s.th.fail(uKey, accountThreshold)
-	startedA, untilA := s.th.fail(aKey, addressThreshold)
+	// Converts the two reservations Login holds into recorded failures.
+	startedU, untilU := s.th.failRelease(uKey, accountThreshold)
+	startedA, untilA := s.th.failRelease(aKey, addressThreshold)
 	actor := Actor{Name: "anonymous", Addr: cm.Addr}
 	target, reason := "", "unknown user"
 	if u != nil {
@@ -704,31 +734,38 @@ func (s *Service) userExists(ctx context.Context, tx *sql.Tx, id string) error {
 // password. The attempt counts toward the account's throttle like a login.
 func (s *Service) ChangePassword(ctx context.Context, who *Identity, current, next string, cm ClientMeta) (*LoginResult, error) {
 	uKey := accountKey(who.Username)
-	if locked, _ := s.th.locked(uKey); locked {
+	if !s.th.reserve(uKey, accountThreshold) { // locked, or the allowance is taken by attempts in flight
 		return nil, ErrTooManyAttempts
 	}
 	u, err := s.userByName(ctx, who.Username)
 	if err != nil {
+		s.th.release(uKey)
 		return nil, err
 	}
 	if u == nil || u.ID != who.ID {
+		s.th.release(uKey)
 		return nil, ErrUnauthenticated
 	}
 	if len(current) > MaxPasswordBytes {
 		current = current[:MaxPasswordBytes]
 	}
-	match, _, verr := s.h.Verify(ctx, u.hash, current)
-	if verr != nil && ctx.Err() != nil {
-		return nil, ctx.Err()
+	match, _, verr := s.h.Verify(ctx, u.hash, current, func() bool { l, _ := s.th.locked(uKey); return !l })
+	if verr != nil && !errors.Is(verr, errBadHash) {
+		s.th.release(uKey)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, ErrTooManyAttempts
 	}
 	actor := who.Actor(cm.Addr)
 	if !match {
-		if started, until := s.th.fail(uKey, accountThreshold); started {
+		if started, until := s.th.failRelease(uKey, accountThreshold); started {
 			s.record(ctx, actor, "login.lockout", who.Username, map[string]any{"scope": "account", "seconds": int(until.Sub(s.now()).Round(time.Second) / time.Second)})
 		}
 		s.record(ctx, actor, "password.change.fail", who.Username, nil)
 		return nil, ErrWrongPassword
 	}
+	s.th.release(uKey)
 	if err := ValidatePassword(next, who.Username); err != nil {
 		return nil, err
 	}

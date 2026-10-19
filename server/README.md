@@ -49,6 +49,7 @@ answers a generic 500 and never logs the panic value.
 | `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
 | `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
 | `WHEELHOUSE_DENIED_NETWORKS` | link-local, cloud metadata | Comma-separated CIDRs or addresses provider clients refuse to connect to (default `169.254.0.0/16,fe80::/10,fd00:ec2::254`; `none` allows all; an unparsable entry is fatal). Private ranges and loopback are allowed unless listed |
+| `WHEELHOUSE_ALLOWED_HOSTS` | | Comma-separated host names (`nas.example.lan`, `*.example.lan`) whose requests may get the local-network bypass, besides IP literals, `localhost` and single-label names (DNS-rebinding defence). Added to the list stored via `PUT /api/admin/network` (`allowedHosts`); an invalid entry is fatal |
 | `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose forwarded headers are believed: `X-Forwarded-Proto: https` makes the session cookie `Secure`, `X-Forwarded-For`/`Forwarded`/`X-Real-IP` give the client address (right-most untrusted entry). Added to the trusted proxies stored via `PUT /api/admin/network` (default none; an unparsable entry is fatal) |
 | `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
 | `WHEELHOUSE_SECRET_KEY` | | The master key, base64 of 32 bytes; second choice |

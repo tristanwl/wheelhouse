@@ -70,6 +70,9 @@ creating the administrator needs a **one-time setup token**:
   succeeds: `docker exec wheelhouse cat /config/setup-token`.
 - A new token is made at every start while there are no users, so a token from an
   old log line is dead.
+- **Anyone who can read the logs, or the config directory, before setup completes
+  can claim the instance.** Create the administrator before you share the port or the
+  logs; the example Compose file publishes it on `127.0.0.1` only.
 
 Open the UI: it shows the setup wizard (token, administrator name, password), signs you
 in and lands on the dashboard with an "Add your services" checklist (it goes away once
@@ -166,6 +169,7 @@ Set via environment variables (see [.env.example](.env.example)):
 | `WHEELHOUSE_CONFIG_DIR` | no | The config directory (default `/config`, which is what the image uses): database, master key, setup token, `settings.json`. Mainly for running outside a container |
 | `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated at first start. **Keep a copy: [docs/operations.md](docs/operations.md#key-loss)** |
 | `WHEELHOUSE_DENIED_NETWORKS` | no | Networks Wheelhouse refuses to connect to when it contacts your services (default: link-local and cloud-metadata addresses, including the NAT64 prefix `64:ff9b::/96`, `100.100.100.200` and `192.0.0.192`; `none` allows everything; private LAN ranges are always fine). Service URLs are trusted administrator input |
+| `WHEELHOUSE_ALLOWED_HOSTS` | no | Comma-separated host names (`nas.example.lan`, or `*.example.lan`) that may use the local-network bypass, in addition to IP addresses, `localhost` and single-label names. Read-only; an admin can store more. Protects against DNS rebinding (see [docs/operations.md](docs/operations.md)). Default empty |
 | `WHEELHOUSE_TRUSTED_PROXIES` | no | Comma-separated addresses and CIDR ranges of reverse proxies whose forwarded headers are believed (`X-Forwarded-Proto` makes the session cookie `Secure`; `X-Forwarded-For`, `Forwarded` and `X-Real-IP` give the client address, used by the audit log and the local-network bypass). Added to the proxies an admin stores in the database. Default empty: no proxy is trusted |
 
 The variable names are the same as in 0.1.x, so an existing `.env` keeps working.

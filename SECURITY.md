@@ -1,12 +1,13 @@
 # Security policy
 
-Wheelhouse can delete library items and rewrite media files. The released 0.2.x
-has **no authentication**: run it only on a trusted network and do not expose it
-to the internet. The development branch enforces accounts, sessions, CSRF
-protection and login throttling on the server (its web UI has a login page, a
-setup wizard and an account page; no release with it exists yet); see [docs/operations.md](docs/operations.md)
-for running it and the [Phase 2 plan](docs/wheelhouse-phase2-plan.md) for what is
-still to come.
+Wheelhouse can delete library items and rewrite media files. Releases 0.0.x to
+0.2.x have **no authentication**: run them only on a trusted network and do not
+expose them to the internet. Later versions (and the development branch) enforce
+accounts, sessions, CSRF protection and login throttling, and have a login page,
+a setup wizard and an account page; they are still pre-releases (0.x) until the
+[Phase 2 plan](docs/wheelhouse-phase2-plan.md) is finished, so keep them off the
+internet too and read [docs/operations.md](docs/operations.md) before running one.
+Check the release notes of the version you run to see which applies.
 
 The [threat model](docs/threat-model.md) lists what Wheelhouse protects, from
 whom, which mitigation is already in place, which comes with which planned

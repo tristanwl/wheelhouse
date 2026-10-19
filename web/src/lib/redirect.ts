@@ -6,6 +6,8 @@
  */
 export function safeRedirect(raw: string | null | undefined, fallback = "/"): string {
   if (!raw || !raw.startsWith("/")) return fallback;
+  // eslint-disable-next-line no-control-regex
+  if (/[\\\u0000-\u001f\u007f]/.test(raw)) return fallback; // backslash, control characters
   let url: URL;
   try {
     url = new URL(raw, "http://wheelhouse.invalid");
@@ -14,7 +16,12 @@ export function safeRedirect(raw: string | null | undefined, fallback = "/"): st
   }
   if (url.origin !== "http://wheelhouse.invalid") return fallback;
   if (/^\/(login|setup)(\/|$)/.test(url.pathname)) return fallback;
-  return `${url.pathname}${url.search}${url.hash}`;
+  const result = `${url.pathname}${url.search}${url.hash}`;
+  // URL normalisation can turn "/.//evil.example/x" into "//evil.example/x",
+  // which a browser reads as another site. Check the result, not only the input.
+  // eslint-disable-next-line no-control-regex
+  if (result.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(result)) return fallback;
+  return result;
 }
 
 /** The forced password-change screen, remembering where the person was headed. */

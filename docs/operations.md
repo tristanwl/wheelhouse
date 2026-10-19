@@ -108,6 +108,11 @@ key is the key-loss case below.
   needs it. The file is deleted when setup succeeds, and a new token is made at
   every start while no account exists, so an old log line is useless.
   `docker logs wheelhouse 2>&1 | grep setup_token` or `docker exec wheelhouse cat /config/setup-token`.
+  **Anyone who can read the logs (or the config directory) before setup
+  completes can claim the instance**, so do not expose the port to untrusted
+  networks, and do not ship logs of a fresh start to a shared system, until you
+  have created the administrator. The example Compose file publishes the port on
+  `127.0.0.1` only for this reason.
 - **A forgotten or locked-out password.** Another administrator can reset it
   (`POST /api/users/{id}/password`). If you have no other administrator:
   `docker exec wheelhouse wheelhouse reset-password <username>` prints a
@@ -148,6 +153,27 @@ else is ignored. The default is empty (nothing trusted). The proxy must also pas
 the `Host` header through unchanged: the cross-site check compares `Origin` with
 it. Do not expose the plain port to the internet.
 
+An nginx server block that does all of this:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3050;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+`$proxy_add_x_forwarded_for` appends the address nginx saw to whatever the client
+sent. **A proxy that sets or passes the header without appending makes
+client-supplied values trusted**: a client could then write any address into
+`X-Forwarded-For` and pick its own identity in the audit log, dodge the per-address
+login limit, or look like a machine inside the local-network bypass range. Check
+what your proxy does before adding it to the trusted list (Caddy and Traefik
+append by default; with nginx you must write the line above). Wheelhouse sends
+`Strict-Transport-Security: max-age=31536000` only on requests that arrive over
+HTTPS (directly, or from a trusted proxy that says `X-Forwarded-Proto: https`).
+
 The same list decides whose `X-Forwarded-For`, `Forwarded` and `X-Real-IP` are
 believed for the client address (audit log, login throttling, the local-network
 bypass). An administrator can store more proxies in the database
@@ -157,6 +183,14 @@ trusted proxy is used, so make the proxy append to (not replace) the chain it
 received, and send consistent headers: if `X-Forwarded-For`, `Forwarded` and
 `X-Real-IP` name different clients, Wheelhouse treats the client as unknown.
 
+**Login limits and a shared address.** Failed logins are counted per account (5
+before a lock) and per client address (20 before a lock; an IPv6 client counts as
+its /64). Behind a reverse proxy that is not in the trusted list every client has
+the proxy's address, so twenty wrong passwords from anyone lock everyone out of
+logging in from there for 30 seconds and up. If many people share one address (a
+NAT, or a proxy), add the proxy to the trusted proxies so the real client address
+is used.
+
 ## Local-network bypass
 
 Off by default. An administrator can let people on the home network use the app
@@ -165,7 +199,20 @@ without logging in: `PUT /api/admin/network` with `{"enabled": true, "cidrs":
 delete and convert media, never open configuration, users or secrets, and the
 admin pages still ask for the administrator's login. Ranges wider than private
 address space are allowed but returned as `warnings`; `0.0.0.0/0` and `::/0` are
-refused. Behind a reverse proxy, list the proxy under trusted proxies first, or
+refused. **Host names:** a web page on the internet can make a browser on your network
+send requests that come from inside your range but name the attacker's own domain
+in `Host` and `Origin` (DNS rebinding), which would look like a normal same-origin
+request. So the bypass is only granted to requests whose `Host` is an IP address,
+`localhost`, a single-label name (`nas`), or a name on the allowed host names list
+(`allowedHosts` in `PUT /api/admin/network`, Admin, Network, "Allowed host names";
+up to 64 names, `*.example.lan` allowed as a leading wildcard label, `*` and bare
+top-level domains refused; the environment variable `WHEELHOUSE_ALLOWED_HOSTS`, a
+comma-separated list, adds read-only entries). When you turn the bypass on, the host
+name you used to reach the admin page is added for you (`addedHost` in the response).
+Anyone who opens the app by another name from inside the range (for example
+`http://nas.example.lan:3050` before you listed it) is asked to sign in as usual.
+Signed-in sessions are not affected. **Upgrade note:** an installation that already
+had the bypass on and is reached by a dotted host name must add that name once. Behind a reverse proxy, list the proxy under trusted proxies first, or
 every request will look like it comes from the proxy. Scripts that used the 0.2.x
 API with no credentials must call `GET /api/auth/session` first and send the
 returned `csrfToken` as `X-CSRF-Token` on POST, PUT, PATCH and DELETE. See the
