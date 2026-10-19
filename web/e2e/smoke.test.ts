@@ -96,8 +96,8 @@ describe.skipIf(reason)("browser smoke test", () => {
   interface OpenOptions {
     /** Start with the harness administrator's session cookie (default). False: a visitor with no session. */
     session?: boolean;
-    /** The server to visit (default: the main one). */
-    on?: { baseUrl: string };
+    /** The server to visit (default: the main one). Its administrator's cookie is used unless `session` is false. */
+    on?: { baseUrl: string; admin?: { cookie?: { name: string; value: string } } };
     /** HTTP statuses this visit is expected to see (e.g. the 401 of the session probe on the login page). */
     allow?: number[];
   }
@@ -111,12 +111,12 @@ describe.skipIf(reason)("browser smoke test", () => {
     // the browser can start with that session cookie. The UI gets the CSRF token
     // itself from GET /api/auth/session and sends it, as it does for every person.
     if (opts.session !== false) {
-      const session = server.admin.cookie!;
+      const session = (opts.on ?? server).admin!.cookie!;
       await context.addCookies([
         {
           name: session.name,
           value: session.value,
-          url: server.baseUrl,
+          url: target.baseUrl,
           httpOnly: true,
           sameSite: "Strict",
         },
@@ -426,16 +426,17 @@ describe.skipIf(reason)("browser smoke test", () => {
         await v.page.getByLabel("Confirm password").fill(PASSWORD);
         await v.page.getByRole("button", { name: "Create administrator" }).click();
 
-        const banner = v.page.getByRole("status").filter({ hasText: "Add your services" });
+        const banner = v.page.getByRole("complementary", { name: "Getting started" });
         await banner.waitFor();
-        expect(await banner.getByRole("link").getAttribute("href")).toBe("/admin");
+        expect(await banner.getByRole("link").getAttribute("href")).toBe("/admin/services/new");
         expect(new URL(v.page.url()).pathname).toBe("/");
         expect(existsSync(join(fresh.configDir, "setup-token"))).toBe(false);
         await expectNoScriptReadableSession(v.page);
 
-        // /admin exists for the administrator (a placeholder until the admin pages land).
+        // The administrator can open the admin pages: /admin lands on Services.
         await v.page.goto(`${fresh.baseUrl}/admin`);
-        await v.page.getByRole("heading", { name: "Page not found" }).waitFor();
+        await v.page.getByRole("heading", { name: "Services" }).waitFor();
+        expect(new URL(v.page.url()).pathname).toBe("/admin/services");
 
         await v.page.getByRole("button", { name: /owner/ }).click();
         await v.page.getByRole("menuitem", { name: "Sign out" }).click();
@@ -487,6 +488,182 @@ describe.skipIf(reason)("browser smoke test", () => {
       await expectClean(v);
     } finally {
       await v.page.context().close();
+    }
+  });
+
+  // ---- The administration pages, end to end ----
+
+  it("an administrator walks through the admin pages against the real server and the fakes", async () => {
+    const { startServer } = await import("../../acceptance/harness");
+    const { startStack, GOOD } = await import("../../acceptance/fakes");
+    const radarrStack = await startStack({ only: ["radarr"] });
+    // No service configured: the first-run checklist is what the administrator sees.
+    const fresh = await startServer();
+    const WRONG_KEY = "wrong-key-for-the-walkthrough";
+    const NEW_PASSWORD = "walkthrough-passphrase-2";
+    const everything: string[] = [];
+    let temporaryPassword: string | undefined;
+    try {
+      const v = await open("/", { on: fresh });
+      v.page.on("response", (r) => {
+        if (r.url().includes("/api/"))
+          void r.text().then(
+            (t) => everything.push(t),
+            () => {}
+          );
+      });
+      try {
+        const page = v.page;
+        const banner = page.getByRole("complementary", { name: "Getting started" });
+        await banner.waitFor();
+        await banner.getByRole("link", { name: "Add your services" }).click();
+        await page.getByRole("heading", { name: "Add a service" }).waitFor();
+
+        // A Radarr that points at the fake: first a wrong key, then the right one.
+        await page.getByLabel("Type of service").selectOption("radarr");
+        await page.getByLabel(/^URL/).fill(radarrStack.fakes.radarr!.url);
+        const key = page.getByLabel(/^API key/);
+        expect(await key.getAttribute("type")).toBe("password");
+        await key.fill(WRONG_KEY);
+        await page.getByRole("button", { name: "Test connection" }).click();
+        await page.getByText(/^Connection failed/).waitFor();
+        await key.fill(GOOD.arr);
+        await page.getByRole("button", { name: "Test connection" }).click();
+        await page.getByText(/^Connection works/).waitFor();
+        await page.getByRole("button", { name: "Add service" }).click();
+
+        await page.getByText("Radarr was added.").waitFor();
+        const row = page.getByRole("listitem", { name: "Radarr" });
+        await row.getByText("Source: database").waitFor();
+        await row.getByRole("button", { name: "Test connection to Radarr" }).click();
+        await row.getByText(/^Connection works/).waitFor();
+
+        // The key is nowhere in the page after saving, nor in any answer the server gave.
+        const dom = async () =>
+          (await page.content()) +
+          (await page.evaluate(() =>
+            [...document.querySelectorAll("input")].map((i) => i.value).join(" ")
+          ));
+        expect(await dom()).not.toContain(GOOD.arr);
+        expect(await dom()).not.toContain(WRONG_KEY);
+        await row.getByRole("link", { name: "Edit Radarr" }).click();
+        await page.getByTestId("secret-state-apiKey").waitFor();
+        expect(await dom()).not.toContain(GOOD.arr);
+        await page.getByRole("link", { name: "Cancel" }).click();
+
+        // The dashboard shows it, and the checklist is gone.
+        await page
+          .getByRole("navigation", { name: "Main" })
+          .getByRole("link", { name: "Dashboard" })
+          .click();
+        await page.getByRole("heading", { name: "Radarr", exact: true }).waitFor();
+        expect(await banner.count()).toBe(0);
+
+        // Features: switch Library off, the nav loses it; switch it on again.
+        await page
+          .getByRole("navigation", { name: "Main" })
+          .getByRole("link", { name: "Admin" })
+          .click();
+        await page
+          .getByRole("navigation", { name: "Administration" })
+          .getByRole("link", { name: "Features" })
+          .click();
+        const main = page.getByRole("navigation", { name: "Main" });
+        await main.getByRole("link", { name: "Library" }).waitFor();
+        await page.getByRole("switch", { name: "Library" }).click();
+        await page.getByText("Library is now off for everyone.").waitFor();
+        await expect.poll(() => main.getByRole("link", { name: "Library" }).count()).toBe(0);
+        await page.getByRole("switch", { name: "Library" }).click();
+        await page.getByText("Library is now on for everyone.").waitFor();
+        await main.getByRole("link", { name: "Library" }).waitFor();
+
+        // Users: create one with a generated password.
+        await page
+          .getByRole("navigation", { name: "Administration" })
+          .getByRole("link", { name: "Users" })
+          .click();
+        await page.getByRole("button", { name: "Add user" }).click();
+        await page.getByLabel("Username").fill("walker");
+        await page.getByRole("button", { name: "Generate" }).click();
+        const temporary = await page.getByLabel("Password", { exact: true }).inputValue();
+        expect(temporary).toHaveLength(20);
+        temporaryPassword = temporary;
+        await page.getByRole("button", { name: "Create user" }).click();
+        const shown = page.getByTestId("one-time-password");
+        await shown.waitFor();
+        expect(await shown.textContent()).toBe(temporary);
+        await page.getByRole("button", { name: "I have passed it on" }).click();
+        expect(await page.getByTestId("one-time-password").count()).toBe(0);
+        await page.getByRole("row", { name: /walker/ }).waitFor();
+
+        // Network: add a range and save; the page shows where this browser connects from.
+        await page
+          .getByRole("navigation", { name: "Administration" })
+          .getByRole("link", { name: "Network" })
+          .click();
+        await page.getByRole("button", { name: "Add a range" }).click();
+        await page.getByLabel("Local network ranges, entry 1").fill("192.168.1.0/24");
+        await page.getByRole("button", { name: "Save network settings" }).click();
+        await page.getByText("Network settings saved. They apply right away.").waitFor();
+        await page.getByText("127.0.0.1", { exact: true }).waitFor();
+        await page.getByText("Outside the ranges above").waitFor();
+
+        // Audit log: the above is recorded, in words, and holds no secret.
+        await page
+          .getByRole("navigation", { name: "Administration" })
+          .getByRole("link", { name: "Audit log" })
+          .click();
+        for (const what of [
+          "Service added",
+          "Feature switched",
+          "User created",
+          "Network settings changed",
+        ]) {
+          await page
+            .getByRole("row", { name: new RegExp(what) })
+            .first()
+            .waitFor();
+        }
+        const audit = await dom();
+        expect(audit).not.toContain(GOOD.arr);
+        expect(audit).not.toContain(temporary);
+
+        expect(everything.join("\n")).not.toContain(GOOD.arr);
+        expect(everything.join("\n")).not.toContain(WRONG_KEY);
+        await expectNoScriptReadableSession(page);
+        await expectClean(v);
+      } finally {
+        await v.page.context().close();
+      }
+
+      // The new user signs in, must choose a password, and has no way into the admin pages.
+      const w = await open("/", { session: false, on: fresh, allow: [401, 403] });
+      try {
+        await fillSignIn(w.page, "walker", temporaryPassword!);
+        await w.page.getByRole("heading", { name: "Choose a new password" }).waitFor();
+        await w.page.getByLabel("Current password").fill(temporaryPassword!);
+        await w.page.getByLabel("New password", { exact: true }).fill(NEW_PASSWORD);
+        await w.page.getByLabel("Confirm new password").fill(NEW_PASSWORD);
+        await w.page.getByRole("button", { name: "Change password" }).click();
+        await w.page.getByRole("heading", { name: "Service status" }).waitFor();
+        const nav = w.page.getByRole("navigation", { name: "Main" });
+        await nav.getByRole("link", { name: "Dashboard" }).waitFor();
+        expect(await nav.getByRole("link", { name: "Admin" }).count()).toBe(0);
+        await w.page.goto(`${fresh.baseUrl}/admin/services`);
+        await w.page.getByRole("heading", { name: "Not authorised" }).waitFor();
+        expect(await w.page.getByRole("navigation", { name: "Administration" }).count()).toBe(0);
+        // And the server agrees: a user cannot call the admin API.
+        const status = await w.page.evaluate(
+          async () => (await fetch("/api/admin/instances")).status
+        );
+        expect(status).toBe(403);
+        await expectClean(w);
+      } finally {
+        await w.page.context().close();
+      }
+    } finally {
+      await fresh.stop();
+      await radarrStack.close();
     }
   });
 });
