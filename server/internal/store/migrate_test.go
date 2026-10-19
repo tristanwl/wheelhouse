@@ -121,7 +121,7 @@ func TestRefusesChangedOrDamagedHistory(t *testing.T) {
 	for name, stmt := range map[string]string{
 		"edited migration": "UPDATE schema_migrations SET sha256 = 'tampered' WHERE version = 1",
 		"renamed":          "UPDATE schema_migrations SET name = '0001_other' WHERE version = 1",
-		"gap in history":   "UPDATE schema_migrations SET version = 3 WHERE version = 1",
+		"gap in history":   "UPDATE schema_migrations SET version = 1000 WHERE version = 1",
 	} {
 		path := filepath.Join(t.TempDir(), "w.db")
 		db, err := Open(ctx(t), path)
