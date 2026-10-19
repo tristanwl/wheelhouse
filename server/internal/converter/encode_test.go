@@ -18,12 +18,12 @@ func TestArgsPerBackend(t *testing.T) {
 		family  Family
 		want    []string
 	}{
-		{BackendSoftware, FamilyH264, append([]string{"-y", "-i", in, "-map", "0", "-c", "copy", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"}, progress...)},
-		{BackendSoftware, FamilyHEVC, append([]string{"-y", "-i", in, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"}, progress...)},
-		{BackendVAAPI, FamilyH264, append([]string{"-y", "-vaapi_device", "/dev/dri/renderD128", "-i", in, "-map", "0", "-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-qp", "20", "-c:a", "copy", "-c:s", "copy"}, progress...)},
-		{BackendVAAPI, FamilyHEVC, append([]string{"-y", "-vaapi_device", "/dev/dri/renderD128", "-i", in, "-map", "0", "-vf", "format=nv12,hwupload", "-c:v", "hevc_vaapi", "-qp", "20", "-c:a", "copy", "-c:s", "copy"}, progress...)},
-		{BackendNVENC, FamilyH264, append([]string{"-y", "-i", in, "-map", "0", "-c:v", "h264_nvenc", "-cq", "20", "-preset", "p5", "-pix_fmt", "yuv420p", "-c:a", "copy", "-c:s", "copy"}, progress...)},
-		{BackendNVENC, FamilyHEVC, append([]string{"-y", "-i", in, "-map", "0", "-c:v", "hevc_nvenc", "-cq", "20", "-preset", "p5", "-pix_fmt", "yuv420p", "-c:a", "copy", "-c:s", "copy"}, progress...)},
+		{BackendSoftware, FamilyH264, append([]string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-c", "copy", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"}, progress...)},
+		{BackendSoftware, FamilyHEVC, append([]string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"}, progress...)},
+		{BackendVAAPI, FamilyH264, append([]string{"-nostdin", "-y", "-vaapi_device", "/dev/dri/renderD128", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-vf", "format=nv12,hwupload", "-c:v", "h264_vaapi", "-qp", "20", "-c:a", "copy", "-c:s", "copy"}, progress...)},
+		{BackendVAAPI, FamilyHEVC, append([]string{"-nostdin", "-y", "-vaapi_device", "/dev/dri/renderD128", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-vf", "format=nv12,hwupload", "-c:v", "hevc_vaapi", "-qp", "20", "-c:a", "copy", "-c:s", "copy"}, progress...)},
+		{BackendNVENC, FamilyH264, append([]string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-c:v", "h264_nvenc", "-cq", "20", "-preset", "p5", "-pix_fmt", "yuv420p", "-c:a", "copy", "-c:s", "copy"}, progress...)},
+		{BackendNVENC, FamilyHEVC, append([]string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", in, "-map", "0", "-c:v", "hevc_nvenc", "-cq", "20", "-preset", "p5", "-pix_fmt", "yuv420p", "-c:a", "copy", "-c:s", "copy"}, progress...)},
 	}
 	for _, c := range cases {
 		got := Args(c.backend, c.family, in, out)

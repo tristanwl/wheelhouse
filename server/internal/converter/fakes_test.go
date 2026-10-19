@@ -18,6 +18,8 @@ type fakeTools struct {
 	// streamFile holds the JSON the fake ffprobe prints for the stream query
 	// (-show_entries stream=...) that classifies HDR; see setStream.
 	streamFile string
+	// probeLog records every ffprobe invocation, one line of arguments each.
+	probeLog string
 }
 
 // ffmpegModes are the behaviours of the fake ffmpeg. The last argument is the
@@ -63,6 +65,7 @@ func newFakeTools(t *testing.T, mode, probe string) fakeTools {
 		ffprobe:    filepath.Join(dir, "ffprobe"),
 		argsFile:   filepath.Join(dir, "args.txt"),
 		streamFile: filepath.Join(dir, "stream.json"),
+		probeLog:   filepath.Join(dir, "probe.log"),
 	}
 	if err := os.WriteFile(ft.streamFile, []byte(streamSDR), 0o644); err != nil {
 		t.Fatal(err)
@@ -80,7 +83,7 @@ func newFakeTools(t *testing.T, mode, probe string) fakeTools {
 	}
 	// The stream query (HDR classification) answers from stream.json; every
 	// other call is the duration probe the test scripted.
-	probeScript := "#!/bin/sh\ncase \"$*\" in *stream=*) cat '" + ft.streamFile + "'; exit 0;; esac\n" + probe + "\n"
+	probeScript := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + ft.probeLog + "'\ncase \"$*\" in *stream=*) cat '" + ft.streamFile + "'; exit 0;; esac\n" + probe + "\n"
 	if err := os.WriteFile(ft.ffprobe, []byte(probeScript), 0o755); err != nil {
 		t.Fatal(err)
 	}

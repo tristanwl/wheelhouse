@@ -273,8 +273,8 @@ func Args(backend Backend, family Family, filePath, tempPath string) []string {
 	switch backend {
 	case BackendVAAPI:
 		return []string{
-			"-y", "-vaapi_device", vaapiDevice,
-			"-i", filePath,
+			"-nostdin", "-y", "-vaapi_device", vaapiDevice,
+			"-protocol_whitelist", "file", "-i", filePath,
 			"-map", "0",
 			"-vf", "format=nv12,hwupload",
 			"-c:v", vaapiEncoder(family),
@@ -285,8 +285,8 @@ func Args(backend Backend, family Family, filePath, tempPath string) []string {
 		}
 	case BackendNVENC:
 		return []string{
-			"-y",
-			"-i", filePath,
+			"-nostdin", "-y",
+			"-protocol_whitelist", "file", "-i", filePath,
 			"-map", "0",
 			"-c:v", nvencEncoder(family),
 			"-cq", "20", "-preset", "p5",
@@ -303,8 +303,8 @@ func Args(backend Backend, family Family, filePath, tempPath string) []string {
 			enc = "libx264"
 		}
 		return []string{
-			"-y",
-			"-i", filePath,
+			"-nostdin", "-y",
+			"-protocol_whitelist", "file", "-i", filePath,
 			"-map", "0",
 			"-c", "copy",
 			"-c:v", enc,

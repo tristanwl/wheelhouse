@@ -718,9 +718,11 @@ func (q *JobQueue) runJob(j *job) {
 }
 
 func (q *JobQueue) probeDuration(ctx context.Context, path string) (float64, error) {
+	ctx, cancel := context.WithTimeout(ctx, hdrProbeTimeout)
+	defer cancel()
 	var out bytes.Buffer
 	cmd := exec.CommandContext(ctx, q.cfg.Ffprobe, //nolint:gosec // the path is absolute and resolved inside the media roots
-		"-v", "error", "-show_entries", "format=duration",
+		"-v", "error", "-protocol_whitelist", "file", "-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1", path)
 	cmd.Stdout = &out
 	cmd.WaitDelay = 2 * time.Second

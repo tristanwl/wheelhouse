@@ -115,7 +115,7 @@ func TestConversionSucceedsAndKeepsTheOriginalAsBak(t *testing.T) {
 		t.Errorf("rescans: %v", got)
 	}
 	// The log shows the command and the tool's own output.
-	for _, want := range []string{"Probing " + file, "Target: hevc via software", "Duration: 2.0s", "$ ffmpeg -y -i " + file, "frame=1", "Swapped in converted file; original kept at " + file + ".bak"} {
+	for _, want := range []string{"Probing " + file, "Target: hevc via software", "Duration: 2.0s", "$ ffmpeg -nostdin -y -protocol_whitelist file -i " + file, "frame=1", "Swapped in converted file; original kept at " + file + ".bak"} {
 		if !strings.Contains(job.Log, want) {
 			t.Errorf("log lacks %q:\n%s", want, job.Log)
 		}
@@ -134,7 +134,7 @@ func TestConversionArgumentsForcePixFmtAndCopyStreams(t *testing.T) {
 	if filepath.Dir(temp) != root || !strings.HasPrefix(filepath.Base(temp), TempPrefix+job.ID) || filepath.Ext(temp) != ".mkv" {
 		t.Errorf("temp output %q: want a dotfile with the job id next to the original", temp)
 	}
-	want := []string{"-y", "-i", file, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", temp}
+	want := []string{"-nostdin", "-y", "-protocol_whitelist", "file", "-i", file, "-map", "0", "-c", "copy", "-c:v", "libx265", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", temp}
 	if !slices.Equal(args, want) {
 		t.Errorf("args:\n got %q\nwant %q", args, want)
 	}
