@@ -243,6 +243,7 @@ export const ROUTE_LEVELS: { route: string; level: Level }[] = [
   { route: "DELETE /api/users/{id}", level: "admin" },
   { route: "GET /api/users/{id}/sessions", level: "admin" },
   { route: "DELETE /api/users/{id}/sessions", level: "admin" },
+  { route: "DELETE /api/users/{id}/sessions/{sessionId}", level: "admin" },
   { route: "GET /api/audit", level: "admin" },
   { route: "GET /api/admin/providers", level: "admin" },
   { route: "GET /api/admin/instances", level: "admin" },
@@ -266,6 +267,7 @@ export function sampleRequest(route: string): { method: string; path: string } {
       .replace("{instanceId}", "radarr")
       .replace("{jobId}", "nope")
       .replace("{season}", "1")
+      .replace("{sessionId}", "0".repeat(32))
       .replace(/\{id\}/g, "0".repeat(32)),
   };
 }
