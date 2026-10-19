@@ -32,6 +32,25 @@ func TestNoProvidersMatchesNextApp(t *testing.T) {
 	}
 }
 
+func TestDisabledFeaturesReportTheReasonAndDashboardCannotBeDisabled(t *testing.T) {
+	radarr := Instance{Role: RoleMediaManager, Kind: KindMovies, Ready: true}
+	r := Compute([]Instance{radarr}, Environment{Ffmpeg: true, Disabled: map[string]bool{"library": true, "dashboard": true}})
+	by := map[string]Feature{}
+	for _, f := range r.Features {
+		by[f.ID] = f
+	}
+	lib := by["library"]
+	if lib.Available || !lib.Disabled || !slices.Equal(lib.Missing, []string{"disabled by admin"}) {
+		t.Errorf("library = %+v", lib)
+	}
+	if d := by["dashboard"]; !d.Available || d.Disabled {
+		t.Errorf("dashboard = %+v", d)
+	}
+	if !by["codecs"].Available {
+		t.Error("an unrelated feature was affected")
+	}
+}
+
 func TestFfmpegOnlyClearsTheToolRequirement(t *testing.T) {
 	r := Compute(nil, Environment{Ffmpeg: true})
 	var codecs Feature

@@ -40,6 +40,9 @@ type Router struct {
 	mux    *http.ServeMux
 	guard  *Guard
 	routes []Route
+	// wrap, if set, wraps every handler inside the guard (after authentication
+	// and authorization), for checks that need a signed-in caller.
+	wrap func(pattern string, h http.Handler) http.Handler
 }
 
 // NewRouter returns an empty router whose routes are enforced by g. A nil Guard
@@ -57,6 +60,9 @@ func (r *Router) Handle(pattern string, level Level, h http.Handler) {
 		panic(fmt.Sprintf("route %q registered twice", pattern))
 	}
 	r.routes = append(r.routes, Route{Pattern: pattern, Level: level})
+	if r.wrap != nil {
+		h = r.wrap(pattern, h)
+	}
 	r.mux.Handle(pattern, r.guard.authorize(pattern, level, h))
 }
 
