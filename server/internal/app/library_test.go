@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -138,6 +139,17 @@ func TestStoragePlacesItemsByPathWithRootFallback(t *testing.T) {
 	}
 	if got["/movies/"] != 150 || got["/movies/4k"] != 7 {
 		t.Errorf("used bytes per root: %v", got)
+	}
+	// The 900 bytes outside every root are reported, not hidden and not guessed into a root.
+	unplaced := body["unplaced"].([]any)
+	if len(unplaced) != 1 {
+		t.Fatalf("unplaced: %v", unplaced)
+	}
+	if u := unplaced[0].(map[string]any); u["instanceId"] != "radarr" || u["items"] != float64(1) || u["bytes"] != float64(900) {
+		t.Errorf("unplaced entry: %v", u)
+	}
+	if got["/movies/"]+got["/movies/4k"] != 157 {
+		t.Errorf("unplaced bytes leaked into a root: %v", got)
 	}
 }
 
@@ -297,5 +309,69 @@ func TestSearchWithEveryInstanceBrokenIs502(t *testing.T) {
 	}
 	if code, _, _ := send(t, h, "GET", "/api/search?kind=series&term=x", ""); code != 404 {
 		t.Errorf("no Sonarr: %d", code)
+	}
+}
+
+// add-meta with ?kind= must not stop at the first instance when it is broken,
+// and tells the client every ready instance so it can offer a picker.
+func TestAddMetaByKindSkipsBrokenInstances(t *testing.T) {
+	good := mmtest.StartRadarr(t)
+	good4k := mmtest.StartRadarr(t, mmtest.WithMovies(mmtest.FourKMovies()))
+	wrongKey := mmtest.StartRadarr(t, mmtest.WithAPIKey("some-other-key"))
+	ids := func(meta map[string]any) []string {
+		var out []string
+		for _, x := range meta["instances"].([]any) {
+			out = append(out, x.(map[string]any)["instanceId"].(string))
+		}
+		return out
+	}
+
+	// The first Radarr rejects our key (it is "ready" but broken), the second works.
+	h, _ := stack(t, env{
+		"RADARR_URL": wrongKey.URL, "RADARR_API_KEY": mmtest.GoodKey,
+		"RADARR_4K_URL": good4k.URL, "RADARR_4K_API_KEY": mmtest.GoodKey,
+	}, sabNow)
+	code, meta, raw := send(t, h, "GET", "/api/add-meta?kind=movies", "")
+	if code != 200 || meta["instanceId"] != "radarr-4k" {
+		t.Fatalf("a healthy instance should be picked: %d %s", code, raw)
+	}
+	if got := ids(meta); !slices.Equal(got, []string{"radarr", "radarr-4k"}) {
+		t.Errorf("instances: %v", got)
+	}
+	// Asking for the broken one by id is still an error, not a silent switch.
+	if code, _, raw := send(t, h, "GET", "/api/add-meta?instanceId=radarr", ""); code != 502 {
+		t.Errorf("explicit broken instance: %d %s", code, raw)
+	}
+	if code, meta, _ := send(t, h, "GET", "/api/add-meta?instanceId=radarr-4k", ""); code != 200 || meta["instanceId"] != "radarr-4k" || len(ids(meta)) != 2 {
+		t.Errorf("explicit instance: %d %v", code, meta)
+	}
+
+	// A half-configured first instance (no key) is skipped too.
+	h, _ = stack(t, env{
+		"RADARR_URL":    good.URL,
+		"RADARR_4K_URL": good4k.URL, "RADARR_4K_API_KEY": mmtest.GoodKey,
+	}, sabNow)
+	if code, meta, raw := send(t, h, "GET", "/api/add-meta?kind=movies", ""); code != 200 || meta["instanceId"] != "radarr-4k" {
+		t.Errorf("unconfigured first instance: %d %s", code, raw)
+	} else if got := ids(meta); !slices.Equal(got, []string{"radarr-4k"}) {
+		t.Errorf("only ready instances are offered: %v", got)
+	}
+
+	// Nothing works: the first error is reported.
+	h, _ = stack(t, env{"RADARR_URL": wrongKey.URL, "RADARR_API_KEY": mmtest.GoodKey}, sabNow)
+	if code, body, raw := send(t, h, "GET", "/api/add-meta?kind=movies", ""); code != 502 || body["error"] == nil {
+		t.Errorf("all broken: %d %s", code, raw)
+	}
+}
+
+// With nothing outside the roots the field is left out.
+func TestStorageUnplacedIsEmptyWhenEverythingIsPlaced(t *testing.T) {
+	movies := []mmtest.Doc{{"id": 1, "title": "Example Movie 1", "path": "/movies/a", "sizeOnDisk": 5}}
+	roots := []mmtest.Doc{{"id": 1, "path": "/movies", "accessible": true, "freeSpace": 10}}
+	radarr := mmtest.StartRadarr(t, mmtest.WithMovies(movies), mmtest.WithRootFolders(roots))
+	h, _ := stack(t, env{"RADARR_URL": radarr.URL, "RADARR_API_KEY": mmtest.GoodKey}, sabNow)
+	_, body, raw := send(t, h, "GET", "/api/storage", "")
+	if _, present := body["unplaced"]; present {
+		t.Errorf("unplaced: %s", raw)
 	}
 }

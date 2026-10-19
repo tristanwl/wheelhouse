@@ -226,8 +226,14 @@ func registerCodecs(r *Router, d deps) {
 
 	r.HandleFunc("POST /api/codec-analysis/convert/{jobId}/cancel", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		id := req.PathValue("jobId")
+		// An unknown job is 404; a known one that already finished (or is being
+		// cancelled) cannot be cancelled and stays 400.
+		if _, known := queue.Get(id); !known {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+			return
+		}
 		if !queue.Cancel(id) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "job not found or not cancelable"})
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "job is not cancelable"})
 			return
 		}
 		job, _ := queue.Get(id)

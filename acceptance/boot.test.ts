@@ -44,6 +44,21 @@ describe("boot with no environment variables", () => {
     expect((await server.request("/api/storage")).json).toEqual({ entries: [], instances: [] });
   });
 
+  it("offers no encoder when ffmpeg is missing, like /api/features says", async () => {
+    // Only meaningful when we choose the server's PATH (a container has its own); /bin/sh is started by absolute path.
+    if (process.env.WHEELHOUSE_CMD) return;
+    const empty = await startServer({ env: { PATH: "/nonexistent" } });
+    try {
+      const features = (await empty.request("/api/features")).json.features;
+      expect(features.find((f: { id: string }) => f.id === "codecs").missing).toContain("ffmpeg");
+      const { encoders } = (await empty.request("/api/codec-analysis/encoders")).json;
+      expect(encoders).toHaveLength(6);
+      for (const e of encoders) expect(e.available, e.label).toBe(false);
+    } finally {
+      await empty.stop();
+    }
+  });
+
   it("explains what is missing in an error message", async () => {
     for (const path of [
       "/api/search?kind=movies&term=example",

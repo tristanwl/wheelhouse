@@ -269,10 +269,9 @@ describe("mutating routes", () => {
       expect((await server.request(url)).json).toEqual({ jobs: [] });
     });
 
-    it("cancelling a job that does not exist is refused", async () => {
+    it("cancelling a job that does not exist is a 404", async () => {
       const res = await send("POST", `${url}/nope/cancel`);
-      expect(res.status).toBeGreaterThanOrEqual(400);
-      expect(res.status).toBeLessThan(500);
+      expect(res.status).toBe(404);
       expect(res.json.error).toBeTypeOf("string");
     });
 

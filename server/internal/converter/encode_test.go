@@ -56,7 +56,7 @@ func TestDetectorProbesOnceWithRealExitCodes(t *testing.T) {
 	dir := t.TempDir()
 	count := filepath.Join(dir, "count")
 	// Succeeds only for the h264 encoders; the failures say why on stderr.
-	script := "#!/bin/sh\necho x >> '" + count + "'\ncase \"$*\" in\n*h264_*) exit 0;;\n*) echo \"Unknown encoder 'hevc'\" >&2; exit 1;;\nesac\n"
+	script := "#!/bin/sh\necho x >> '" + count + "'\ncase \"$*\" in\n*h264_*|*libx26*) exit 0;;\n*) echo \"Unknown encoder 'hevc'\" >&2; exit 1;;\nesac\n"
 	ffmpeg := filepath.Join(dir, "ffmpeg")
 	if err := os.WriteFile(ffmpeg, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -102,11 +102,11 @@ func TestDetectorProbesOnceWithRealExitCodes(t *testing.T) {
 		t.Errorf("label %q", o.Label)
 	}
 
-	// Cached: a second call runs nothing. (4 hardware probes ran the first time.)
+	// Cached: a second call runs nothing. (6 probes ran the first time.)
 	before, _ := os.ReadFile(count)
 	d.Detect(context.Background())
 	after, _ := os.ReadFile(count)
-	if strings.Count(string(before), "x") != 4 || string(before) != string(after) {
+	if strings.Count(string(before), "x") != 6 || string(before) != string(after) {
 		t.Errorf("probes: first %d, then %d", strings.Count(string(before), "x"), strings.Count(string(after), "x"))
 	}
 }
@@ -116,8 +116,8 @@ func TestDetectorWithoutDeviceOrFfmpeg(t *testing.T) {
 	for _, o := range d.Detect(context.Background()) {
 		switch o.Backend {
 		case BackendSoftware:
-			if !o.Available {
-				t.Errorf("software is always listed as available: %+v", o)
+			if o.Available || o.Reason != "failed to spawn /nonexistent/ffmpeg" {
+				t.Errorf("software without ffmpeg must not be available: %+v", o)
 			}
 		case BackendVAAPI:
 			if o.Available || o.Reason != "/dev/dri/renderD128 not present in this container" {
