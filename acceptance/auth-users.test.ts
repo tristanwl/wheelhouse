@@ -188,6 +188,42 @@ describe("accounts and the audit log", () => {
     for (const d of [d1, d2]) expect((await d.request("/api/auth/session")).status).toBe(401);
   });
 
+  it("lets an administrator end one session of another user, and only that one", async () => {
+    const hana = await newUser("hana-example", "user");
+    const e1 = await signIn("hana-example");
+    const e2 = await signIn("hana-example");
+    const other = await newUser("gina-example", "user");
+    const list = await admin().request(`/api/users/${hana.id}/sessions`);
+    const ids = (list.json.sessions as { id: string }[]).map((s) => s.id);
+    expect(ids).toHaveLength(2);
+
+    // A session id under the wrong user is not found, and ends nothing.
+    expect(
+      (await admin().request(`/api/users/${other.id}/sessions/${ids[0]}`, { method: "DELETE" }))
+        .status
+    ).toBe(404);
+    expect((await e1.request("/api/auth/session")).status).toBe(200);
+    expect((await e2.request("/api/auth/session")).status).toBe(200);
+
+    expect(
+      (await admin().request(`/api/users/${hana.id}/sessions/${ids[0]}`, { method: "DELETE" }))
+        .status
+    ).toBe(200);
+    const alive = [e1, e2].filter((c) => c.cookie);
+    const statuses = await Promise.all(alive.map((c) => c.request("/api/auth/session")));
+    expect(statuses.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(
+      (await admin().request(`/api/users/${hana.id}/sessions/${ids[0]}`, { method: "DELETE" }))
+        .status
+    ).toBe(404);
+    const audit = await admin().request("/api/audit?limit=20");
+    expect(
+      (audit.json.entries as { action: string; target: string }[]).some(
+        (e) => e.action === "session.revoke" && e.target === ids[0]
+      )
+    ).toBe(true);
+  });
+
   it("an administrator's reset forces a new password at the next login", async () => {
     const erin = await newUser("erin-example", "user");
     const old = await signIn("erin-example");

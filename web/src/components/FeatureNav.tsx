@@ -1,11 +1,19 @@
 import { Link } from "react-router";
 import { useFeatures, visibleFeatures } from "@/lib/features";
+import { useSession } from "@/lib/session-context";
 import type { FeaturesResponse } from "@/lib/types";
 
-export function NavLinks({ features }: { features: FeaturesResponse["features"] | undefined }) {
+export function NavLinks({
+  features,
+  admin = false,
+}: {
+  features: FeaturesResponse["features"] | undefined;
+  /** Add the Admin link (administrators only). */
+  admin?: boolean;
+}) {
   const links = visibleFeatures(features);
   return (
-    <nav className="flex gap-4 text-sm text-slate-300">
+    <nav aria-label="Main" className="flex gap-4 text-sm text-slate-300">
       {(links.length > 0 ? links : [{ id: "dashboard", label: "Dashboard", route: "/" }]).map(
         (f) => (
           <Link key={f.id} to={f.route} className="hover:text-white">
@@ -13,10 +21,16 @@ export function NavLinks({ features }: { features: FeaturesResponse["features"] 
           </Link>
         )
       )}
+      {admin && (
+        <Link to="/admin" className="hover:text-white">
+          Admin
+        </Link>
+      )}
     </nav>
   );
 }
 
 export function FeatureNav() {
-  return <NavLinks features={useFeatures().features} />;
+  const { isAdmin } = useSession();
+  return <NavLinks features={useFeatures().features} admin={isAdmin} />;
 }

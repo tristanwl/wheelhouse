@@ -72,7 +72,12 @@ creating the administrator needs a **one-time setup token**:
   old log line is dead.
 
 Open the UI: it shows the setup wizard (token, administrator name, password), signs you
-in and offers the admin pages. Without the UI, use the API:
+in and lands on the dashboard with an "Add your services" checklist (it goes away once
+one service exists). Under **Admin** you add Radarr, Sonarr, your download client and
+media server (each form has a **Test connection** button, and keys are stored encrypted
+and never shown again), switch features on and off, create users, end sessions, allow
+the local network without a login, set the media folders for the codec converter and
+read the audit log. Without the UI, use the API:
 
 ```sh
 curl -s -X POST http://localhost:3050/api/auth/setup -H 'content-type: application/json' \

@@ -147,6 +147,7 @@ func Routes(o Options) *Router {
 	registerCore(r, d)
 	registerAuth(r, d)
 	registerUsers(r, d)
+	registerUserSessions(r, d)
 	registerNetwork(r, d)
 	registerConfig(r, d)
 	registerStack(r, d)

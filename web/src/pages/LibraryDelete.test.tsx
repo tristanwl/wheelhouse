@@ -217,6 +217,9 @@ describe("confirmedDeleteUrl", () => {
     for (const file of files) {
       // Revoking an own login session is not a library delete.
       if (file.endsWith("AccountPage.tsx")) continue;
+      // The administration pages delete services, users and sessions, each behind
+      // its own confirm dialog (admin/Admin.test.tsx checks that).
+      if (file.includes("/pages/admin/")) continue;
       const text = readFileSync(file, "utf8");
       for (const match of text.matchAll(/method:\s*"DELETE"/g)) {
         const before = text.slice(Math.max(0, match.index - 160), match.index);

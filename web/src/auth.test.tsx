@@ -13,6 +13,7 @@ const base = {
   "GET /api/downloads": { instances: [], items: [] },
   "GET /api/library": { items: [], instances: [] },
   "GET /api/add-meta": { instanceId: "radarr", instanceName: "Radarr", qualityProfiles: [] },
+  "GET /api/admin/instances": { instances: [] },
 };
 
 const unauth = { status: 401, body: { error: "authentication required" } };
@@ -59,10 +60,11 @@ describe("route guards", () => {
     expect(calls.some((c) => c.url.startsWith("/api/users"))).toBe(false);
   });
 
-  it("lets an admin through /admin (placeholder until the admin pages exist)", async () => {
+  it("lets an admin through /admin, to the Services page", async () => {
     mockApi({ ...base });
-    renderApp("/admin");
-    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
+    const { router } = renderApp("/admin");
+    expect(await screen.findByRole("heading", { name: "Services" })).toBeInTheDocument();
+    expect(where(router)).toBe("/admin/services");
     expect(screen.queryByRole("heading", { name: "Not authorised" })).not.toBeInTheDocument();
   });
 
@@ -207,9 +209,9 @@ describe("setup wizard", () => {
     await user.type(screen.getByLabelText("Confirm password"), PASSWORD);
     await user.click(screen.getByRole("button", { name: "Create administrator" }));
 
-    const banner = await screen.findByRole("status");
+    const banner = await screen.findByRole("complementary", { name: "Getting started" });
     expect(banner).toHaveTextContent("Add your services");
-    expect(within(banner).getByRole("link")).toHaveAttribute("href", "/admin");
+    expect(within(banner).getByRole("link")).toHaveAttribute("href", "/admin/services/new");
     expect(router.state.location.pathname).toBe("/");
     const setup = calls.find((c) => c.url === "/api/auth/setup")!;
     expect(setup.body).toEqual({

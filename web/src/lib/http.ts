@@ -17,6 +17,12 @@
 
 export const SESSION_URL = "/api/auth/session";
 
+/** One setting the server refused, with what is wrong (never the value). */
+export interface FieldProblem {
+  field: string;
+  message: string;
+}
+
 /** An error answer from the API, with the server's own message. */
 export class ApiError extends Error {
   constructor(
@@ -25,7 +31,9 @@ export class ApiError extends Error {
     /** Machine-readable `code` some answers carry, e.g. "password-change-required". */
     readonly code?: string,
     /** Seconds from a Retry-After header, when the server sent one. */
-    readonly retryAfter?: number
+    readonly retryAfter?: number,
+    /** Per-setting problems some answers list (`fields`), e.g. a service form the server refused. */
+    readonly fields?: FieldProblem[]
   ) {
     super(message);
     this.name = "ApiError";
@@ -88,10 +96,14 @@ export function refreshCsrfToken(): Promise<void> {
 }
 
 /** Reads an error body once, without consuming the response the caller gets. */
-async function errorBody(res: Response): Promise<{ error?: string; code?: string }> {
+async function errorBody(
+  res: Response
+): Promise<{ error?: string; code?: string; fields?: unknown }> {
   try {
     const body: unknown = await res.clone().json();
-    if (body && typeof body === "object") return body as { error?: string; code?: string };
+    if (body && typeof body === "object") {
+      return body as { error?: string; code?: string; fields?: unknown };
+    }
   } catch {
     /* not JSON */
   }
@@ -141,6 +153,18 @@ export async function apiFetch(url: string, init: ApiInit = {}): Promise<Respons
   return res;
 }
 
+function fieldProblems(raw: unknown): FieldProblem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: FieldProblem[] = [];
+  for (const f of raw) {
+    if (f && typeof f === "object") {
+      const { field, message } = f as Record<string, unknown>;
+      if (typeof field === "string" && typeof message === "string") out.push({ field, message });
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** The error an API answer describes: our routes explain themselves in an `error` field. */
 export async function toApiError(res: Response, url: string): Promise<ApiError> {
   const body = await errorBody(res);
@@ -149,7 +173,8 @@ export async function toApiError(res: Response, url: string): Promise<ApiError> 
     typeof body.error === "string" ? body.error : `request to ${url} failed: ${res.status}`,
     res.status,
     body.code,
-    Number.isFinite(retry) ? retry : undefined
+    Number.isFinite(retry) ? retry : undefined,
+    fieldProblems(body.fields)
   );
 }
 

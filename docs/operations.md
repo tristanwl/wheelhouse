@@ -161,8 +161,7 @@ received, and send consistent headers: if `X-Forwarded-For`, `Forwarded` and
 
 Off by default. An administrator can let people on the home network use the app
 without logging in: `PUT /api/admin/network` with `{"enabled": true, "cidrs":
-["192.168.1.0/24"], "trustedProxies": []}` (the admin page arrives with Phase 2
-item 7). A request from inside a range is a signed-in `user`: it can browse, add,
+["192.168.1.0/24"], "trustedProxies": []}` (or use Admin, Network in the UI). A request from inside a range is a signed-in `user`: it can browse, add,
 delete and convert media, never open configuration, users or secrets, and the
 admin pages still ask for the administrator's login. Ranges wider than private
 address space are allowed but returned as `warnings`; `0.0.0.0/0` and `::/0` are
@@ -176,7 +175,7 @@ threat model for what this trades away.
 
 **Media roots.** Convert only touches files inside the media roots. An
 administrator sets them with `PUT /api/admin/converter` (`{"mediaRoots":
-["/movies", "/tv"], "includeHdr": false}`; the admin page arrives with item 7);
+["/movies", "/tv"], "includeHdr": false}`; or Admin, Media and converter in the UI);
 `GET` shows `effectiveRoots` and the `source`: `database` (saved by an
 administrator), `environment` (`WHEELHOUSE_MEDIA_ROOTS`, read-only) or `default`
 (`/movies` and `/tv`). The database wins; an empty `mediaRoots` removes the saved
