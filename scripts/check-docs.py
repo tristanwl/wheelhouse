@@ -35,6 +35,7 @@ TEST_ONLY = {
     "WHEELHOUSE_BIN",
     "WHEELHOUSE_CMD",
     "WHEELHOUSE_SMOKE_REQUIRED",
+    "WHEELHOUSE_WRITE_FUZZ_SEEDS",
 }
 
 # Specs that describe the 0.1.x Next.js code say so in a banner; their file
