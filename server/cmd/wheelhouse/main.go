@@ -26,7 +26,9 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
 	"github.com/tristanwl/wheelhouse/server/internal/converter"
+	"github.com/tristanwl/wheelhouse/server/internal/instances"
 	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
+	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
@@ -133,7 +135,8 @@ func run(log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("secret key: %w", err)
 	}
-	if _, err := db.UnlockSecrets(ctx, loaded, true); err != nil { // the Cipher is used from Phase 2 item 4 on
+	cipher, err := db.UnlockSecrets(ctx, loaded, true)
+	if err != nil {
 		if errors.Is(err, store.ErrWrongKey) {
 			return fmt.Errorf("secret key: %w. Put the original key back (%s). If it is lost for good, `wheelhouse forget-secrets --yes` discards the stored provider credentials and keeps the accounts; see docs/operations.md, \"Key loss\"", err, loaded.Source)
 		}
@@ -144,6 +147,16 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("accounts: %w", err)
 	}
 
+	denied, err := core.ParseDeniedNetworks(os.Getenv("WHEELHOUSE_DENIED_NETWORKS"))
+	if err != nil {
+		return fmt.Errorf("WHEELHOUSE_DENIED_NETWORKS: %w", err)
+	}
+	core.SetDeniedNetworks(denied)
+	registry, err := all.Registry()
+	if err != nil {
+		return fmt.Errorf("providers: %w", err)
+	}
+	stored := instances.New(db, cipher, registry, instances.Options{Environment: core.NewProcessEnvConfigSource(), Logger: log})
 	network, err := netaccess.New(ctx, db, proxies)
 	if err != nil {
 		return err
@@ -157,7 +170,7 @@ func run(log *slog.Logger) error {
 
 	handler := app.Handler(app.Options{
 		Logger:    log,
-		Source:    core.NewProcessEnvConfigSource(),
+		Config:    stored,
 		Context:   ctx,
 		Converter: app.ConverterOptions{MediaRoots: converter.RootsFromEnv(os.Getenv), ConfigDir: configDir},
 		Auth:      accounts,

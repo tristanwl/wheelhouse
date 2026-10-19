@@ -58,8 +58,10 @@ gets both from the acceptance harness until the UI has its own login (plan item 
 
 The server opens a SQLite database in `/config` at start (`internal/store`, with
 `internal/secrets` for the master key) and keeps accounts, sessions and the audit
-log in it (`internal/auth`); the service configuration is still the environment
-plus `/config/settings.json` until Phase 2 item 4. Every route is enforced by
+log in it (`internal/auth`); provider instances and feature toggles are stored there too
+(`internal/instances`; secrets encrypted, environment variables a read-only
+source that the database overrides by id), codec settings are still
+`/config/settings.json`. Every route is enforced by
 `app.Guard` (`internal/app/guard.go`): sessions, the same-origin check, the CSRF
 token, roles. Commands: `backup`, `rekey`, `reset-password`, `forget-secrets`.
 Everything that talks to another service goes through the provider layer in
@@ -70,8 +72,8 @@ Everything that talks to another service goes through the provider layer in
   suite every adapter must pass, and one package per provider.
 - **A provider** is a `core.Definition` (id, role, a `Config` struct whose tags
   say required/secret/url, a `Create` factory) returned by its `Definition()` and
-  listed in `providers/all`. Config comes from a `core.ConfigSource`: environment
-  variables today (`core/envsource.go`), a database later.
+  listed in `providers/all`. Config comes from a `core.ConfigSource`: the environment
+  (`core/envsource.go`, read-only) and the database (`internal/instances`).
 - **Routes** (`internal/app`) never build a service client: they ask the runtime
   for the ready instances of a role and iterate them, so every route works with
   several instances (Radarr and Radarr 4K) and with none. Every route is

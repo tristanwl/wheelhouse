@@ -13,6 +13,7 @@ import (
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/features"
+	"github.com/tristanwl/wheelhouse/server/internal/instances"
 	"github.com/tristanwl/wheelhouse/server/internal/middleware"
 	"github.com/tristanwl/wheelhouse/server/internal/netaccess"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/all"
@@ -33,6 +34,11 @@ type Options struct {
 	// Source is where instances come from when Runtime is nil. Defaults to an
 	// empty source (nothing configured); main passes the process environment.
 	Source core.ConfigSource
+	// Config is the stored configuration (provider instances and feature
+	// toggles in the database). When set it is also the Source if none is given
+	// (main passes it with the environment inside). Without it the admin
+	// configuration routes answer 503.
+	Config *instances.Source
 	// Now is the clock for the 24 h warning rule. Defaults to time.Now.
 	Now func() time.Time
 	// Context bounds background work (running conversions are killed when it is
@@ -71,6 +77,8 @@ type deps struct {
 	auth  *auth.Service
 	guard *Guard
 	net   *netaccess.Service
+	// cfg is the stored configuration; nil in tests that build an app without it.
+	cfg *instances.Source
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -104,6 +112,9 @@ func Routes(o Options) *Router {
 		o.Now = time.Now
 	}
 	if o.Runtime == nil {
+		if o.Source == nil && o.Config != nil {
+			o.Source = o.Config
+		}
 		if o.Source == nil {
 			o.Source = emptySource{}
 		}
@@ -123,13 +134,15 @@ func Routes(o Options) *Router {
 		o.Network = netaccess.NewMemory(o.TrustedProxies)
 	}
 	guard := NewGuard(o.Auth, o.Network)
-	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard}
+	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, auth: o.Auth, guard: guard, cfg: o.Config}
 
 	r := NewRouter(guard)
+	r.wrap = d.featureGate
 	registerCore(r, d)
 	registerAuth(r, d)
 	registerUsers(r, d)
 	registerNetwork(r, d)
+	registerConfig(r, d)
 	registerStack(r, d)
 	registerCodecs(r, d)
 	registerLibrary(r, d)

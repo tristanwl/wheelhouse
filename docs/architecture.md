@@ -547,6 +547,15 @@ shows Dashboard plus the available features, the global add/search box
 Explore and Codecs routes are wrapped in `FeatureGate.tsx`, which renders a stub
 saying what is missing, with a link to the README's Configuration section.
 
+An administrator can switch Library, Explore or Codecs off (`PUT
+/api/admin/features`; the Dashboard cannot be). A disabled feature is reported
+`available: false, disabled: true, missing: ["disabled by admin"]`, and the
+router refuses the API routes that feature serves (`/api/library*`,
+`/api/explore*`, `/api/codec-analysis*`) with 403 for everyone, so a switched-off
+Codecs page cannot be driven by hand. `/api/add`, `/api/search` and
+`/api/add-meta` are shared with other features and stay. This is a convenience
+for the household, not a boundary between roles.
+
 ## Config
 
 Environment variables, read by the server only (never sent to the browser). All
@@ -565,16 +574,19 @@ TMDB_API_KEY, TMDB_BASE_URL
 
 Extra Sonarr/Radarr instances use `RADARR_<ID>_URL` and `RADARR_<ID>_API_KEY`
 (same for `SONARR_`): `RADARR_4K_URL` is the instance `radarr-4k`, shown as
-"Radarr 4K". This is the interim way to configure several instances until
-configuration moves to a database.
+"Radarr 4K". Environment variables are a **read-only** source. The same instances can be
+stored in the database (see "Stored configuration" below), which wins by id.
 
 Server settings: `PORT` (3000; 3050 in the image), `WHEELHOUSE_LISTEN`
 (`host:port`, overrides `PORT`), `WHEELHOUSE_MEDIA_ROOTS` (`/movies:/tv`),
 `WHEELHOUSE_CONFIG_DIR` (`/config`), `WHEELHOUSE_DB` (default
 `/config/wheelhouse.db`), `WHEELHOUSE_SECRET_KEY_FILE` / `WHEELHOUSE_SECRET_KEY`
 (the master key; otherwise `/config/secret.key` is generated at the first start)
-and `WHEELHOUSE_TRUSTED_PROXIES` (reverse proxies whose forwarded headers are
-believed, together with the list stored in the database; default none). The server keeps its state in `/config`: the database,
+`WHEELHOUSE_DENIED_NETWORKS` (networks provider clients refuse to connect to;
+default link-local and cloud metadata, `none` to allow all) and
+`WHEELHOUSE_TRUSTED_PROXIES` (reverse proxies whose forwarded headers are
+believed, together with the list stored in the database; default none). The
+server keeps its state in `/config`: the database,
 the key, `settings.json` and, until the first account exists, `setup-token`.
 
 ### Accounts and sessions
@@ -654,11 +666,62 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   `must_change_password`, sessions ended, audited as `cli`); a flagged account can
   call only the session, password and logout routes until it has changed it.
 
+### Stored configuration
+
+`internal/instances` (`Source`) implements `core.ConfigSource` over the
+database (`instances` and `feature_settings`, migration 0003) and, read-only,
+the environment. **Precedence:** an instance in the database hides an
+environment instance with the same id; an environment instance with no row is
+shown as `source: "environment"` and cannot be edited, deleted or replaced by a
+create with its id. `POST /api/admin/instances/{id}/import` copies it into the
+database (settings as they are, a URL's user information dropped), after which
+the environment values for that id are ignored; deleting the stored copy brings
+the environment one back (`environmentAgain: true`).
+
+Secret settings (the `secret` fields of the provider's config struct) of one
+instance are a single JSON object sealed with `secrets.Cipher` in
+`instances.secrets`, associated data `(instances, id, secrets)`, so a value
+copied to another row does not open. Non-secret settings are JSON in `config`.
+A row whose secrets cannot be opened is served without them (the instance then
+reports its credentials missing) and logged once; it never fails the others.
+
+**Runtime reload.** The `core.Runtime` asks the source for the instances on
+every call and caches each client by a hash of the validated config, so a create,
+edit, enable/disable or delete is seen by the next request: a changed instance
+gets a new client (and so a fresh response cache), a deleted one is dropped, and
+a request already using the old client finishes with it. Writes are single
+transactions on the one writer connection, so two edits cannot lose each other's
+secret (`TestRuntimePicksUpChangesWithoutRestart` runs them concurrently under
+`-race`).
+
+**Admin API** (all `admin`, CSRF-protected, audited with setting names, never
+values):
+
+| Route | |
+|---|---|
+| `GET /api/admin/providers` | the registry: id, role, display name, JSON Schema of the config form (`x-secret` marks credentials), capabilities |
+| `GET /api/admin/instances` | every instance: `source`, `readOnly`, `overridesEnvironment`, `status`, redacted `error`, `lastTest`, `config` (non-secret values) and `secrets: {name: {set: bool}}` |
+| `POST /api/admin/instances` | create: `providerId`, optional `id` (the provider id, or starting with `<provider>-`; lowercase letters, digits, hyphens; derived from the name when omitted), `name`, `enabled`, `config`; validated by the provider's config; 400 with `fields`, 409 on a duplicate id or an environment id |
+| `PUT /api/admin/instances/{id}` | update `name`, `enabled`, `config`; a secret left out keeps its stored value, a given one replaces it |
+| `DELETE /api/admin/instances/{id}` | delete a stored instance |
+| `POST /api/admin/instances/{id}/import` | copy an environment instance into the database |
+| `POST /api/admin/instances/test` | connection test of unsaved `{providerId, config}`, or of a saved `{id}` (with optional edited `config`, stored secrets filled in); returns `{ok, version, error, durationMs}`, redacted |
+| `GET/PUT /api/admin/features` | per-feature `enabled` flags |
+
+**URLs are trusted administrator input.** The server requests whatever address an
+admin configures (a connection test, then every poll), so a URL must be `http` or
+`https` with a host and no credentials, and the core HTTP client refuses to
+connect to link-local and cloud-metadata addresses (`169.254.0.0/16`,
+`fe80::/10`, `fd00:ec2::254`) by default, checked on the resolved address at
+connect time. Private LAN ranges and loopback are allowed: they are where the
+services are. `WHEELHOUSE_DENIED_NETWORKS` replaces the list (comma-separated
+CIDRs; `none` allows everything).
+
 ### Storage and secrets
 
 The storage layer ([plan](wheelhouse-phase2-plan.md), item 1) under the accounts.
-No stored configuration uses the secret columns yet (item 4); the key is created
-and checked at start so that a wrong key is noticed at once.
+The secret column is `instances.secrets` (see "Stored configuration"); the key is
+created and checked at start so that a wrong key is noticed at once.
 
 - **Database.** SQLite through `modernc.org/sqlite` (pure Go, so the binary stays
   static and cross-compiles). One file, mode 0600, WAL, foreign keys on. A writer
@@ -666,7 +729,7 @@ and checked at start so that a wrong key is noticed at once.
   Go and readers never block. Embedded, numbered, forward-only migrations are
   applied at open in a single transaction and recorded with a hash in
   `schema_migrations`; a database newer than the binary is refused. Tables: `meta`
-  (0001), `users`, `sessions`, `audit_log` (0002).
+  (0001), `users`, `sessions`, `audit_log` (0002), `instances`, `feature_settings` (0003).
 - **Secrets at rest.** `secrets.Cipher` seals each value with AES-256-GCM, a
   random nonce per value and the table, row id and field as associated data, in a
   versioned envelope (format byte, key version, nonce, ciphertext and tag). The
