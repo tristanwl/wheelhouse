@@ -225,7 +225,9 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 	log.Info("listening", "addr", ln.Addr().String(), "version", version.Version)
 
+	drain := &app.Drain{}
 	handler := app.Handler(app.Options{
+		Drain:     drain,
 		Logger:    log,
 		Config:    stored,
 		Context:   ctx,
@@ -245,5 +247,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	err = app.Serve(ctx, ln, handler, log)
 	stopPruning()
 	<-pruned
+	// A running conversion is stopped by the cancelled context; give it a moment
+	// to be marked interrupted and audited before the database closes.
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelDrain()
+	drain.Wait(drainCtx)
 	return err
 }

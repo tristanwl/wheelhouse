@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
@@ -24,6 +25,8 @@ import (
 
 // Options are the parts of the app that tests replace.
 type Options struct {
+	// Drain, when set, is where the app registers work to wait for at shutdown.
+	Drain  *Drain
 	Logger *slog.Logger
 	// UI serves every non-API path. Defaults to the embedded UI.
 	UI http.Handler
@@ -82,6 +85,40 @@ type deps struct {
 	net   *netaccess.Service
 	// cfg is the stored configuration; nil in tests that build an app without it.
 	cfg *instances.Source
+	// drain collects what must finish after the server stops accepting requests
+	// and before the database closes; nil when the caller does not wait.
+	drain *Drain
+}
+
+// Drain lets the caller wait for background work (a running conversion being
+// marked interrupted and audited) after the context is cancelled and before the
+// database is closed. The zero value is ready to use.
+type Drain struct {
+	mu  sync.Mutex
+	fns []func(context.Context)
+}
+
+// Add registers f, which returns when the work has finished or ctx ends.
+func (d *Drain) Add(f func(context.Context)) {
+	d.mu.Lock()
+	d.fns = append(d.fns, f)
+	d.mu.Unlock()
+}
+
+// Wait runs every registered function and returns when all are done.
+func (d *Drain) Wait(ctx context.Context) {
+	d.mu.Lock()
+	fns := append([]func(context.Context){}, d.fns...)
+	d.mu.Unlock()
+	var wg sync.WaitGroup
+	for _, f := range fns {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f(ctx)
+		}()
+	}
+	wg.Wait()
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -140,7 +177,7 @@ func Routes(o Options) *Router {
 		o.Converter.Settings = converter.NewMemorySettings(o.Converter.MediaRoots)
 	}
 	guard := NewGuard(o.Auth, o.Network)
-	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, convSet: o.Converter.Settings, auth: o.Auth, guard: guard, cfg: o.Config}
+	d := deps{net: o.Network, rt: o.Runtime, ffmpeg: o.Ffmpeg, now: o.Now, log: o.Logger, ctx: o.Context, conv: o.Converter, convSet: o.Converter.Settings, auth: o.Auth, guard: guard, cfg: o.Config, drain: o.Drain}
 
 	r := NewRouter(guard)
 	r.wrap = d.featureGate

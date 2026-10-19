@@ -189,6 +189,10 @@ type JobQueue struct {
 	// recovered is closed once the startup clean-up has finished; no job runs
 	// before then, so the clean-up cannot undo a swap in progress.
 	recovered chan struct{}
+
+	// work counts the goroutines that run jobs, so shutdown can wait for the
+	// running job to be recorded (state, audit entry) before the database closes.
+	work sync.WaitGroup
 }
 
 // NewMemoryQueue returns a queue that keeps nothing across restarts.
@@ -234,7 +238,8 @@ func NewQueue(ctx context.Context, cfg Config) *JobQueue {
 	}()
 	if q.hasQueued() {
 		q.processing = true
-		go q.loop()
+		q.work.Add(1)
+		go q.runLoop()
 	}
 	return q
 }
@@ -490,7 +495,8 @@ func (q *JobQueue) Enqueue(req Request) Job {
 	q.save(j)
 	if !q.processing {
 		q.processing = true
-		go q.loop()
+		q.work.Add(1)
+		go q.runLoop()
 	}
 	return j.Job
 }
@@ -526,10 +532,38 @@ func (q *JobQueue) Cancel(id string) bool {
 	return false
 }
 
+func (q *JobQueue) runLoop() {
+	defer q.work.Done()
+	q.loop()
+}
+
+// Wait blocks until the goroutine running jobs has finished or ctx ends. Call it
+// after the queue's context is cancelled: a running job is stopped, marked
+// interrupted and reported (its audit entry) before Wait returns, so the caller
+// can close the database afterwards without losing that record.
+func (q *JobQueue) Wait(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		q.work.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+}
+
 func (q *JobQueue) loop() {
 	<-q.recovered
 	for {
 		q.mu.Lock()
+		// Shutting down: whatever is still queued stays queued, so the next
+		// start resumes it (only the job that was running is interrupted).
+		if q.base.Err() != nil {
+			q.processing = false
+			q.mu.Unlock()
+			return
+		}
 		var next *job
 		for _, j := range q.jobs {
 			if j.Status == StatusQueued {

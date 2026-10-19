@@ -9,7 +9,7 @@ import (
 )
 
 type urlConfig struct {
-	URL string `json:"url" config:"required,url"`
+	URL string `json:"url" label:"URL" config:"required,url"`
 }
 
 // FuzzInstanceURL feeds arbitrary text to the instance URL validation that every
