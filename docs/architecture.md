@@ -16,12 +16,16 @@ a setup wizard, and a database-backed configuration are planned — see
 
 ## Stack
 
-One Go binary (`server/`, standard library only) with the Vite single-page UI
+One Go binary (`server/`, standard library plus the pure-Go SQLite driver) with the Vite single-page UI
 (`web/`: React 19, React Router, SWR, Tailwind CSS) embedded in it, shipped in
-one container image together with ffmpeg and the VA-API drivers. No database:
-the server is a thin read/aggregate/proxy layer over the services' own APIs, and
-its only state is `settings.json` in `/config` and, while a conversion runs, the
-queue in memory.
+one container image together with ffmpeg and the VA-API drivers. The server is a
+thin read/aggregate/proxy layer over the services' own APIs, and its only state
+today is `settings.json` in `/config` and, while a conversion runs, the queue in
+memory. A SQLite database and an encrypted-secrets layer (`internal/store`,
+`internal/secrets`) exist as a foundation for Phase 2 (accounts, stored
+configuration) but **the server does not open the database yet**; see "Storage
+and secrets" below. What is protected and from whom is in the
+[threat model](threat-model.md).
 
 Since release 0.2.0 this is the whole product. Releases up to 0.1.x were a
 Next.js app with the same URLs, API and environment variables; the migration is
@@ -29,9 +33,11 @@ described in the phase 2 spec. Comments in the Go code that mention `lib/...` or
 `app/...` refer to that code, which is in git history (tag `0.1.1`).
 
 ```
-cmd/wheelhouse        main: config, signals, listener; healthcheck and version commands
+cmd/wheelhouse        main: config, signals, listener; healthcheck, version, backup and rekey commands
 internal/app          the router (every route states its access level), middleware chain, graceful Serve
-internal/config       listen address
+internal/config       listen address, database path
+internal/store        SQLite: open (modes, WAL, pools), embedded migrations, backup, secret-column rekey
+internal/secrets      AES-256-GCM envelopes, master key loading, redacting key and secret types
 internal/features     feature gating (what the nav shows)
 internal/status       GET /api/status
 internal/downloads    GET /api/downloads
@@ -552,7 +558,40 @@ configuration moves to a database.
 
 Server settings: `PORT` (3000; 3050 in the image), `WHEELHOUSE_LISTEN`
 (`host:port`, overrides `PORT`), `WHEELHOUSE_MEDIA_ROOTS` (`/movies:/tv`). The
-only file Wheelhouse keeps is `/config/settings.json`.
+only file the running server keeps is `/config/settings.json`.
+
+Read only by the storage commands for now: `WHEELHOUSE_DB` (default
+`/config/wheelhouse.db`), `WHEELHOUSE_SECRET_KEY_FILE` and `WHEELHOUSE_SECRET_KEY`
+(the master key; otherwise `/config/secret.key` is generated).
+
+### Storage and secrets
+
+The foundation for Phase 2 ([plan](wheelhouse-phase2-plan.md), item 1). Not used
+by the server process yet: no route reads or writes the database, and starting
+the server creates neither the database nor a key. The `backup` and `rekey`
+commands and the tests are its only callers until the next items wire it in.
+
+- **Database.** SQLite through `modernc.org/sqlite` (the first third-party
+  module; pure Go, so the binary stays static and cross-compiles). One file,
+  mode 0600, WAL, foreign keys on. A writer pool of one connection and a pool of
+  `query_only` readers, so writers queue in Go and readers never block. Embedded,
+  numbered, forward-only migrations are applied at open in a single transaction
+  and recorded with a hash in `schema_migrations`; a database newer than the
+  binary is refused. `meta` is the only table so far.
+- **Secrets at rest.** `secrets.Cipher` seals each value with AES-256-GCM, a
+  random nonce per value and the table, row id and field as associated data, in a
+  versioned envelope (format byte, key version, nonce, ciphertext and tag). The
+  master key comes from a key file, the environment or a generated
+  `/config/secret.key`. A check value in `meta` says which key version the
+  database is under, so a wrong key fails immediately and `rekey` can re-encrypt
+  every secret column in one transaction.
+- **Backups** are `VACUUM INTO` snapshots taken while the server runs, mode 0600,
+  never overwriting; they contain ciphertext, not the key.
+- **What this protects.** A copied database or backup. It does not protect a copy
+  of the whole `/config` volume when the key is the generated file beside the
+  database; see the residual risks in the [threat model](threat-model.md).
+
+The formats and commands are specified in [server/README.md](../server/README.md#storage-and-secrets).
 
 Sonarr/Radarr library lists are cached for 5 seconds per instance (concurrent
 requests share one upstream call; adding, deleting or rescanning clears that

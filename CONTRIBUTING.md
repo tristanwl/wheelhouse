@@ -15,7 +15,7 @@ focused pull requests.
 
 ## Development setup
 
-Wheelhouse is a Go server (`server/`, standard library only) with a Vite UI
+Wheelhouse is a Go server (`server/`, standard library plus the SQLite driver) with a Vite UI
 (`web/`) embedded in the binary. You need Go 1.27+ and Node 22.12+ (24
 recommended, see `.nvmrc`); Docker only for the image.
 
@@ -30,7 +30,7 @@ are `check`, `acceptance`, `server`, `web` and `docker`):
 
 ```sh
 # server (job "server"); also needs golangci-lint v2 and govulncheck
-make -C server check
+make -C server check   # gofmt, vet, test -race, lint, govulncheck, deps (go.mod tidy, licenses), build
 
 # UI (job "web"); the smoke test needs Chromium (`npx playwright-core install chromium`)
 cd web && npm ci && npm run typecheck && npm run lint && npm run format:check \

@@ -89,6 +89,14 @@ jobs:
           working-directory: server
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+      # go.mod and go.sum tidy and verified; every module in the shipped binary
+      # must carry one of these licenses (all compatible with GPL-3.0). Keep the
+      # list in step with `deps` in server/Makefile.
+      - name: dependencies
+        run: |
+          go mod tidy -diff
+          go mod verify
+          go run github.com/google/go-licenses/v2@v2.0.1 check ./cmd/wheelhouse --ignore github.com/tristanwl/wheelhouse --allowed_licenses=MIT,BSD-2-Clause,BSD-3-Clause,Apache-2.0,ISC
       - name: build
         run: CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
 

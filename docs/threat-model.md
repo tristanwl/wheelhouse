@@ -1,0 +1,249 @@
+# Wheelhouse threat model
+
+Status: written for Phase 2 item 1 ([plan](wheelhouse-phase2-plan.md)); updated by
+every Phase 2 PR that changes a trust boundary or a mitigation. The security
+requirements this serves are in [wheelhouse-spec-phase2.md](wheelhouse-spec-phase2.md);
+the reporting policy is in [SECURITY.md](../SECURITY.md).
+
+**Where things stand today (0.2.x).** There is **no authentication**. Every
+route is public, so anyone who can reach the port can read the dashboard, delete
+library items (with `?confirm=true`) and queue conversions. That is acceptable
+only on a trusted network and is why no 1.0 exists. Items marked "Phase 2 item N"
+below are *not in place yet*; the "Mitigation" column says which are. Nothing in
+this document should be read as a promise about a released version until the
+item that provides it has merged and a release has been cut.
+
+## What Wheelhouse is, for this purpose
+
+One Go process in one container. It holds credentials for a person's whole media
+stack (Sonarr, Radarr, SABnzbd, qBittorrent, Plex, Jellyfin, TMDB), can delete
+library entries through those services, and can rewrite media files on disk with
+ffmpeg. It serves a single-page UI and a JSON API, makes outgoing HTTP calls to
+the configured services, and (from Phase 2) keeps a SQLite database and a master
+key under `/config`.
+
+## Assets
+
+| Asset | Why it matters | Where it lives |
+|---|---|---|
+| **Provider secrets** (API keys, tokens, qBittorrent username and password, credentials in service URLs) | They are the keys to services that hold downloads, accounts and watch history; a leaked Plex token or *arr key gives full control of that service | Today: process environment. Phase 2: encrypted in the database (item 4), master key in a file or the environment |
+| **Master key** | Decrypts every stored secret | `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY`, or `/config/secret.key` (item 1, in place) |
+| **Library files** | Wheelhouse can delete entries (and, through *arr, files) and rewrite files in place; loss or corruption is irreversible without the `.bak` | Media directories mounted into the container |
+| **User credentials** | Argon2id password hashes unlock the admin role | Database (item 2) |
+| **Sessions** | A session token is the user's identity for up to 30 days | Only the SHA-256 of the token in the database (item 2); the cookie in the browser |
+| **Configuration and the audit log** | Integrity of what the admin configured and of the record of who did what | Database (items 2 and 4) |
+| **Availability** | The household uses it; a crash loop or a stuck conversion is a loss, but a lesser one | The process |
+| **The host** | A compromised container is a foothold on a machine that also runs the rest of the media stack | Container runtime |
+
+## Actors
+
+| # | Actor | Capability assumed |
+|---|---|---|
+| A1 | Anonymous network attacker | Can send arbitrary HTTP to the port if it is exposed (directly, port-forwarded, or through a proxy); no credentials |
+| A2 | Malicious or compromised configured upstream service | Answers Wheelhouse's outgoing requests with arbitrary bytes: huge bodies, slow streams, redirects, HTML where JSON is expected, hostile JSON, text that looks like an injection |
+| A3 | Local-network user | On the LAN, maybe a guest or a compromised IoT device; can reach the port and can spoof forwarded headers; with the Phase 2 bypass they are treated as a signed-in `user` by design |
+| A4 | Lower-privileged signed-in user (`user` role) | Authenticated, wants to read configuration or secrets, create users, or escalate to `admin` |
+| A5 | Someone holding a copy of the database or a backup | Read access to `wheelhouse.db` or a `wheelhouse backup` file, but not to the master key |
+| A6 | Someone holding the whole `/config` volume | Database, `secret.key` and `settings.json` together (a stolen disk, a leaked volume snapshot, a careless `tar` of the config directory) |
+| A7 | Malicious media file name or metadata | A file in the library whose name, embedded tags or container structure are crafted (it can arrive through a download client); reaches ffprobe, ffmpeg and the UI |
+| A8 | Supply chain | A malicious or compromised dependency, base image, GitHub Action or release artifact |
+| A9 | Someone with shell access on the host or the container | Out of scope as an attacker (they can read process memory and the key); relevant only to what the design should not make worse |
+
+## Trust boundaries
+
+```
+ browser ──(1)──► reverse proxy (TLS) ──(2)──► wheelhouse process ──(3)──► configured services
+                                                  │   │   └──(4)──► ffmpeg / ffprobe (child processes)
+                                                  │   └──(5)──► /config  (settings.json, wheelhouse.db, secret.key)
+                                                  └──(6)──► media directories
+```
+
+1. **Network to proxy.** Untrusted. TLS ends here (assumption T1).
+2. **Proxy to Wheelhouse.** Wheelhouse does not know whether a proxy exists. It
+   trusts forwarded headers only from an explicit trusted-proxy list (item 5);
+   today it reads none of them.
+3. **Wheelhouse to services.** The services are configured by the admin and
+   *trusted to be what they are*, but their **responses are untrusted input**
+   (A2).
+4. **Wheelhouse to ffmpeg/ffprobe.** Child processes parse untrusted media; they
+   get validated arguments, never a shell.
+5. **Wheelhouse to `/config`.** Trusted storage, but its contents are protected
+   against copying (encryption of secrets, file modes), not against a reader of
+   the whole volume (A6).
+6. **Wheelhouse to the media directories.** Writes only inside the configured
+   roots after resolving symlinks.
+
+## Entry points
+
+| Entry point | Untrusted input | Notes |
+|---|---|---|
+| HTTP API (`/api/...`, `/healthz`) | method, path, query, headers, JSON bodies | Every route is registered with a level; `router_test.go` enumerates them |
+| UI (the embedded SPA) | everything a service or a file name can put on screen | Rendered by React (escaped); strict CSP, no inline script |
+| Environment variables | service URLs and keys, listen address, media roots, key material | Set by the operator; read once at start |
+| Files under `/config` and the media roots | `settings.json`, the database, the key file, media files | Parsed defensively; wrong modes refused for the database and key |
+| Upstream responses | bodies, status codes, redirects, timing | Size, time and redirect limits in `providers/core` |
+| ffmpeg / ffprobe | media file contents and metadata | Run as the container user with a context and validated arguments |
+| CLI inside the container (`backup`, `rekey`, later `reset-password`) | arguments, the same environment | Reachable only by someone who can already exec in the container (A9) |
+
+## Assumptions
+
+- **T1. TLS is terminated by a reverse proxy** the operator runs (Caddy, nginx,
+  Traefik). Wheelhouse serves plain HTTP. It sets `Secure` on cookies when the
+  request arrived over HTTPS (item 2); behind a proxy that means a trusted-proxy
+  entry (item 5). Exposing the plain port to the internet is unsupported.
+- **T2. The container runtime isolates the process** (non-root user, read-only
+  root filesystem, dropped capabilities as the README recommends, `no-new-privileges`).
+  A container escape is out of scope.
+- **T3. The host and the `/config` mount are not shared** with untrusted local
+  users. The files are created `0600` and the database directory must not be
+  world-writable, but a user who is root on the host reads everything.
+- **T4. The services Wheelhouse is configured against are the ones the admin
+  intended.** An attacker who can change the configuration is already an admin.
+- **T5. Clocks are roughly right** (session timeouts, audit timestamps).
+- **T6. The operator keeps the master key somewhere other than next to their
+  backups** if they want backups to be useless on their own.
+
+## Threats (STRIDE)
+
+Status key: **in place** (merged, with the named test), **item N** (a Phase 2
+work-plan item, not merged yet), **accepted** (a known limit, see Residual
+risks), **out of scope**.
+
+### Spoofing
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| S1 | A1 uses the app with no identity at all | Authentication on every non-public route; `authorize` middleware; an enumerating test fails if a route has no decision | Today: **none**. Item 2 (`router_test.go` already lists every route and level) |
+| S2 | A1 claims a fresh install before the admin does | Setup page only until an admin exists; one-time setup token in the log and `/config/setup-token` | Item 3 |
+| S3 | A1 guesses or brute-forces a password | Argon2id, minimum length 12, common-password list, per-account and per-address exponential delay and lockout, identical responses for unknown users and wrong passwords | Item 2 |
+| S4 | A3 spoofs `X-Forwarded-For` to look like a local address and get the bypass | Bypass matches the TCP peer address; forwarded headers ignored unless the peer is in the trusted-proxy list; tests for spoofing | Item 5 |
+| S5 | Session theft or fixation | 256-bit random tokens, only the SHA-256 stored, rotated on login and password change, `HttpOnly`, `SameSite=Strict`, `Secure` over HTTPS, idle 12 h and absolute 30 d limits, revocation | Item 2 |
+| S6 | A2 impersonates a configured service | TLS verification is always on, no insecure option (`TestHTTPClientVerifiesTLSCertificates`); plain-HTTP services on a LAN are the operator's choice and are not authenticated beyond their API key | In place; plain HTTP **accepted** |
+| S7 | A CSRF request makes a signed-in browser act | Per-session CSRF token header plus `Origin`/`Sec-Fetch-Site` same-origin check on every state-changing request; `GET` never changes state | Item 2 |
+
+### Tampering
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| T-1 | A1 deletes library items or queues conversions | Auth (S1); deletes need `?confirm=true`, enforced server side (acceptance suite, `routes_library.go`); conversion keeps a `.bak` and warns about hard links | Confirm and `.bak`: **in place**. Auth: item 2 |
+| T-2 | A user edits configuration, users or roles | Role check on every admin route, enumerated by a test; the last admin cannot be deleted or demoted | Item 2 and 4 |
+| T-3 | A5 or A6 edits the database offline (adds an admin, changes a service URL) | Not prevented: whoever can write the database can do anything the server can. File mode `0600` and the directory check reduce accidental exposure | **Accepted** (A6 is out of the guarantee) |
+| T-4 | A tampered or swapped ciphertext is accepted | AES-256-GCM authenticates every byte; the row id and field are bound as associated data so a value moved to another row does not open (`TestTamperDetectionEveryByte`, `TestWrongAssociatedData`, `TestSecretIsBoundToItsRowAndField`) | **In place** (item 1) |
+| T-5 | A database from a newer Wheelhouse is opened by an older binary and corrupted | Migrations record a hash per applied migration; the server refuses a newer schema (`TestRefusesNewerSchema`, `TestRefusesChangedOrDamagedHistory`) | **In place** (item 1) |
+| T-6 | A crash corrupts the database or leaves half a migration | WAL, `synchronous=FULL`, every migration batch in one transaction (`TestCrashMidTransactionLeavesNoTrace`, `TestMigrationsApplyInOrderAndAllOrNothing`) | **In place** (item 1) |
+| T-7 | Path traversal or a symlink escape makes conversion touch a file outside the media roots | The path is resolved (`..` refused, `EvalSymlinks`, regular file), must be inside a root, and the check repeats at job start and before the swap (`TestResolveInRoots`) | **In place** |
+| T-8 | A request body or header forged to reach ffmpeg arguments | Arguments come from validated enums and an absolute resolved path; `os/exec`, never a shell | **In place** (`internal/converter`) |
+| T-9 | A hostile `Host`/`Origin` or header trick | Only the TCP peer is used for the bypass (S4); the CSRF origin check (S7) | Item 2 and 5 |
+
+### Repudiation
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| R1 | A destructive action cannot be traced to anyone | Append-only audit table: logins, failures, lockouts, user and role changes, service changes, deletes, conversions, bypass use; acting user and address, never secrets; retention 180 days; admins can read it | Item 2 (table) and later items add events. Today deletes log an `audit` line without a user |
+| R2 | An admin edits or deletes audit rows | Nothing in the app writes anything but inserts; **not** protected against someone with the database file (T-3) | Item 2; limit **accepted** |
+
+### Information disclosure
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| I1 | Provider secrets appear in a response, header, error, log line or UI | Routes make upstream calls through `core.NewHTTPClient` and echo only `core.Redact`ed text (plain, URL-encoded, base64, JSON-escaped, `apikey=` parameters, `user:pass@`); canary sweeps over every error string, route and log (`providers/core/canary_test.go`, each provider's `canary_test.go`, `acceptance/secrets.test.ts`) | **In place** |
+| I2 | A saved secret is read back through the admin API | After saving, a secret is never returned; the UI shows "set" and "replace" | Item 4 |
+| I3 | A5 reads secrets from the database or a backup | Secrets are AES-256-GCM encrypted; the key is not in the database or in a `wheelhouse backup`. A canary test scans the raw database, its `-wal` and a backup (`TestPlaintextNeverReachesDisk`); deleted values are overwritten (`secure_delete`, `TestDeletedValuesAreOverwritten`) | **In place** (item 1); the columns arrive with item 4 |
+| I4 | A6 reads secrets from the whole volume | Not prevented when the key is the generated `/config/secret.key` beside the database. Operators who care point `WHEELHOUSE_SECRET_KEY_FILE` at a secret mount or tmpfs | **Accepted**, documented honestly |
+| I5 | The key or a plaintext leaks into a log, panic message, `%v` print or JSON | `secrets.Key` and `secrets.Secret` redact under every fmt verb, `slog` and JSON (`TestKeyNeverPrints`, `TestSecretsAndKeysRedact`); errors are static text; the access log omits queries, headers and bodies; panics answer a generic 500 (`TestRecoverHidesDetails`) | **In place** |
+| I6 | Anyone on the network reads library and status data | Same as S1 | Item 2 |
+| I7 | Secrets in the process environment are readable (`docker inspect`, `/proc/<pid>/environ`) | The environment source is the 0.2.x interface and stays supported; the admin page shows environment values as "from environment" and offers import into the database; operators can use a key file for the master key | **Accepted** for the environment path |
+| I8 | A user session reveals admin data | Role-gated routes (T-2); the local-network bypass never grants `admin` | Items 2 and 5 |
+| I9 | Browser-side leakage (referrers, framing, MIME sniffing, third-party images) | `Referrer-Policy: no-referrer`, `frame-ancestors 'none'`, `nosniff`, CSP with images only from `self`, `data:` and the two metadata hosts (`TestSecurityHeaders`, `TestCSPAllowsExactlyTheImageHosts`) | **In place** |
+| I10 | A backup is left world-readable | Backups are created `0600` and never overwrite (`TestBackupCopiesEverythingWithMode0600`, `TestBackupNeverOverwrites`); the database and key file are refused when group or world accessible | **In place** (item 1) |
+| I11 | Timing reveals whether a username exists | Constant-time comparison path for known and unknown users | Item 2 |
+
+### Denial of service
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| D1 | A2 sends an endless or huge body | 64 MiB response cap, 8 s timeout covering the body, the stream is cut at the limit (`TestHTTPClientRejectsOversizedResponses`, `TestHTTPClientStopsReadingAnEndlessStream`, `TestHTTPClientTimesOutInsteadOfHanging`) | **In place** |
+| D2 | A2 redirects Wheelhouse elsewhere or in a loop | Redirects only within the same host, never https to http, loop limit (`TestHTTPClientRefusesRedirectsToAnotherHost`, `TestCheckRedirectRefusesHTTPSDowngrade`, `TestHTTPClientStopsRedirectLoops`) | **In place** |
+| D3 | A1 holds connections open | Server read-header (10 s), read (30 s) and idle (120 s) timeouts | **In place**; request body size limits per route are part of item 10's review |
+| D4 | A1 floods login | Per-account and per-address throttling and lockout; lockout must not let an attacker lock the real admin out of the local CLI recovery path | Item 2; recovery via `reset-password` in item 3 |
+| D5 | One failing service takes the dashboard down | Each instance fails independently (`TestOneInstanceFailingNeverAffectsTheOthers`) | **In place** |
+| D6 | A7 crashes ffmpeg or makes a conversion run forever | Child process under a context, one job at a time, cancel endpoint, the original kept as `.bak`; ffmpeg itself parsing hostile files is **accepted** (T2) | Partly in place |
+| D7 | The disk fills (a huge conversion, an unbounded audit log) | Audit retention is configurable (180 days); conversion needs space for a second copy and fails cleanly | Item 2; disk exhaustion by conversion **accepted** |
+| D8 | Concurrent CLI and server contention on the database | One writer connection, busy timeout, WAL so readers never block (`TestTwoHandlesShareTheFile`, `TestConcurrentReadersAndWriters`) | **In place** (item 1) |
+
+### Elevation of privilege
+
+| ID | Threat | Mitigation | Status |
+|---|---|---|---|
+| E1 | A4 reaches an `admin` route | Role check by the `authorize` middleware; an enumerating test sends a `user` request to every admin route and expects 403 | Item 2 |
+| E2 | A4 or A3 sets their own role or creates an admin | User management is `admin` only; a role is never taken from a request field of the acting user | Item 2 |
+| E3 | The bypass becomes admin | Capped at `user` in the code that builds the identity; the admin pages ask for the admin's login even from the local network; a test asserts it | Item 5 |
+| E4 | SQL injection | Statements use bound parameters; the only dynamic SQL is table and column names from a fixed list validated against `^[a-z][a-z0-9_]*$`; the SQLite connection runs in defensive mode with `trusted_schema=OFF` | **In place** (item 1); each later query is reviewed in item 10 |
+| E5 | SSRF through provider URLs: an admin (or, before item 4, the operator) points a service at an internal address and uses Test connection as a scanner | Provider URLs must be `http`/`https` with a host and without credentials; responses are never echoed (only a redacted status). Blocking private ranges is **not** possible, because the services *are* on private addresses | **Accepted** with a dedicated review in item 10 |
+| E6 | Code execution through a hostile media file (A7) in ffmpeg or ffprobe | Fixed argument shapes, no shell, no user-supplied filter strings; the container runs non-root, read-only, caps dropped. Memory-safety bugs in ffmpeg are not Wheelhouse's to fix but are the main reason T2 matters; keep the image's ffmpeg current | **Accepted** |
+| E7 | A hostile file name (A7) as XSS or a path trick in the UI or a log | The UI is React with a CSP that forbids inline script; the access log quotes control characters in paths (`TestAccessLogQuotesControlCharactersInPath`); conversion refuses anything outside the roots | **In place** |
+| E8 | A compromised dependency or image (A8) runs code in the process | See "Supply chain" below | Partly in place |
+| E9 | Anyone can run the CLI | `backup`, `rekey` and `reset-password` need `exec` in the container: whoever has it already has the process and the key (A9) | **Out of scope** |
+
+## Supply chain (A8)
+
+- **One third-party Go module family.** The server was standard library only.
+  Phase 2 adds `modernc.org/sqlite` (with its pinned pure-Go dependencies, listed
+  with licenses in the item 1 PR) and, in item 2, `golang.org/x/crypto`. Every
+  addition needs a written justification, the newest stable version, a clean
+  `govulncheck`, and a license compatible with GPL-3.0.
+- **CI:** `govulncheck` (pinned) and `npm audit` on every PR; a license check on
+  the Go module graph; Dependabot weekly for Go, npm, Actions and base images.
+- **Pinning:** GitHub Actions by commit SHA, base images by tag and digest,
+  `go.sum` and the npm lock files committed.
+- **Release artifacts:** signed images with provenance and an SBOM are an
+  acceptance criterion for 1.0 and are not in place yet.
+- **Residual:** `modernc.org/sqlite` is SQLite transpiled to Go. Its quality is
+  that of its maintainers' tooling; a bug there is not caught by Go's memory
+  safety in the same way as hand-written Go. The alternative (cgo SQLite) is not
+  safer and costs the static binary and easy arm64.
+
+## Phase 2 items and the threats they close
+
+| Item | Closes |
+|---|---|
+| 1 Threat model and storage foundation (this document) | T-4, T-5, T-6, I3, I5, I10, D8, E4 groundwork |
+| 2 Users, sessions, login, CSRF, `authorize`, audit | S1, S3, S5, S7, T-2, E1, E2, I6, I11, R1, D4 |
+| 3 First-run setup and recovery | S2 |
+| 4 Stored configuration | I2, I3 end to end, I7 import path |
+| 5 Local-network bypass | S4, E3, I8 |
+| 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary |
+| 8 Converter settings | T-7 for configurable roots, HDR handling, D6 persisted queue |
+| 9 Bugs and polish | arm64 image: no change to the model |
+| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit |
+
+## Residual risks (what stays true after Phase 2)
+
+1. **A stolen `/config` volume is a full compromise** when the master key is the
+   generated `secret.key`: the key sits beside the database. Only a key supplied
+   from outside the volume changes that.
+2. **Environment variables are readable** by anyone who can inspect the container
+   or its process.
+3. **Plain HTTP between Wheelhouse and its services** is accepted; a LAN
+   attacker who can sniff or alter that traffic sees API keys sent in headers or
+   query strings by the services' own protocols (SABnzbd, TMDB).
+4. **ffmpeg and ffprobe parse hostile files.** Wheelhouse limits what they are
+   asked to do, not what a bug in them can do. The container is the boundary.
+5. **A user with the local-network bypass can delete and convert.** That is the
+   design (they manage media); it is a convenience trade-off the admin makes
+   explicitly, and it is off by default.
+6. **The audit log is only as trustworthy as the database file.**
+7. **Single process, single node.** No rate limiting beyond login throttling, no
+   distributed lockout; a reverse proxy is the place for broader request limits.
+8. **Backups restored to a different key** cannot be read; losing the key loses
+   the secrets, by design. Keep the key apart from the backup.
+9. **Time-of-check races on the media filesystem** (a symlink swapped between
+   the path check and the swap) are narrowed by re-checking before the swap, not
+   eliminated; they need local write access to the media directories.
+
+## Keeping this current
+
+Each PR that adds a route, a dependency, a file the process writes, or an
+outgoing request path updates the relevant row, in the same PR. Item 10 repeats
+the exercise from scratch with an independent reviewer and records the outcome
+here.

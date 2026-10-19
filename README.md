@@ -18,7 +18,9 @@ using hardware encoding when your GPU supports it.
 > Plex, configured by environment variables. There is **no authentication
 > yet** — run it only on a trusted network. Swappable providers (Jellyfin,
 > ...), a setup wizard, an admin page and local-user auth are
-> planned; see [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md).
+> planned; see [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md). What is and
+> is not protected, and by which planned change, is in the
+> [threat model](docs/threat-model.md).
 
 Wheelhouse is a companion for the *arr stack, not a replacement for it, and
 is not affiliated with or endorsed by Plex, Sonarr, Radarr, SABnzbd, Jellyfin
@@ -97,6 +99,8 @@ Set via environment variables (see [.env.example](.env.example)):
 | `PORT` | no | TCP port to listen on (default `3000`; the image sets `3050`) |
 | `WHEELHOUSE_LISTEN` | no | Address to listen on as `host:port` (for example `127.0.0.1:3050`); overrides `PORT`. Default: all interfaces on `PORT`. `HOSTNAME` is never used |
 | `WHEELHOUSE_MEDIA_ROOTS` | no | Folders Convert may touch, separated like `PATH` (default `/movies:/tv`) |
+| `WHEELHOUSE_DB` | no | SQLite database file (default `/config/wheelhouse.db`). **The server does not open it yet**; only `wheelhouse backup` and `wheelhouse rekey` do (see below) |
+| `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated. Not used by the server yet |
 
 The variable names are the same as in 0.1.x, so an existing `.env` keeps working.
 
@@ -134,6 +138,24 @@ without affecting the others. Setting only one of the two variables is
 reported as a configuration error. This environment convention is interim;
 Phase 2 moves instance configuration to the database.
 
+### Backups and the master key (preview)
+
+Phase 2 stores accounts and service settings in a SQLite database in `/config`,
+with provider secrets encrypted by a master key. **The server does not use the
+database yet**; the storage commands exist so they are tested before anything
+depends on them. They run inside the container, as the container's user:
+
+```sh
+docker exec wheelhouse wheelhouse backup /config/wheelhouse-backup.db   # never overwrites; mode 0600
+docker exec wheelhouse wheelhouse rekey                                  # new master key, re-encrypts every secret
+# Podman: the same with `podman exec`.
+```
+
+A backup contains the encrypted secrets but **not the master key**: back up
+`secret.key` (or whatever you pointed `WHEELHOUSE_SECRET_KEY_FILE` at) somewhere
+else, or the backup cannot be read. Stop Wheelhouse before `rekey` and take a
+backup first. Details in [server/README.md](server/README.md#storage-and-secrets).
+
 The Codecs "Convert" feature reads and writes your media files directly, so
 mount them at the same in-container paths Sonarr/Radarr use. Conversions
 keep a `.bak` of the original and never delete it. See
@@ -141,7 +163,7 @@ keep a `.bak` of the original and never delete it. See
 
 ## Development
 
-Wheelhouse is a Go server (`server/`, standard library only) that serves a Vite
+Wheelhouse is a Go server (`server/`, standard library plus the SQLite driver) that serves a Vite
 single-page UI (`web/`) embedded in the binary.
 
 ```sh

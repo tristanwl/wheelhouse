@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strconv"
 )
 
@@ -71,6 +72,21 @@ func Load(getenv func(string) string) (Config, error) {
 		cfg.Port = p
 	}
 	return cfg, nil
+}
+
+// DBFileName is the SQLite database's name inside the config directory.
+const DBFileName = "wheelhouse.db"
+
+// DBPath returns where the SQLite database lives: WHEELHOUSE_DB when set,
+// otherwise <configDir>/wheelhouse.db. configDir is the single config directory
+// the rest of the server uses (codecs.DefaultConfigDir, /config in the image),
+// which also holds the generated secret.key. Nothing opens the database at
+// server start yet; the backup and rekey commands do.
+func DBPath(getenv func(string) string, configDir string) string {
+	if v := getenv("WHEELHOUSE_DB"); v != "" {
+		return v
+	}
+	return filepath.Join(configDir, DBFileName)
 }
 
 func parsePort(s string) (int, error) {

@@ -3,6 +3,8 @@
 //	wheelhouse               run the server
 //	wheelhouse healthcheck   exit 0 if the local server answers /healthz (for HEALTHCHECK)
 //	wheelhouse version       print the version (also --version)
+//	wheelhouse backup FILE   write a consistent copy of the database to FILE
+//	wheelhouse rekey         re-encrypt every stored secret under a new master key
 package main
 
 import (
@@ -19,6 +21,7 @@ import (
 	"time"
 
 	"github.com/tristanwl/wheelhouse/server/internal/app"
+	"github.com/tristanwl/wheelhouse/server/internal/codecs"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
 	"github.com/tristanwl/wheelhouse/server/internal/converter"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
@@ -37,8 +40,23 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "backup", "rekey":
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			e := cliEnv{getenv: os.Getenv, configDir: codecs.DefaultConfigDir, stdout: os.Stdout}
+			var err error
+			if os.Args[1] == "backup" {
+				err = runBackup(ctx, e, os.Args[2:])
+			} else {
+				err = runRekey(ctx, e, os.Args[2:])
+			}
+			stop()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "wheelhouse %s: %v\n", os.Args[1], err)
+				os.Exit(1)
+			}
+			return
 		default:
-			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version]\n", os.Args[0])
+			fmt.Fprintf(os.Stderr, "usage: %s [healthcheck | version | backup <file> | rekey]\n", os.Args[0])
 			os.Exit(2)
 		}
 	}
