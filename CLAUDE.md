@@ -99,6 +99,10 @@ Everything that talks to another service goes through the provider layer in
   provider's `canary_test.go` and `acceptance/secrets.test.ts` plant canary
   secrets and sweep every error string, route and log; when you add a route or
   provider, make sure it is covered, and never weaken them.
+- **Upstream bodies are untrusted in shape, not just size.** Decode them with
+  `core.DecodeJSON` or `HTTPClient.JSON` (element, depth and string limits and
+  the process-wide gate), never `json.Unmarshal` on a response, and give an
+  endpoint that returns a whole library its own `Request.MaxBytes`.
 - **Adapters normalize.** Sizes in bytes, progress 0..1, durations in seconds,
   states from the shared enums. An unreachable service returns a `ProviderError`
   (the caller reports it as down); a wrong key is a clear "API key incorrect".
