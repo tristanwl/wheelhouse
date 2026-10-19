@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,11 +138,11 @@ func TestHashRoundTripStoresItsParameters(t *testing.T) {
 	if !strings.HasPrefix(enc, "$argon2id$v=19$m=16,t=2,p=1$") || strings.Contains(enc, goodPW) {
 		t.Fatalf("unexpected encoding %q", enc)
 	}
-	ok, p, err := h.Verify(context.Background(), enc, goodPW)
+	ok, p, err := h.Verify(context.Background(), enc, goodPW, nil)
 	if err != nil || !ok || p != (Params{Memory: 16, Time: 2, Threads: 1}) {
 		t.Fatalf("verify: %v %v %+v", ok, err, p)
 	}
-	if ok, _, _ := h.Verify(context.Background(), enc, goodPW+"x"); ok {
+	if ok, _, _ := h.Verify(context.Background(), enc, goodPW+"x", nil); ok {
 		t.Fatal("a wrong password verified")
 	}
 	enc2, _ := h.Hash(context.Background(), goodPW)
@@ -151,7 +152,7 @@ func TestHashRoundTripStoresItsParameters(t *testing.T) {
 	// A hash made with other parameters still verifies; it is reported as weaker.
 	old := newHasher(Params{Memory: 8, Time: 1, Threads: 1})
 	oldEnc, _ := old.Hash(context.Background(), goodPW)
-	ok, p, _ = h.Verify(context.Background(), oldEnc, goodPW)
+	ok, p, _ = h.Verify(context.Background(), oldEnc, goodPW, nil)
 	if !ok || !p.Weaker(h.params) || h.params.Weaker(p) {
 		t.Fatalf("old hash: ok=%v params=%+v", ok, p)
 	}
@@ -167,7 +168,7 @@ func TestMalformedStoredHashesNeverMatchAndNeverCrash(t *testing.T) {
 		"$argon2id$v=19$m=8,t=1,p=0$c2FsdHNhbHQ$a2V5a2V5a2V5a2V5a2V5",
 		"$argon2id$v=19$m=8,t=1,p=1$!!!$a2V5a2V5a2V5a2V5a2V5",
 	} {
-		ok, _, err := h.Verify(context.Background(), bad, "x")
+		ok, _, err := h.Verify(context.Background(), bad, "x", nil)
 		if ok || err == nil {
 			t.Errorf("%q: ok=%v err=%v", bad, ok, err)
 		}
@@ -225,6 +226,30 @@ func TestUsernameRules(t *testing.T) {
 		if got := ValidateUsername(name) == nil; got != ok {
 			t.Errorf("%q: valid=%v, want %v", name, got, ok)
 		}
+	}
+}
+
+func TestReservedUsernamesAreRefusedAtCreateAndRenameButStillLogIn(t *testing.T) {
+	e := newEnv(t)
+	e.admin("alice")
+	for _, n := range []string{"local-network", "CLI", "System", "anonymous", "Local-Network"} {
+		if err := ValidateUsername(n); err == nil {
+			t.Errorf("%q accepted", n)
+		}
+		if _, err := e.s.CreateUser(e.ctx(), Actor{Name: "t"}, NewUser{Username: n, Password: goodPW, Role: RoleUser}); err == nil {
+			t.Errorf("created %q", n)
+		}
+	}
+	bob := e.user("bobby", RoleUser)
+	if _, err := e.s.UpdateUser(e.ctx(), Actor{Name: "t"}, bob.ID, UserPatch{Username: ptr("system")}); err == nil {
+		t.Error("renamed to a reserved name")
+	}
+	// An account that already has such a name (from an older database) keeps working.
+	if _, err := e.db.Exec(e.ctx(), "UPDATE users SET username = 'cli' WHERE id = ?", bob.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.login("cli", goodPW); err != nil {
+		t.Fatalf("existing account: %v", err)
 	}
 }
 
@@ -472,10 +497,9 @@ func TestEveryFailedLoginLooksTheSameAndComputesAHash(t *testing.T) {
 		_, _ = e.login("carol", "wrong-password-1")
 	}
 	cases := map[string][2]string{
-		"unknown user":    {"nobody", goodPW},
-		"wrong password":  {"alice", "wrong-password-1"},
-		"disabled":        {"bob", goodPW},
-		"locked (unused)": {"carol", goodPW},
+		"unknown user":   {"nobody", goodPW},
+		"wrong password": {"alice", "wrong-password-1"},
+		"disabled":       {"bob", goodPW},
 	}
 	for name, c := range cases {
 		before := e.s.h.computed.Load()
@@ -486,6 +510,15 @@ func TestEveryFailedLoginLooksTheSameAndComputesAHash(t *testing.T) {
 		if got := e.s.h.computed.Load() - before; got != 1 {
 			t.Errorf("%s: %d hashes computed, want 1 (no timing difference between real and made-up users)", name, got)
 		}
+	}
+	// A locked account answers the same way but spends no hash at all: nothing
+	// observable differs, and a flood against it costs nothing.
+	before := e.s.h.computed.Load()
+	if _, err := e.login("carol", goodPW); err != ErrInvalidCredentials { //nolint:errorlint
+		t.Errorf("locked: %v", err)
+	}
+	if got := e.s.h.computed.Load() - before; got != 0 {
+		t.Errorf("a locked account still cost %d hashes", got)
 	}
 	if _, err := e.login("alice", goodPW); err != nil {
 		t.Fatalf("a failure of another name locked alice: %v", err)
@@ -1076,3 +1109,208 @@ func TestHealthyReflectsTheDatabase(t *testing.T) {
 }
 
 var _ = sql.ErrNoRows
+
+// ---------------------------------------------------------------- throttle races
+
+// slow makes one verification take a few milliseconds, so a burst of parallel
+// attempts really overlaps.
+var slow = Params{Memory: 8 * 1024, Time: 2, Threads: 1}
+
+func newSlowEnv(t *testing.T) *env {
+	e := newEnv(t)
+	e.s = New(e.db, Options{Clock: e.clk.now, Params: slow, ConfigDir: e.dir})
+	return e
+}
+
+// burst runs n logins at once, released together, and returns how many
+// succeeded.
+func (e *env) burst(n int, f func(i int) error) (ok int) {
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	var mu sync.Mutex
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if f(i) == nil {
+				mu.Lock()
+				ok++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	return ok
+}
+
+func (e *env) assertNoLeaks() {
+	e.t.Helper()
+	e.s.th.mu.Lock()
+	n := len(e.s.th.inflight)
+	e.s.th.mu.Unlock()
+	if n != 0 || len(e.s.h.sem) != 0 || e.s.h.waiting.Load() != 0 {
+		e.t.Fatalf("leaked: %d reservations, %d hash slots, %d waiting", n, len(e.s.h.sem), e.s.h.waiting.Load())
+	}
+}
+
+func TestParallelGuessesCannotPassTheAccountLock(t *testing.T) {
+	e := newSlowEnv(t)
+	e.admin("alice")
+	before := e.s.h.computed.Load()
+	// 100 parallel wrong guesses: exactly the allowance is verified.
+	ok := e.burst(100, func(i int) error {
+		_, err := e.login("alice", fmt.Sprintf("wrong-guess-%d-xxxx", i))
+		return err
+	})
+	if ok != 0 {
+		t.Fatal("a wrong password logged in")
+	}
+	if got := e.s.h.computed.Load() - before; got != accountThreshold {
+		t.Fatalf("%d verifications for 100 parallel guesses, want exactly %d", got, accountThreshold)
+	}
+	// The account is locked now: the right password is refused and costs no hash.
+	before = e.s.h.computed.Load()
+	if _, err := e.login("alice", goodPW); err != ErrInvalidCredentials { //nolint:errorlint
+		t.Fatalf("the right password after the burst: %v", err)
+	}
+	if e.s.h.computed.Load() != before {
+		t.Fatal("a locked account was verified")
+	}
+	// One failure row per verified failure, one lockout row, not one per guess.
+	if n := e.count("SELECT count(*) FROM audit_log WHERE action = 'login.fail'"); n != accountThreshold {
+		t.Fatalf("%d login.fail rows, want %d", n, accountThreshold)
+	}
+	if n := e.count("SELECT count(*) FROM audit_log WHERE action = 'login.lockout'"); n != 1 {
+		t.Fatalf("%d login.lockout rows, want 1", n)
+	}
+	e.assertNoLeaks()
+	// The lock still lifts, and the slots work again.
+	e.clk.advance(lockBase + time.Second)
+	if _, err := e.login("alice", goodPW); err != nil {
+		t.Fatalf("after the lock: %v", err)
+	}
+	e.assertNoLeaks()
+}
+
+func TestParallelGuessesWithTheRightPasswordLastStillRespectTheLimit(t *testing.T) {
+	e := newSlowEnv(t)
+	e.admin("alice")
+	before := e.s.h.computed.Load()
+	e.burst(100, func(i int) error {
+		pw := fmt.Sprintf("wrong-guess-%d-xxxx", i)
+		if i == 99 {
+			pw = goodPW
+		}
+		_, err := e.login("alice", pw)
+		return err
+	})
+	if got := e.s.h.computed.Load() - before; got > accountThreshold {
+		t.Fatalf("%d verifications, more than the %d allowed", got, accountThreshold)
+	}
+	e.assertNoLeaks()
+}
+
+func TestParallelGuessesAreLimitedPerAddressAcrossNames(t *testing.T) {
+	e := newSlowEnv(t)
+	e.admin("alice")
+	before := e.s.h.computed.Load()
+	e.burst(100, func(i int) error {
+		_, err := e.login(fmt.Sprintf("nobody%d", i), "wrong-guess-xxxx")
+		return err
+	})
+	if got := e.s.h.computed.Load() - before; got != addressThreshold {
+		t.Fatalf("%d verifications from one address, want %d", got, addressThreshold)
+	}
+	e.assertNoLeaks()
+}
+
+func TestParallelChangePasswordGuessesAreLimited(t *testing.T) {
+	e := newSlowEnv(t)
+	e.admin("alice")
+	r := e.mustLogin("alice")
+	id, _ := e.s.Authenticate(e.ctx(), r.Token)
+	before := e.s.h.computed.Load()
+	ok := e.burst(60, func(i int) error {
+		_, err := e.s.ChangePassword(e.ctx(), id, fmt.Sprintf("wrong-current-%d-xx", i), otherPW, client)
+		return err
+	})
+	if ok != 0 {
+		t.Fatal("a wrong current password was accepted")
+	}
+	if got := e.s.h.computed.Load() - before; got != accountThreshold {
+		t.Fatalf("%d verifications, want %d", got, accountThreshold)
+	}
+	if _, err := e.s.ChangePassword(e.ctx(), id, goodPW, otherPW, client); !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("right current password while locked: %v", err)
+	}
+	e.assertNoLeaks()
+}
+
+func TestAFloodAgainstOneAccountDoesNotSlowOtherClients(t *testing.T) {
+	e := newSlowEnv(t)
+	e.admin("alice")
+	e.user("bob", RoleUser)
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			cm := ClientMeta{Addr: fmt.Sprintf("198.51.100.%d", g+1), UserAgent: "flood"}
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					_, _ = e.s.Login(e.ctx(), "alice", "wrong-guess-xxxx", cm)
+				}
+			}
+		}()
+	}
+	time.Sleep(100 * time.Millisecond) // alice is locked and being hammered
+	start := time.Now()
+	_, err := e.s.Login(e.ctx(), "bob", goodPW, ClientMeta{Addr: "203.0.113.7"})
+	took := time.Since(start)
+	close(stop)
+	wg.Wait()
+	if err != nil {
+		t.Fatalf("bob: %v", err)
+	}
+	if took > 2*time.Second {
+		t.Fatalf("a legitimate login took %v during a flood against another account", took)
+	}
+	e.assertNoLeaks()
+}
+
+func TestVerificationQueueIsBounded(t *testing.T) {
+	h := newHasher(cheap)
+	for range maxConcurrentHashes {
+		h.sem <- struct{}{} // every slot busy
+	}
+	errs := make(chan error, maxQueuedVerifies)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	for range maxQueuedVerifies {
+		go func() {
+			_, _, err := h.Verify(ctx, "$argon2id$v=19$m=8,t=1,p=1$c2FsdHNhbHRzYWx0$QUJDREVGR0hJSktMTU5PUA", "x", nil)
+			errs <- err
+		}()
+	}
+	for h.waiting.Load() != maxQueuedVerifies {
+		time.Sleep(time.Millisecond)
+	}
+	if _, _, err := h.Verify(ctx, "$argon2id$v=19$m=8,t=1,p=1$c2FsdHNhbHRzYWx0$QUJDREVGR0hJSktMTU5PUA", "x", nil); !errors.Is(err, errBusy) {
+		t.Fatalf("the queue is not bounded: %v", err)
+	}
+	cancel()
+	for range maxQueuedVerifies {
+		if err := <-errs; err == nil {
+			t.Error("a queued verification of a stored hash succeeded after cancel")
+		}
+	}
+	if h.waiting.Load() != 0 {
+		t.Fatal("waiters leaked")
+	}
+}

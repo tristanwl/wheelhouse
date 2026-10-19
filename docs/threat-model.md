@@ -120,7 +120,7 @@ risks), **out of scope**.
 |---|---|---|---|
 | S1 | A1 uses the app with no identity at all | Authentication on every non-public route; the `Guard` (`internal/app/guard.go`); an enumerating test fails if a route has no decision, and the acceptance suite sends an unauthenticated request to every non-public route and expects 401 | **In place** (item 2; `TestEveryRouteHasAnAccessLevel`, `TestUnauthenticatedRequestsGet401OnEveryGuardedRoute`, `acceptance/auth-levels.test.ts`). Released 0.2.x: none |
 | S2 | A1 claims a fresh install before the admin does | Only the setup routes answer until an admin exists (503 `setup required` elsewhere); a one-time setup token (logged once, `/config/setup-token`, mode 0600, constant-time compare, throttled, removed on success, new at every start) is required; setup works only while no account exists, re-checked inside its transaction | **In place** on the server (item 2; `TestSetupNeedsTheTokenAndWorksOnce`, `TestSetupLosingTheRaceCreatesNothing`, `acceptance/auth-setup.test.ts`); the web setup page is item 3 / 6 |
-| S3 | A1 guesses or brute-forces a password | Argon2id (64 MiB, 3 passes) with at most 3 hashes at a time, minimum length 12, common-password list, per-account (5 failures, 30 s doubling to 15 min) and per-address (20) lockout kept in memory, identical responses for unknown users, wrong passwords, disabled accounts and locked logins | **In place** (item 2; `TestEveryFailedLoginLooksTheSameAndComputesAHash`, `TestAccountLockoutBacksOffAndLiftsAfterTheTime`, `acceptance/auth-throttle.test.ts`). The counters are not persisted; a restart clears them (accepted: only the operator restarts the server) |
+| S3 | A1 guesses or brute-forces a password | Argon2id (64 MiB, 3 passes) with at most 3 hashes at a time, minimum length 12, common-password list, per-account (5 failures, 30 s doubling to 15 min) and per-address (20) lockout kept in memory, identical responses for unknown users, wrong passwords, disabled accounts and locked logins | **In place** (item 2; `TestEveryFailedLoginLooksTheSameAndComputesAHash`, `TestAccountLockoutBacksOffAndLiftsAfterTheTime`, `acceptance/auth-throttle.test.ts`). Item 10 closed a race: attempts in flight now count toward the threshold (a slot is reserved per account and address key before hashing), the lock is re-checked after the hash semaphore, locked keys skip Argon2 entirely and the verification queue is bounded (`TestParallelGuessesCannotPassTheAccountLock` and siblings). The counters are not persisted; a restart clears them (accepted: only the operator restarts the server) |
 | S4 | A3 spoofs `X-Forwarded-For` to look like a local address and get the bypass | Bypass matches the TCP peer address; forwarded headers ignored unless the peer is in the trusted-proxy list, then only the right-most untrusted entry counts and malformed or contradictory values give "unknown" (no bypass); tests for spoofing, chains, IPv6, IPv4-mapped, zone ids and malformed values | **In place** (item 5; `server/internal/netaccess`, `TestSpoofedForwardedHeadersAreIgnoredFromUntrustedPeers`, `acceptance/auth-bypass.test.ts`) |
 | S5 | Session theft or fixation | 256-bit random tokens, only the SHA-256 stored, a new session at login and password change (a client-supplied token is never adopted), `HttpOnly`, `SameSite=Strict`, `Secure` and the `__Host-` name over HTTPS, idle 12 h and absolute 30 d limits, revocation (own and, for admins, anyone's); a stolen cookie works until it expires or is revoked | **In place** (item 2; `TestSessionCookieFlags`, `TestSessionsEndWhenIdleOrOld`, `TestPasswordChangeRotatesAndRevokes`, `acceptance/auth-sessions.test.ts`) |
 | S6 | A2 impersonates a configured service | TLS verification is always on, no insecure option (`TestHTTPClientVerifiesTLSCertificates`); plain-HTTP services on a LAN are the operator's choice and are not authenticated beyond their API key | In place; plain HTTP **accepted** |
@@ -138,7 +138,7 @@ risks), **out of scope**.
 | T-6 | A crash corrupts the database or leaves half a migration | WAL, `synchronous=FULL`, every migration batch in one transaction (`TestCrashMidTransactionLeavesNoTrace`, `TestMigrationsApplyInOrderAndAllOrNothing`) | **In place** (item 1) |
 | T-7 | Path traversal or a symlink escape makes conversion touch a file outside the media roots | The path is resolved (`..` refused, `EvalSymlinks`, regular file), must be inside a root, and the check repeats at job start and before the swap (`TestResolveInRoots`). The roots are admin-only configuration validated on save (absolute, no `..`, not `/` or a system folder or the config directory, existing directories, no nesting: `TestValidateRoots`), and a job read back from the database is resolved against the roots in force when it runs, never trusted (`TestStaleRowOutsideTheRootsNeverRuns`) | **In place** (item 8) |
 | T-8 | A request body or header forged to reach ffmpeg arguments | Arguments come from validated enums and an absolute resolved path; `os/exec`, never a shell | **In place** (`internal/converter`) |
-| T-9 | A hostile `Host`/`Origin` or header trick | Only the TCP peer is used for the bypass (S4); the CSRF origin check (S7); `X-Forwarded-Proto` is believed only from a peer in `WHEELHOUSE_TRUSTED_PROXIES` and only decides the cookie's `Secure` flag; the recorded address is the client address resolved by the same rules (the TCP peer unless a trusted proxy forwarded it) | **In place** (items 2 and 5; `TestSessionCookieFlags`, `netaccess` tests). DNS rebinding against a bypass client is not stopped by the origin check (Origin and Host both name the attacker's name); a Host allow-list is a candidate for item 10 |
+| T-9 | A hostile `Host`/`Origin` or header trick | Only the TCP peer is used for the bypass (S4); the CSRF origin check (S7); `X-Forwarded-Proto` is believed only from a peer in `WHEELHOUSE_TRUSTED_PROXIES` and only decides the cookie's `Secure` flag; the recorded address is the client address resolved by the same rules (the TCP peer unless a trusted proxy forwarded it) | **In place** (items 2 and 5; `TestSessionCookieFlags`, `netaccess` tests). **DNS rebinding is mitigated** (item 10): the bypass identity is granted only when the request's `Host` is an IP literal, `localhost`, a single-label name, or on the allow-list (`WHEELHOUSE_ALLOWED_HOSTS` plus the stored list), so a rebound attacker domain gets the same 401 as any anonymous client (`TestBypassNeedsAnAcceptableHost`, `TestSpoofedHostAndOriginPairIsRefusedForTheBypass`, `acceptance/auth-hardening.test.ts`). Session cookies are host-bound and need no such check |
 
 ### Repudiation
 
@@ -171,7 +171,7 @@ risks), **out of scope**.
 | D1 | A2 sends an endless or huge body | 64 MiB response cap, 8 s timeout covering the body, the stream is cut at the limit (`TestHTTPClientRejectsOversizedResponses`, `TestHTTPClientStopsReadingAnEndlessStream`, `TestHTTPClientTimesOutInsteadOfHanging`) | **In place** |
 | D2 | A2 redirects Wheelhouse elsewhere or in a loop | Redirects only within the same host, never https to http, loop limit (`TestHTTPClientRefusesRedirectsToAnotherHost`, `TestCheckRedirectRefusesHTTPSDowngrade`, `TestHTTPClientStopsRedirectLoops`) | **In place** |
 | D3 | A1 holds connections open | Server read-header (10 s), read (30 s) and idle (120 s) timeouts | **In place**; request body size limits per route are part of item 10's review |
-| D4 | A1 floods login | Per-account and per-address throttling and lockout, a cap of 3 concurrent password hashes, a bounded in-memory table, and audit rows written once per lock rather than per attempt. A lock never blocks the local CLI recovery path: `reset-password` (and an admin's reset) lifts it | **In place** (item 2; `TestPasswordResetLiftsTheLockout`, `TestThrottleTableIsBoundedAndKeepsLockouts`). An attacker can still lock out a *known* account name for up to 15 minutes at a time (accepted, as everywhere; existing sessions keep working and an administrator can reset) |
+| D4 | A1 floods login | Per-account and per-address throttling and lockout, a cap of 3 concurrent password hashes, a bounded in-memory table, and audit rows written once per lock rather than per attempt (a locked key spends no hash and writes no row; a burst of parallel guesses cannot exceed the allowance). A lock never blocks the local CLI recovery path: `reset-password` (and an admin's reset) lifts it | **In place** (item 2; `TestPasswordResetLiftsTheLockout`, `TestThrottleTableIsBoundedAndKeepsLockouts`). An attacker can still lock out a *known* account name for up to 15 minutes at a time (accepted, as everywhere; existing sessions keep working and an administrator can reset) |
 | D5 | One failing service takes the dashboard down | Each instance fails independently (`TestOneInstanceFailingNeverAffectsTheOthers`) | **In place** |
 | D6 | A7 crashes ffmpeg or makes a conversion run forever | Child process under a context, one job at a time, cancel endpoint, the original kept as `.bak`; ffmpeg itself parsing hostile files is **accepted** (T2) | Partly in place (item 8: the queue survives a restart; a job running at the time is marked `interrupted`, never resumed or re-run from a stale row) |
 | D7 | The disk fills (a huge conversion, an unbounded audit log) | Audit rows are small and written once per lock rather than per failed attempt; retention pruning (default 180 days) arrives with its settings; conversion needs space for a second copy and fails cleanly | Partly in place; pruning pending; disk exhaustion by conversion **accepted** |
@@ -244,8 +244,20 @@ Off by default. An administrator turns it on with a list of CIDR ranges
   cross-origin page cannot read that response, so it cannot learn the token. It
   changes when the server restarts or the client's address does; the UI refetches
   it. A script that worked without credentials in 0.2.x must fetch the session
-  first and send the token. Limit: DNS rebinding makes the attacker's page
-  same-origin, so it can read the token (see T-9).
+  first and send the token. DNS rebinding would make an attacker's page
+  same-origin and let it read the token, which is why the Host check below
+  applies first (see T-9).
+- **Which Host counts.** The bypass is granted only when the request's `Host`
+  (port stripped, lower-cased, IPv6 literals unbracketed, trailing dot removed) is
+  an IP literal, `localhost`, a name without a dot (cannot be registered in
+  public DNS) or an entry of the allow-list: `WHEELHOUSE_ALLOWED_HOSTS` (read-only)
+  plus the list stored with the network settings (at most 64 names; `*.example.lan`
+  matches names below it; `*`, bare TLDs, IP addresses and malformed names are
+  refused). Turning the bypass on from the UI adds the Host of that request. A request
+  that fails the check gets the ordinary anonymous 401, including the CSRF token
+  endpoint. The proxy must pass `Host` through unchanged. Residual: a host on
+  the list is trusted to resolve only to the operator's address; a name whose DNS
+  an attacker controls must not be listed.
 - **Wide ranges.** Ranges that are not entirely inside private space (RFC 1918,
   100.64/10, loopback, 169.254/16, fc00::/7, fe80::/10) are accepted with a
   `warnings` entry that the admin page must show; `0.0.0.0/0` and `::/0` (and the
@@ -254,6 +266,32 @@ Off by default. An administrator turns it on with a list of CIDR ranges
 - **Audit.** Changes to the settings (`network.update`, by the admin) and every
   add, delete and conversion by the bypass principal carry `via: bypass`, the
   resolved client address, and the TCP `peer` when a proxy forwarded the request.
+
+## Security review findings (item 10, set 1: auth, host allow-list, web)
+
+Three independent reviewers attacked a running build. Confirmed findings and their
+status (each fix has a regression test that fails on the old code):
+
+| Finding | Severity | Status |
+|---|---|---|
+| Login throttle race: N parallel guesses all passed the lock check before any failed, so 100 parallel logins let the right password through past the 5-failure lock; `ChangePassword` likewise | Medium | **Fixed.** In-flight reservations per key, lock re-checked after the semaphore, locked keys skip Argon2, bounded queue, one lockout row per lock |
+| DNS rebinding reaches the local-network bypass (Host and Origin both attacker-controlled) | Medium | **Fixed** by the Host allow-list (above); migration 0006 |
+| `safeRedirect` could return `//evil.example/x` (from `/.//evil.example/x`) | Low | **Fixed**: the normalised result is checked; backslashes and control characters rejected |
+| `/.gitkeep` and `/.gitignore` served from the embedded UI | Low | **Fixed**: dot files are never served |
+| No HSTS | Info | **Added**, only on HTTPS requests (direct TLS or a trusted proxy's `X-Forwarded-Proto: https`) |
+| An account could be named like an audit actor (`local-network`, `cli`, `system`, `anonymous`) | Low | **Fixed** at create and rename (case-insensitive); an existing account with such a name keeps working |
+| The setup token is logged to stderr | Info | **Accepted by design** (it is the delivery mechanism). The log line and docs say that anyone who can read the logs before setup completes can claim the instance; the Compose example publishes `127.0.0.1:3050` and the Podman unit explains `WHEELHOUSE_LISTEN` |
+| `/healthz` discloses the version | Info | **Accepted**: needed by health checks and the update check; the version is also in the image tag |
+| Trusted-proxy documentation did not show an appending nginx configuration | Docs | **Fixed** ([operations.md](operations.md#behind-a-reverse-proxy)) |
+| Release notes and SECURITY.md claimed "no authentication" for every pre-release | Docs | **Fixed**: the note depends on the version |
+
+**Per-address lockout behind one address.** Failures count per client address as
+well as per account: 20 failures lock the address (an IPv6 /64) for 30 seconds,
+doubling to 15 minutes. Behind a reverse proxy that is not in the trusted list,
+or a NAT shared by many people, everyone shares one address, so one person's
+guessing locks the others out of login. Administrators in that position should
+list the proxy under trusted proxies so the real client address is used. This is
+availability, not confidentiality (accepted, as for locking a known account name).
 
 ## Phase 2 items and the threats they close
 
@@ -267,7 +305,7 @@ Off by default. An administrator turns it on with a list of CIDR ranges
 | 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary. Done: the admin pages never receive a stored secret, secrets are not kept in browser storage or logged, one-time passwords live only in component state, and every destructive action asks first |
 | 8 Converter settings (merged) | T-7 for configurable roots, HDR handling (no silent loss of HDR: excluded by default, acknowledged when allowed), D6 persisted queue |
 | 9 Bugs and polish | arm64 image: no change to the model |
-| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit |
+| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit. Set 1 (auth, host allow-list, web): see "Security review findings" above |
 
 ## Residual risks (what stays true after Phase 2)
 

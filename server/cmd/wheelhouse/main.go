@@ -171,6 +171,11 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	envHosts, err := netaccess.ParseHostEnv(os.Getenv("WHEELHOUSE_ALLOWED_HOSTS"))
+	if err != nil {
+		return fmt.Errorf("WHEELHOUSE_ALLOWED_HOSTS: %w", err)
+	}
+	network.SetEnvHosts(envHosts)
 
 	convSettings, err := converter.NewSettings(ctx, db, converter.EnvRoots(os.Getenv), []string{configDir, filepath.Dir(config.DBPath(os.Getenv, configDir))})
 	if err != nil {

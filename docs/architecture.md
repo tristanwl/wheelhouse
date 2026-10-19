@@ -696,7 +696,13 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   key, returned by `GET /api/auth/session` (`"bypass": true`). It is refused
   (401) on logout, password change and the session routes, 403 on admin routes;
   a real session always wins. The settings are cached in memory and replaced on
-  each update, so a request never reads the database for them.
+  each update, so a request never reads the database for them. Before the bypass
+  identity is granted the request's `Host` must be acceptable
+  (`netaccess.Service.HostAllowed`: an IP literal, `localhost`, a single-label
+  name, `WHEELHOUSE_ALLOWED_HOSTS` or the stored `allowedHosts`, column
+  `allowed_hosts`, migration 0006), the defence against DNS rebinding; a request
+  that fails it is an ordinary anonymous 401. `PUT /api/admin/network` adds the
+  request's own Host when it turns the bypass on (`addedHost` in the response).
 - **Login throttling.** In memory (a failed login causes no database write, a
   restart is the only thing that forgets it, and the locks are short): the first 4
   failures for a name are free, the 5th locks it for 30 s and each further failure
@@ -704,6 +710,11 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   counts as its /64); 10 wrong setup tokens lock an address for setup. Counters
   exist for names that do not exist, a locked login answers like a wrong password,
   and a password reset by an admin or the CLI lifts the lock. The table is bounded.
+  Attempts in flight count toward the threshold: `Login` and `ChangePassword`
+  reserve a slot per key before hashing (`throttle.reserve`), convert it into a
+  failure or release it afterwards, re-check the lock once the hash semaphore is
+  held, skip Argon2 for locked keys, and shed load when more than 32 verifications
+  are queued, so a parallel burst cannot exceed the allowance.
 - **Audit log.** `audit_log` is append-only (triggers refuse update and delete).
   Setup, login ok / failure / lockout, logout, password change and reset, user
   create / update / role change / delete, session revocation, library add and

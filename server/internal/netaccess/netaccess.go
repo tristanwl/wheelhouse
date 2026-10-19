@@ -36,6 +36,10 @@ type Settings struct {
 	// Proxies are the trusted proxies stored in the database; the environment
 	// list (WHEELHOUSE_TRUSTED_PROXIES) is a second, read-only source.
 	Proxies []netip.Prefix
+	// AllowedHosts are the stored host names (canonical, see ParseHostEntry)
+	// whose requests may get the bypass, besides IP literals, localhost and
+	// single-label names.
+	AllowedHosts []string
 }
 
 // Input is a settings update as an administrator sends it: text, parsed and
@@ -44,6 +48,8 @@ type Input struct {
 	Enabled        bool
 	CIDRs          []string
 	TrustedProxies []string
+	// AllowedHosts replaces the stored host list; nil keeps the current one.
+	AllowedHosts *[]string
 }
 
 // ValidationError is a settings update that was refused; its text is safe to show.
@@ -59,8 +65,10 @@ func invalid(format string, a ...any) error { return &ValidationError{Msg: fmt.S
 type Service struct {
 	db  *store.DB // nil: settings live in memory only (tests)
 	env []netip.Prefix
-	cur atomic.Pointer[Settings]
-	now func() time.Time
+	// envHosts is WHEELHOUSE_ALLOWED_HOSTS (read-only).
+	envHosts []string
+	cur      atomic.Pointer[Settings]
+	now      func() time.Time
 }
 
 // New loads the stored settings. env is WHEELHOUSE_TRUSTED_PROXIES, already parsed.
@@ -92,8 +100,8 @@ func (s *Service) EnvProxies() []netip.Prefix { return append([]netip.Prefix(nil
 
 func load(ctx context.Context, db *store.DB) (Settings, error) {
 	var enabled int
-	var cidrs, proxies string
-	if err := db.QueryRow(ctx, `SELECT bypass_enabled, bypass_cidrs, trusted_proxies FROM network_settings WHERE id = 1`).Scan(&enabled, &cidrs, &proxies); err != nil {
+	var cidrs, proxies, hosts string
+	if err := db.QueryRow(ctx, `SELECT bypass_enabled, bypass_cidrs, trusted_proxies, allowed_hosts FROM network_settings WHERE id = 1`).Scan(&enabled, &cidrs, &proxies, &hosts); err != nil {
 		return Settings{}, err
 	}
 	st := Settings{Enabled: enabled == 1}
@@ -103,6 +111,9 @@ func load(ctx context.Context, db *store.DB) (Settings, error) {
 	}
 	if st.Proxies, err = decodeList(proxies); err != nil {
 		return Settings{}, fmt.Errorf("trusted_proxies: %w", err)
+	}
+	if err := json.Unmarshal([]byte(hosts), &st.AllowedHosts); err != nil {
+		return Settings{}, fmt.Errorf("allowed_hosts: %w", err)
 	}
 	return st, nil
 }
@@ -205,17 +216,24 @@ func (s *Service) Update(ctx context.Context, in Input) (Settings, []string, err
 	if in.Enabled && len(bypass) == 0 {
 		return Settings{}, nil, invalid("cidrs: add at least one range before turning the bypass on")
 	}
-	st := Settings{Enabled: in.Enabled, Bypass: bypass, Proxies: proxies}
+	hosts := s.cur.Load().AllowedHosts
+	if in.AllowedHosts != nil {
+		if hosts, err = ParseHostList(*in.AllowedHosts); err != nil {
+			return Settings{}, nil, err
+		}
+	}
+	st := Settings{Enabled: in.Enabled, Bypass: bypass, Proxies: proxies, AllowedHosts: hosts}
 	if s.db != nil {
 		cj, _ := json.Marshal(Strings(bypass))
 		pj, _ := json.Marshal(Strings(proxies))
+		hj, _ := json.Marshal(append([]string{}, hosts...))
 		enabled := 0
 		if st.Enabled {
 			enabled = 1
 		}
 		err := s.db.Tx(ctx, func(tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `UPDATE network_settings SET bypass_enabled = ?, bypass_cidrs = ?, trusted_proxies = ?, updated_at = ? WHERE id = 1`,
-				enabled, string(cj), string(pj), s.now().Unix())
+			_, err := tx.ExecContext(ctx, `UPDATE network_settings SET bypass_enabled = ?, bypass_cidrs = ?, trusted_proxies = ?, allowed_hosts = ?, updated_at = ? WHERE id = 1`,
+				enabled, string(cj), string(pj), string(hj), s.now().Unix())
 			return err
 		})
 		if err != nil {

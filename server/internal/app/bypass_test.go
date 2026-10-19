@@ -55,6 +55,16 @@ func newBypassEnv(t *testing.T, enabled bool, stored netaccess.Input, envProxies
 	return &bypassHarness{harness: newHarnessOn(t, acc, opts...), net: nw}
 }
 
+// do defaults the Host to a single-label LAN name, which is always eligible for
+// the bypass; the host allow-list tests set o.host themselves.
+func (b *bypassHarness) do(method, path string, o reqOpts) *httptest.ResponseRecorder {
+	b.t.Helper()
+	if o.host == "" {
+		o.host = "nas:3050"
+	}
+	return b.harness.do(method, path, o)
+}
+
 // get is a plain request from a peer (no session).
 func (b *bypassHarness) from(peer, method, path string, o reqOpts) *httptest.ResponseRecorder {
 	b.t.Helper()
@@ -172,8 +182,8 @@ func TestBypassCSRFRules(t *testing.T) {
 			t.Errorf("%s: %d", name, code)
 		}
 	}
-	if code := post(reqOpts{csrf: csrf, headers: map[string]string{"Origin": "http://example.com"}}); code == 403 {
-		t.Error("a same-origin request with the token was refused") // httptest hosts are example.com
+	if code := post(reqOpts{csrf: csrf, headers: map[string]string{"Origin": "http://nas:3050"}}); code == 403 {
+		t.Error("a same-origin request with the token was refused") // the harness Host is nas:3050
 	}
 	if code := post(reqOpts{csrf: csrf}); code == 403 || code == 401 {
 		t.Errorf("valid token: %d", code)

@@ -115,7 +115,15 @@ jobs:
 
           extra="Docker image: \`docker pull $IMAGE:$version\`"
           if [ "$prerelease" = true ]; then
-            extra="$extra"$'\n\n'"**Alpha.** Wheelhouse has no authentication yet. Run it only on a trusted network."
+            # Versions up to 0.2.x (the last released) have no authentication; later pre-releases do.
+            case "$version" in
+              0.0.* | 0.1.* | 0.2.*)
+                extra="$extra"$'\n\n'"**Alpha.** This version has no authentication. Run it only on a trusted network."
+                ;;
+              *)
+                extra="$extra"$'\n\n'"**Pre-release.** This version has accounts and sign-in, but the project is still a pre-release: do not expose it to the internet."
+                ;;
+            esac
           fi
 
           if gh release view "$version" > /dev/null 2>&1; then

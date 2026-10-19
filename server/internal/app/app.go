@@ -169,9 +169,13 @@ func Handler(o Options) http.Handler {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
+	if o.Network == nil {
+		o.Network = netaccess.NewMemory(o.TrustedProxies)
+	}
+	g := &Guard{Net: o.Network}
 	return middleware.Chain(Routes(o),
 		middleware.WithRequestID(),
-		middleware.SecurityHeaders(),
+		middleware.SecurityHeaders(g.secure),
 		middleware.AccessLog(o.Logger),
 		middleware.Recover(o.Logger),
 	)

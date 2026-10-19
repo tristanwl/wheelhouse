@@ -45,7 +45,7 @@ func TestChainOrderFirstIsOutermost(t *testing.T) {
 }
 
 func TestSecurityHeaders(t *testing.T) {
-	rec := serve(Chain(http.HandlerFunc(ok), SecurityHeaders()), "GET", "/", nil)
+	rec := serve(Chain(http.HandlerFunc(ok), SecurityHeaders(nil)), "GET", "/", nil)
 	h := rec.Header()
 
 	csp := h.Get("Content-Security-Policy")
@@ -105,7 +105,7 @@ func TestCSPAllowsExactlyTheImageHosts(t *testing.T) {
 
 func TestSecurityHeadersOnErrorResponses(t *testing.T) {
 	boom := func(http.ResponseWriter, *http.Request) { panic("boom") }
-	h := Chain(http.HandlerFunc(boom), SecurityHeaders(), Recover(logger(&bytes.Buffer{})))
+	h := Chain(http.HandlerFunc(boom), SecurityHeaders(nil), Recover(logger(&bytes.Buffer{})))
 	rec := serve(h, "GET", "/", nil)
 	if rec.Code != 500 || rec.Header().Get("Content-Security-Policy") == "" {
 		t.Fatalf("status %d, CSP %q", rec.Code, rec.Header().Get("Content-Security-Policy"))

@@ -336,8 +336,45 @@ export interface NetworkSettings {
   cidrs: string[];
   trustedProxies: string[];
   envTrustedProxies?: string[];
+  /** Stored host names allowed to use the bypass (besides IPs, localhost, single-label names). */
+  allowedHosts?: string[];
+  /** The same from WHEELHOUSE_ALLOWED_HOSTS: read-only. */
+  envAllowedHosts?: string[];
+  /** Set on a save that turned the bypass on: the Host of that request, added to the list. */
+  addedHost?: string;
   warnings: string[];
-  client?: { address: string; forwarded?: boolean; inRange: boolean };
+  client?: {
+    address: string;
+    forwarded?: boolean;
+    inRange: boolean;
+    host?: string;
+    hostAllowed?: boolean;
+  };
+}
+
+/**
+ * A quick check of an allowed host name before it is sent (the server decides).
+ * Names need at least two labels; `*.example.lan` allows everything below a name.
+ * undefined when it looks right.
+ */
+export function validateHostName(text: string): string | undefined {
+  const t = text.trim().toLowerCase().replace(/\.$/, "");
+  if (t === "") return "Enter a host name such as nas.example.lan.";
+  if (t === "*" || /^\*\.[^.]*$/.test(t))
+    return "A wildcard must be followed by a full name, such as *.example.lan.";
+  const base = t.startsWith("*.") ? t.slice(2) : t;
+  if (base.includes("*"))
+    return "A wildcard is only allowed as the first part, as in *.example.lan.";
+  if (/^[0-9.:]+$/.test(base) || base.includes(":"))
+    return "IP addresses are always allowed; list host names only.";
+  if (!base.includes("."))
+    return "Names without a dot (such as nas) and localhost are always allowed.";
+  if (
+    base.length > 253 ||
+    !base.split(".").every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l))
+  )
+    return "Use letters, digits and hyphens in dot-separated parts, with no port or path.";
+  return undefined;
 }
 
 /**

@@ -49,10 +49,14 @@ type throttle struct {
 	now func() time.Time
 	mu  sync.Mutex
 	m   map[string]*entry
+	// inflight counts verifications that hold a reservation per key (see
+	// reserve). It is separate from m so that clearing or evicting a failure
+	// record can never lose track of a running verification.
+	inflight map[string]int
 }
 
 func newThrottle(now func() time.Time) *throttle {
-	return &throttle{now: now, m: map[string]*entry{}}
+	return &throttle{now: now, m: map[string]*entry{}, inflight: map[string]int{}}
 }
 
 func accountKey(username string) string {
@@ -92,10 +96,69 @@ func (t *throttle) locked(key string) (bool, time.Time) {
 	return false, time.Time{}
 }
 
+// reserve claims one verification slot for key. It succeeds only when the
+// recorded failures plus the verifications already running leave room under
+// threshold, and the key is not locked. This is what stops a burst of parallel
+// guesses: every one of them used to pass the lock check before any of them
+// had failed, so N parallel guesses were all verified. Now at most
+// threshold-failures verifications can be running for a key, so the lock
+// holds even against a simultaneous burst. A caller that gets true must call
+// release (a success or an aborted attempt) or failRelease (a wrong password)
+// exactly once.
+func (t *throttle) reserve(key string, threshold int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := t.now()
+	failures := 0
+	if e := t.m[key]; e != nil {
+		if e.lockedUntil.After(now) {
+			return false
+		}
+		if now.Sub(e.last) <= decayAfter {
+			failures = e.failures
+		}
+	}
+	// After an expired lock the failures are still on record (the next one
+	// doubles the lock), and exactly one attempt at a time may probe.
+	if t.inflight[key] >= max(threshold-failures, 1) {
+		return false
+	}
+	t.inflight[key]++
+	return true
+}
+
+// release gives back a reservation without recording a failure.
+func (t *throttle) release(key string) {
+	t.mu.Lock()
+	t.releaseLocked(key)
+	t.mu.Unlock()
+}
+
+func (t *throttle) releaseLocked(key string) {
+	if t.inflight[key] <= 1 {
+		delete(t.inflight, key)
+		return
+	}
+	t.inflight[key]--
+}
+
+// failRelease converts a reservation into a recorded failure in one step, so
+// the slot is never counted twice or not at all.
+func (t *throttle) failRelease(key string, threshold int) (started bool, until time.Time) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.releaseLocked(key)
+	return t.failLocked(key, threshold)
+}
+
 // fail records a failure for key and reports whether it started a lockout.
 func (t *throttle) fail(key string, threshold int) (started bool, until time.Time) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.failLocked(key, threshold)
+}
+
+func (t *throttle) failLocked(key string, threshold int) (started bool, until time.Time) {
 	now := t.now()
 	e := t.m[key]
 	if e != nil && now.Sub(e.last) > decayAfter && !e.lockedUntil.After(now) {
