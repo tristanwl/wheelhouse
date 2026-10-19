@@ -557,6 +557,13 @@ func (q *JobQueue) loop() {
 	<-q.recovered
 	for {
 		q.mu.Lock()
+		// Shutting down: whatever is still queued stays queued, so the next
+		// start resumes it (only the job that was running is interrupted).
+		if q.base.Err() != nil {
+			q.processing = false
+			q.mu.Unlock()
+			return
+		}
 		var next *job
 		for _, j := range q.jobs {
 			if j.Status == StatusQueued {

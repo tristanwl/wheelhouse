@@ -431,6 +431,55 @@ func TestShutdownMidConversionLeavesAnInterruptedFailure(t *testing.T) {
 	}
 }
 
+// Shutdown stops the running job only: Wait returns after its finish notice was
+// delivered (the audit row is written there, before the database closes), and the
+// jobs still queued stay queued so the next start resumes them.
+func TestShutdownWaitsForTheFinishNoticeAndKeepsQueuedJobsQueued(t *testing.T) {
+	root, first := library(t, "a.mkv", "x")
+	second := filepath.Join(root, "b.mkv")
+	if err := os.WriteFile(second, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db := openDB(t)
+	ft := newFakeTools(t, "slow", probeTwoSeconds)
+	var mu sync.Mutex
+	var finished []string
+	ctx, cancel := context.WithCancel(context.Background())
+	q := NewQueue(ctx, Config{
+		MediaRoots: []string{root}, Ffmpeg: ft.ffmpeg, Ffprobe: ft.ffprobe, Store: NewSQLStore(db),
+		OnFinish: func(j Job) {
+			time.Sleep(50 * time.Millisecond) // the audit write takes a moment
+			mu.Lock()
+			finished = append(finished, j.ID)
+			mu.Unlock()
+		},
+	})
+	a := q.Enqueue(request(first))
+	b := q.Enqueue(request(second))
+	wait(t, q, a.ID, StatusRunning)
+	cancel() // SIGTERM
+	waitCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
+	defer stop()
+	q.Wait(waitCtx)
+	mu.Lock()
+	got := append([]string(nil), finished...)
+	mu.Unlock()
+	if len(got) != 1 || got[0] != a.ID {
+		t.Fatalf("finish notices when Wait returned: %v, want only the interrupted job %s", got, a.ID)
+	}
+	if j, _ := q.Get(b.ID); j.Status != StatusQueued {
+		t.Errorf("the queued job became %q during shutdown; it must stay queued", j.Status)
+	}
+	rows, _ := NewSQLStore(db).Load(context.Background())
+	status := map[string]Status{}
+	for _, r := range rows {
+		status[r.ID] = r.Status
+	}
+	if status[a.ID] != StatusFailed || status[b.ID] != StatusQueued {
+		t.Errorf("saved rows: %v", status)
+	}
+}
+
 func TestFinishedJobsArePrunedByCountAndAge(t *testing.T) {
 	root, file := library(t, "a.mkv", "x")
 	db := openDB(t)
