@@ -3,8 +3,8 @@
 Wheelhouse can delete library items and rewrite media files. The released 0.2.x
 has **no authentication**: run it only on a trusted network and do not expose it
 to the internet. The development branch enforces accounts, sessions, CSRF
-protection and login throttling on the server (its web UI has no login screen
-yet, so no release with it exists); see [docs/operations.md](docs/operations.md)
+protection and login throttling on the server (its web UI has a login page, a
+setup wizard and an account page; no release with it exists yet); see [docs/operations.md](docs/operations.md)
 for running it and the [Phase 2 plan](docs/wheelhouse-phase2-plan.md) for what is
 still to come.
 

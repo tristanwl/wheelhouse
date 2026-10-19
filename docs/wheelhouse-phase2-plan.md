@@ -132,9 +132,9 @@ database and key at start; users, Argon2id passwords, sessions, CSRF, login
 throttling, the `Guard` that enforces the route levels, the audit log, a minimal
 `POST /api/auth/setup` with the setup token, the user and audit API, `wheelhouse
 reset-password` and `forget-secrets`, [docs/operations.md](operations.md), and an
-authenticated mode in the acceptance suite. Items 3 to 10 are open. The web UI
-cannot log in until item 6, so nothing is released before then (a browser smoke
-test borrows the acceptance harness's session meanwhile).
+authenticated mode in the acceptance suite. Item 6 (web login, setup wizard, account, route guards) is done:
+the UI has its own session handling and the browser smoke test drives the real login
+and setup flows. The other items are open.
 
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`

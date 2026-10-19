@@ -11,7 +11,7 @@ delete library items (with `?confirm=true`) and queue conversions. That is
 acceptable only on a trusted network and is why no 1.0 exists. The development
 branch (Phase 2 item 2, merged but **not released**) enforces authentication on
 the server: accounts, sessions, login, CSRF, throttling, an audit log and the
-route levels are in place and tested; the web UI has no login screen yet (item 6),
+route levels are in place and tested; the web UI's login, setup wizard, account page and route guards are in place (item 6),
 so no release is cut until the items that make it usable have landed. Items
 marked "item N" below without "in place" are *not in place yet*. Nothing in this
 document should be read as a promise about a released version until the item that

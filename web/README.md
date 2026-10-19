@@ -35,6 +35,19 @@ make -C ../server build           # the binary now serves this UI
 placeholder page, so `go build` and `go test` work from a clean checkout.
 `npm run embed -- --clean` empties it again.
 
+## Signing in
+
+`src/lib/http.ts` is the only code that calls `fetch`: it sends the session cookie,
+adds the CSRF token (kept in memory, from `GET /api/auth/session`) to every non-GET
+request, retries once after a CSRF refusal, and reports 401 and 503 `setup required`
+to `components/SessionProvider.tsx`. The provider holds the user, role and the
+`bypass` flag (set by the server for the local-network bypass); `RequireAuth` and
+`RequireAdmin` (`components/Guards.tsx`) send people to `/login`, `/setup`,
+`/change-password` or the not-authorised page. The pages are `/login`, `/setup`
+(wizard step 1), `/account` and `/change-password`. Nothing about the session is
+written to browser storage. `/admin/*` is reserved for the admin pages: replace the
+placeholder children of that route in `src/routes.tsx`.
+
 ## Security constraints
 
 The server sends `default-src 'self'; script-src 'self'; style-src 'self'; font-src
@@ -53,7 +66,8 @@ https://artworks.thetvdb.com` (posters from TMDB and, for Sonarr, TheTVDB). So:
 
 ## Tests
 
-`npm test` runs the component and router tests (jsdom): every route, nav gating and
+`npm test` runs the component and router tests (jsdom): the API client (CSRF, 401, 503), route guards,
+login, setup, forced password change, account and bypass rendering (`src/auth.test.tsx`), every route, nav gating and
 the "not configured" stubs, the 404 page, the delete flow, Explore add, Codecs
 convert and hard-link confirmation, SWR polling intervals, and the Logo with fake
 timers.
@@ -68,7 +82,9 @@ npm run test:smoke
 ```
 
 It starts the binary against the acceptance suite's fake services, loads every page
-in headless Chromium, and fails on a console error, a CSP violation, a failed or
+in headless Chromium (the pages start with the harness administrator's session cookie; the
+login, first-run setup and forced password change are driven through the UI itself, using
+the setup token from the config directory), and fails on a console error, a CSP violation, a failed or
 erroring request, or a request to a host outside the CSP allow-list; it also checks
 the logo, the self-hosted font and the confirm-then-delete flow. Without a binary
 or a working Chromium it skips and says why; `WHEELHOUSE_SMOKE_REQUIRED=1` (set in

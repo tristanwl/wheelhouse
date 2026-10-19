@@ -19,8 +19,8 @@ using hardware encoding when your GPU supports it.
 > authentication** — run it only on a trusted network. The development branch
 > (`main`, unreleased) has accounts, sessions and login on the server: every
 > route needs a signed-in user, and nothing works until the first administrator is
-> created ([First run](#first-run)). Its web UI has no login or setup screen yet,
-> so use a release (or the API) until that lands. Swappable providers, a setup
+> created ([First run](#first-run)). Its web UI has a login page, a setup wizard
+> and an account page; no release has them yet. Swappable providers, a setup
 > wizard and an admin page are planned; see
 > [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md). What is and is not
 > protected, and by which planned change, is in the
@@ -66,7 +66,8 @@ creating the administrator needs a **one-time setup token**:
 - A new token is made at every start while there are no users, so a token from an
   old log line is dead.
 
-The web UI will get a setup screen (until then, use the API):
+Open the UI: it shows the setup wizard (token, administrator name, password), signs you
+in and offers the admin pages. Without the UI, use the API:
 
 ```sh
 curl -s -X POST http://localhost:3050/api/auth/setup -H 'content-type: application/json' \
