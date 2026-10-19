@@ -259,7 +259,7 @@ export async function runCommand(
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const env = serverEnv(options.configDir, options.env, await freePort());
   const cmd = `exec ${SERVER_CMD} ${args.map(shellQuote).join(" ")}`;
-  const child = spawn("sh", ["-c", cmd], {
+  const child = spawn("/bin/sh", ["-c", cmd], {
     cwd: SERVER_CWD,
     env: env as unknown as NodeJS.ProcessEnv,
     stdio: ["ignore", "pipe", "pipe"],
@@ -295,7 +295,7 @@ async function spawnServer(options: StartOptions): Promise<Spawned> {
   let output = "";
   // `exec` replaces the shell with the command, so the PID we hold is the
   // server's own and killing it leaves nothing behind.
-  const child = spawn("sh", ["-c", `exec ${SERVER_CMD}`], {
+  const child = spawn("/bin/sh", ["-c", `exec ${SERVER_CMD}`], {
     cwd: SERVER_CWD,
     env: env as unknown as NodeJS.ProcessEnv,
     stdio: ["ignore", "pipe", "pipe"],
@@ -323,8 +323,62 @@ async function spawnServer(options: StartOptions): Promise<Spawned> {
   };
 }
 
+/**
+ * Spawns a server and waits until it is really ours and ready. Ports come from
+ * `freePort()`, which only says a port was free a moment ago: another test
+ * worker (or a fake service) can take it before the server binds, and then
+ * `/healthz` is answered by somebody else's server, whose config directory has
+ * no setup token. So "ready" needs two things: the server's own "listening"
+ * log line for our address (it prints it only after a successful bind and after
+ * the setup token file is written) and a `/healthz` answer. When the server
+ * fails to bind, it is started again on a new port.
+ */
+async function spawnReady(options: StartOptions): Promise<Spawned> {
+  const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
+  for (let attempt = 1; ; attempt++) {
+    const sp = await spawnServer(options);
+    const kill = async () => {
+      if (sp.exited() === undefined) {
+        sp.child.kill("SIGTERM");
+        const timer = setTimeout(() => sp.child.kill("SIGKILL"), 3000);
+        await sp.exit;
+        clearTimeout(timer);
+      }
+      if (sp.ownsConfigDir) rmSync(sp.configDir, { recursive: true, force: true });
+    };
+    const base = `http://127.0.0.1:${sp.port}`;
+    const ours = (): boolean => sp.output().includes(`listening addr=127.0.0.1:${sp.port}`);
+    let bindFailed = false;
+    for (;;) {
+      if (sp.exited() !== undefined) {
+        if (attempt < 5 && /address already in use|bind:/.test(sp.output())) {
+          bindFailed = true;
+          break;
+        }
+        if (sp.ownsConfigDir) rmSync(sp.configDir, { recursive: true, force: true });
+        throw new Error(`server ${sp.exited()} before it was ready\n${sp.output()}`);
+      }
+      if (ours()) {
+        try {
+          const res = await send(base, "/healthz", { timeoutMs: 2000 }, {});
+          if (res.status === 200) return sp;
+        } catch {
+          /* not answering yet */
+        }
+      }
+      if (Date.now() > deadline) {
+        await kill();
+        throw new Error(`server not ready on /healthz after the timeout\n${sp.output()}`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (bindFailed) await sp.exit;
+    if (bindFailed && sp.ownsConfigDir) rmSync(sp.configDir, { recursive: true, force: true });
+  }
+}
+
 export async function startServer(options: StartOptions = {}): Promise<RunningServer> {
-  const sp = await spawnServer(options);
+  const sp = await spawnReady(options);
   const baseUrl = `http://127.0.0.1:${sp.port}`;
   const dbPath = path.join(sp.configDir, "wheelhouse.db");
   const secrets = new Set<string>([ADMIN.password]);
@@ -346,26 +400,6 @@ export async function startServer(options: StartOptions = {}): Promise<RunningSe
       rmSync(sp.configDir, { recursive: true, force: true });
   }
 
-  // Ready when GET /healthz answers (it needs neither a session nor an account).
-  const deadline = Date.now() + (options.readyTimeoutMs ?? 60_000);
-  for (;;) {
-    if (sp.exited() !== undefined) {
-      if (sp.ownsConfigDir) rmSync(sp.configDir, { recursive: true, force: true });
-      throw new Error(`server ${sp.exited()} before it was ready\n${sp.output()}`);
-    }
-    try {
-      const res = await anon.request("/healthz", { timeoutMs: 2000 });
-      if (res.status === 200) break;
-    } catch {
-      /* not listening yet */
-    }
-    if (Date.now() > deadline) {
-      await stop();
-      throw new Error(`server not ready on /healthz after the timeout\n${sp.output()}`);
-    }
-    await new Promise((r) => setTimeout(r, 150));
-  }
-
   const server: RunningServer = {
     baseUrl,
     configDir: sp.configDir,
@@ -379,7 +413,7 @@ export async function startServer(options: StartOptions = {}): Promise<RunningSe
     plant,
     async cli(args) {
       const cmd = `exec ${SERVER_CMD} ${args.map(shellQuote).join(" ")}`;
-      const child = spawn("sh", ["-c", cmd], {
+      const child = spawn("/bin/sh", ["-c", cmd], {
         cwd: SERVER_CWD,
         env: sp.env as unknown as NodeJS.ProcessEnv,
         stdio: ["ignore", "pipe", "pipe"],

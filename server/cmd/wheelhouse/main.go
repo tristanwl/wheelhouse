@@ -73,7 +73,10 @@ func main() {
 		}
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(log); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx, log)
+	stop()
+	if err != nil {
 		log.Error("fatal", "error", err)
 		os.Exit(1)
 	}
@@ -104,7 +107,16 @@ func healthcheck(getenv func(string) string, rt http.RoundTripper) error {
 	return nil
 }
 
-func run(log *slog.Logger) error {
+// listen opens the listener; a variable only so a test can observe the moment.
+var listen = func(ctx context.Context, addr string) (net.Listener, error) {
+	return (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+}
+
+// run starts the server and returns when ctx is cancelled or it fails. The order
+// matters: storage, key and the setup token file come first, and the listener
+// is opened last, so an address that answers always has its token on disk
+// (TestSetupTokenIsWrittenBeforeListening pins it).
+func run(ctx context.Context, log *slog.Logger) error {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
@@ -114,9 +126,6 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	configDir := config.ConfigDir(os.Getenv)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	// Storage first: a server that cannot open its database or key must not
 	// listen, because every route but health and setup needs accounts. Each of
@@ -162,7 +171,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.Addr())
+	ln, err := listen(ctx, cfg.Addr())
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
