@@ -1,0 +1,267 @@
+{
+  "providers": [
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "apiKey": {
+            "minLength": 1,
+            "title": "API key",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "apiKey"
+        ],
+        "title": "Sonarr",
+        "type": "object",
+        "x-order": [
+          "url",
+          "apiKey"
+        ]
+      },
+      "displayName": "Sonarr",
+      "id": "sonarr",
+      "role": "mediaManager",
+      "secretKeys": [
+        "apiKey"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "apiKey": {
+            "minLength": 1,
+            "title": "API key",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "apiKey"
+        ],
+        "title": "Radarr",
+        "type": "object",
+        "x-order": [
+          "url",
+          "apiKey"
+        ]
+      },
+      "displayName": "Radarr",
+      "id": "radarr",
+      "role": "mediaManager",
+      "secretKeys": [
+        "apiKey"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "apiKey": {
+            "minLength": 1,
+            "title": "API key",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "apiKey"
+        ],
+        "title": "SABnzbd",
+        "type": "object",
+        "x-order": [
+          "url",
+          "apiKey"
+        ]
+      },
+      "displayName": "SABnzbd",
+      "id": "sabnzbd",
+      "role": "downloadClient",
+      "secretKeys": [
+        "apiKey"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "password": {
+            "minLength": 1,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          },
+          "username": {
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "username",
+          "password"
+        ],
+        "title": "qBittorrent",
+        "type": "object",
+        "x-order": [
+          "url",
+          "username",
+          "password"
+        ]
+      },
+      "displayName": "qBittorrent",
+      "id": "qbittorrent",
+      "role": "downloadClient",
+      "secretKeys": [
+        "password"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "token": {
+            "minLength": 1,
+            "title": "Token",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "Plex",
+        "type": "object",
+        "x-order": [
+          "url",
+          "token"
+        ]
+      },
+      "displayName": "Plex",
+      "id": "plex",
+      "role": "mediaServer",
+      "secretKeys": [
+        "token"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "apiKey": {
+            "minLength": 1,
+            "title": "API key",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "Jellyfin",
+        "type": "object",
+        "x-order": [
+          "url",
+          "apiKey"
+        ]
+      },
+      "displayName": "Jellyfin",
+      "id": "jellyfin",
+      "role": "mediaServer",
+      "secretKeys": [
+        "apiKey"
+      ]
+    },
+    {
+      "configSchema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "apiKey": {
+            "minLength": 1,
+            "title": "API key",
+            "type": "string",
+            "writeOnly": true,
+            "x-secret": true
+          },
+          "url": {
+            "format": "uri",
+            "minLength": 1,
+            "pattern": "^https?://",
+            "title": "Base URL",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ],
+        "title": "TMDB",
+        "type": "object",
+        "x-order": [
+          "apiKey",
+          "url"
+        ]
+      },
+      "displayName": "TMDB",
+      "id": "tmdb",
+      "role": "metadata",
+      "secretKeys": [
+        "apiKey"
+      ]
+    }
+  ]
+}
