@@ -31,3 +31,24 @@ export function passwordStrength(password: string): Strength {
   }
   return { meetsMinimum: true, level: 2, label: "Long enough; longer is better" };
 }
+
+// Leaves out look-alike characters (0/O, 1/l/I) so it can be read out or typed from a note.
+const GENERATED_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/**
+ * A random one-time password for an account an administrator creates or resets,
+ * from the browser's secure random source. It is shown once and never stored.
+ */
+export function generatePassword(length = 20): string {
+  const limit = 256 - (256 % GENERATED_ALPHABET.length); // reject the biased tail
+  let out = "";
+  const buf = new Uint8Array(length * 2);
+  while (out.length < length) {
+    crypto.getRandomValues(buf);
+    for (const b of buf) {
+      if (b < limit && out.length < length)
+        out += GENERATED_ALPHABET[b % GENERATED_ALPHABET.length];
+    }
+  }
+  return out;
+}
