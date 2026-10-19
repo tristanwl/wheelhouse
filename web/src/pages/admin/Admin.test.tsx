@@ -938,6 +938,40 @@ describe("who can see the administration pages", () => {
       "page"
     );
   });
+
+  // Issue #86: at phone width the tabs used to sit in a row that scrolled
+  // sideways with the last ones cut off and no hint. They wrap instead, so none is
+  // hidden; the order (which is the keyboard focus order) and the semantics stay.
+  it("sub-navigation wraps instead of scrolling, in a fixed order", async () => {
+    mockApi({ ...base, "GET /api/admin/features": { features: [] } });
+    renderApp("/admin/features");
+    const nav = await screen.findByRole("navigation", { name: "Administration" });
+    const list = within(nav).getByRole("list");
+    expect(list.className).toMatch(/\bflex-wrap\b/);
+    expect(list.className).not.toMatch(/overflow-/);
+    for (const item of within(list).getAllByRole("listitem")) {
+      expect(item.className).not.toMatch(/overflow-|\bshrink-0\b/);
+    }
+    expect(
+      within(list)
+        .getAllByRole("link")
+        .map((a) => a.textContent)
+    ).toEqual([
+      "Services",
+      "Features",
+      "Users",
+      "Sessions",
+      "Network",
+      "Media and converter",
+      "Audit log",
+    ]);
+    // The current page is the only one marked, with aria-current (not by colour alone).
+    expect(
+      within(list)
+        .getAllByRole("link")
+        .filter((a) => a.hasAttribute("aria-current"))
+    ).toHaveLength(1);
+  });
 });
 
 describe("first-run checklist on the dashboard", () => {
