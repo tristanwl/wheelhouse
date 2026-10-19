@@ -16,6 +16,18 @@ func TestLoadDefaults(t *testing.T) {
 	}
 }
 
+func TestDBPath(t *testing.T) {
+	if got := DBPath(env(nil), "/config"); got != "/config/wheelhouse.db" {
+		t.Errorf("default = %q", got)
+	}
+	if got := DBPath(env(map[string]string{"WHEELHOUSE_DB": "/data/w.db"}), "/config"); got != "/data/w.db" {
+		t.Errorf("override = %q", got)
+	}
+	if got := DBPath(env(map[string]string{"WHEELHOUSE_DB": ""}), "/config"); got != "/config/wheelhouse.db" {
+		t.Errorf("empty = %q", got)
+	}
+}
+
 func TestLoadPort(t *testing.T) {
 	cfg, err := Load(env(map[string]string{"PORT": "8123"}))
 	if err != nil {
