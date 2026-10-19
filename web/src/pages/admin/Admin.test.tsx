@@ -691,11 +691,17 @@ describe("media and converter", () => {
 
   it("edits the media roots and the HDR switch against the contract", async () => {
     const user = userEvent.setup();
-    const stored = { mediaRoots: ["/movies"], includeHdr: false, effectiveRoots: ["/movies"] };
+    const stored = {
+      mediaRoots: ["/movies"],
+      includeHdr: false,
+      effectiveRoots: ["/movies"],
+      source: "default",
+    };
     const updated = {
       mediaRoots: ["/movies", "/tv"],
       includeHdr: true,
       effectiveRoots: ["/movies", "/tv"],
+      source: "database",
     };
     let saved = false;
     const { calls } = mockApi({
@@ -707,7 +713,9 @@ describe("media and converter", () => {
       },
     });
     renderApp("/admin/converter");
-    expect(await screen.findByText("In use now: /movies.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("In use now: /movies (the default folders).")
+    ).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: /HDR/ })).not.toBeChecked();
     await user.click(screen.getByRole("button", { name: "Add a folder" }));
     await user.type(screen.getByLabelText("Media folders, entry 2"), "tv");
@@ -722,7 +730,7 @@ describe("media and converter", () => {
       mediaRoots: ["/movies", "/tv"],
       includeHdr: true,
     });
-    expect(await screen.findByText("In use now: /movies, /tv.")).toBeInTheDocument();
+    expect(await screen.findByText("In use now: /movies, /tv (saved here).")).toBeInTheDocument();
   });
 });
 

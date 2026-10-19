@@ -6,6 +6,12 @@ import { validateMediaRoot, type ConverterSettings } from "@/lib/admin";
 import { fetcher } from "@/lib/fetcher";
 import { ApiError, apiJson, jsonInit } from "@/lib/http";
 
+const SOURCE_TEXT: Record<string, string> = {
+  database: " (saved here)",
+  environment: " (from the server's environment settings)",
+  default: " (the default folders)",
+};
+
 function ConverterForm({
   settings,
   onSaved,
@@ -52,7 +58,7 @@ function ConverterForm({
       <section className={`${CARD} space-y-4 p-4`}>
         <StringListEditor
           label="Media folders"
-          hint="The folders on the server where your movies and series live, as the server sees them (inside a container, the path inside the container). The codec page only reads and converts files below these folders."
+          hint="The folders where your movies and series live, as the server sees them (inside a container, the path inside the container). Conversion only touches files below these folders. Each must exist, must not be a system folder and must not overlap another one. Remove them all to go back to the server's environment settings or the default."
           values={roots}
           onChange={setRoots}
           validate={validateMediaRoot}
@@ -63,7 +69,7 @@ function ConverterForm({
         />
         <p className="text-sm text-slate-400" data-testid="effective-roots">
           {settings.effectiveRoots && settings.effectiveRoots.length > 0
-            ? `In use now: ${settings.effectiveRoots.join(", ")}.`
+            ? `In use now: ${settings.effectiveRoots.join(", ")}${SOURCE_TEXT[settings.source ?? ""] ?? ""}.`
             : "No media folder is in use yet, so conversion cannot start."}
         </p>
       </section>
@@ -73,7 +79,7 @@ function ConverterForm({
           checked={includeHdr}
           onChange={setIncludeHdr}
           disabled={busy}
-          description="Off by default. Converting an HDR file to another codec can wash out its colours, so the codec page leaves HDR files alone unless you turn this on."
+          description="Off by default. Conversion writes standard-range video, so an HDR or Dolby Vision file would lose its HDR and look grey on an HDR screen. Such files are left out of the codec page. When this is on they are shown, marked as HDR, and converting one needs an explicit confirmation."
         />
       </section>
       {error && <ErrorNote>{error}</ErrorNote>}
@@ -115,6 +121,7 @@ export default function ConverterPage() {
             mediaRoots: data.mediaRoots ?? [],
             includeHdr: data.includeHdr === true,
             effectiveRoots: data.effectiveRoots ?? [],
+            source: data.source,
           }}
           onSaved={(next) => void mutate(next, { revalidate: true })}
         />

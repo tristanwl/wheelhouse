@@ -608,6 +608,16 @@ describe.skipIf(reason)("browser smoke test", () => {
         await page.getByText("127.0.0.1", { exact: true }).waitFor();
         await page.getByText("Outside the ranges above").waitFor();
 
+        // Media and converter: the folders in use and the HDR switch (saving needs real folders).
+        await page
+          .getByRole("navigation", { name: "Administration" })
+          .getByRole("link", { name: "Media and converter" })
+          .click();
+        await page.getByText(/^In use now:/).waitFor();
+        expect(await page.getByRole("switch", { name: /HDR/ }).getAttribute("aria-checked")).toBe(
+          "false"
+        );
+
         // Audit log: the above is recorded, in words, and holds no secret.
         await page
           .getByRole("navigation", { name: "Administration" })

@@ -8,18 +8,26 @@ import (
 	"math"
 	"net/http"
 
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/codecs"
 	"github.com/tristanwl/wheelhouse/server/internal/converter"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/mediamanager"
+	"github.com/tristanwl/wheelhouse/server/internal/store"
 )
 
 // ConverterOptions configures the codec routes. The zero value is the
 // production behaviour.
 type ConverterOptions struct {
-	// MediaRoots are the folders conversion may touch (default
-	// converter.DefaultMediaRoots).
+	// MediaRoots are the media roots "from the environment" when Settings is nil
+	// (tests); empty means converter.DefaultMediaRoots.
 	MediaRoots []string
+	// Settings are the converter settings (media roots, HDR switch). Defaults to
+	// in-memory settings seeded with MediaRoots; main passes the stored ones.
+	Settings *converter.Settings
+	// Store is the database the conversion queue is saved in. Without it the
+	// queue lives in memory only.
+	Store *store.DB
 	// ConfigDir holds settings.json (default codecs.DefaultConfigDir).
 	ConfigDir string
 	// Ffmpeg and Ffprobe are the binaries (default: found on PATH).
@@ -60,20 +68,21 @@ func num(obj map[string]any, key string) (float64, bool) {
 // conversion routes (app/api/codec-analysis/** in the Next app).
 func registerCodecs(r *Router, d deps) {
 	conv := d.conv
-	if len(conv.MediaRoots) == 0 {
-		conv.MediaRoots = converter.DefaultMediaRoots
-	}
+	cset := d.convSet
 	if conv.ConfigDir == "" {
 		conv.ConfigDir = codecs.DefaultConfigDir
 	}
-	store := codecs.NewStore(conv.ConfigDir)
+	prefStore := codecs.NewStore(conv.ConfigDir)
 	detector := &converter.Detector{Ffmpeg: conv.Ffmpeg}
 	queue := conv.Queue
 	if queue == nil {
-		queue = converter.NewMemoryQueue(d.ctx, converter.Config{
-			MediaRoots: conv.MediaRoots,
-			Ffmpeg:     conv.Ffmpeg,
-			Ffprobe:    conv.Ffprobe,
+		cfg := converter.Config{
+			Roots:    cset.Roots,
+			AllowHDR: cset.IncludeHDR,
+			Logger:   d.log,
+			OnFinish: d.auditConversionFinish,
+			Ffmpeg:   conv.Ffmpeg,
+			Ffprobe:  conv.Ffprobe,
 			Rescan: func(ctx context.Context, instanceID string, itemID int) error {
 				client, err := d.rt.Client(ctx, instanceID)
 				if err != nil {
@@ -85,7 +94,11 @@ func registerCodecs(r *Router, d deps) {
 				}
 				return m.Rescan(ctx, itemID)
 			},
-		})
+		}
+		if conv.Store != nil {
+			cfg.Store = converter.NewSQLStore(conv.Store)
+		}
+		queue = converter.NewQueue(d.ctx, cfg)
 	}
 
 	r.HandleFunc("GET /api/codec-analysis", Authenticated, func(w http.ResponseWriter, req *http.Request) {
@@ -116,13 +129,13 @@ func registerCodecs(r *Router, d deps) {
 			files = append(files, res.Value.Files...)
 			resp.SkippedCount += res.Value.Skipped
 		}
-		resp.Analysis = codecs.Analyze(files, store.Get())
+		resp.Analysis = codecs.AnalyzeWith(files, prefStore.Get(), codecs.AnalyzeOptions{IncludeHDR: cset.IncludeHDR()})
 		resp.Problems = problems
 		writeJSON(w, http.StatusOK, resp)
 	})
 
 	r.HandleFunc("GET /api/codec-analysis/settings", Authenticated, func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, store.Get())
+		writeJSON(w, http.StatusOK, prefStore.Get())
 	})
 
 	r.HandleFunc("PUT /api/codec-analysis/settings", Admin, func(w http.ResponseWriter, req *http.Request) {
@@ -134,14 +147,14 @@ func registerCodecs(r *Router, d deps) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "hd and uhd must each be 'h264' or 'hevc'"})
 			return
 		}
-		if err := store.Set(prefs); err != nil {
+		if err := prefStore.Set(prefs); err != nil {
 			// Almost always a /config volume the container user can't write to.
 			writeJSON(w, http.StatusInternalServerError, map[string]string{
 				"error": fmt.Sprintf("Could not save settings (%s). Make sure the /config volume exists on the host and is writable by the container's user.", core.Redact(err.Error())),
 			})
 			return
 		}
-		writeJSON(w, http.StatusOK, store.Get())
+		writeJSON(w, http.StatusOK, prefStore.Get())
 	})
 
 	r.HandleFunc("GET /api/codec-analysis/encoders", Authenticated, func(w http.ResponseWriter, req *http.Request) {
@@ -176,7 +189,7 @@ func registerCodecs(r *Router, d deps) {
 		}
 
 		// Nothing is read, queued or written for a path outside the media roots.
-		resolved, err := converter.ResolveInRoots(conv.MediaRoots, filePath)
+		resolved, err := converter.ResolveInRoots(cset.Roots(), filePath)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
@@ -186,8 +199,11 @@ func registerCodecs(r *Router, d deps) {
 		// seeding. Converting leaves that copy alone (so disk use grows), or breaks
 		// the seed if the link was relied on: make the user say they know. A file
 		// that already has a job just reattaches, so it isn't asked again.
-		if ack, _ := obj["acknowledgeHardlink"].(bool); !ack {
-			if _, active := queue.FindActive(resolved); !active {
+		ackLink, _ := obj["acknowledgeHardlink"].(bool)
+		ackHDR, _ := obj["acknowledgeHdr"].(bool)
+		hdr := codecs.HDRNone
+		if _, active := queue.FindActive(resolved); !active {
+			if !ackLink {
 				if links, ok := converter.LinkCount(resolved); ok && links > 1 {
 					writeJSON(w, http.StatusConflict, map[string]any{
 						"error": fmt.Sprintf("This file has %d hard links, so another copy of it (for example one a torrent client is seeding) may share its data.", links),
@@ -196,7 +212,28 @@ func registerCodecs(r *Router, d deps) {
 					return
 				}
 			}
+			// HDR and Dolby Vision (issue #32): conversion writes SDR 8-bit, so the
+			// result loses the HDR. The class comes from the file itself, never from
+			// the request. Off by default; when allowed, the caller must say it knows.
+			hdr = converter.ProbeHDR(req.Context(), conv.Ffprobe, resolved)
+			if hdr.IsHDR() {
+				switch {
+				case !cset.IncludeHDR():
+					writeJSON(w, http.StatusConflict, map[string]any{
+						"error": "This file is HDR or Dolby Vision. Conversion would turn it into SDR 8-bit, so HDR files are left out unless an administrator allows converting them in the converter settings.",
+						"code":  "hdr-excluded", "hdr": hdr,
+					})
+					return
+				case !ackHDR:
+					writeJSON(w, http.StatusConflict, map[string]any{
+						"error": "This file is HDR or Dolby Vision. The result will be SDR 8-bit: the HDR and Dolby Vision metadata is lost and the picture may look washed out. Confirm to convert anyway.",
+						"code":  "hdr", "hdr": hdr,
+					})
+					return
+				}
+			}
 		}
+		owner, ownerName := ownerOf(req)
 
 		job := queue.Enqueue(converter.Request{
 			InstanceID:   instanceID,
@@ -207,10 +244,16 @@ func registerCodecs(r *Router, d deps) {
 			Backend:      backend,
 			TargetFamily: family,
 			ResolvedPath: resolved,
+			HDR:          hdr,
+			Owner:        owner,
+			OwnerName:    ownerName,
+			AckHardlink:  ackLink,
+			AckHDR:       ackHDR && hdr.IsHDR(),
 		})
 		d.audit(req, "conversion.start", job.ID, map[string]any{
 			"instanceId": instanceID, "itemId": int(itemID), "title": clip(title, 200), "file": clip(filePath, 400),
-			"backend": backendS, "targetFamily": familyS,
+			"backend": backendS, "targetFamily": familyS, "hdr": string(hdr),
+			"acknowledgedHardlink": ackLink, "acknowledgedHdr": ackHDR && hdr.IsHDR(),
 		})
 		writeJSON(w, http.StatusOK, job)
 	})
@@ -246,4 +289,45 @@ func clip(s string, n int) string {
 		r = r[:len(r)-1]
 	}
 	return string(r)
+}
+
+// ownerOf names who a request acts as, for the job list: the user id, or
+// "bypass" for the local-network bypass principal.
+func ownerOf(r *http.Request) (id, name string) {
+	i := IdentityOf(r.Context())
+	switch {
+	case i == nil:
+		return "cli", "system"
+	case i.Bypass:
+		return "bypass", auth.BypassUsername
+	}
+	return i.ID, i.Username
+}
+
+// auditConversionFinish records how a conversion ended. The actor is whoever
+// started the job; the entry has no client address (nobody asked right now).
+func (d deps) auditConversionFinish(j converter.Job) {
+	a := auth.Actor{Name: j.OwnerName}
+	switch j.Owner {
+	case "bypass":
+		a.Via = "bypass"
+	case "cli", "":
+	default:
+		a.ID = j.Owner
+	}
+	detail := map[string]any{
+		"status": string(j.Status), "instanceId": j.InstanceID, "itemId": j.ItemID,
+		"title": clip(j.Title, 200), "hdr": string(j.HDR), "newSize": j.NewSize,
+	}
+	if j.Error != "" {
+		detail["error"] = clip(j.Error, 300)
+	}
+	if j.Error == converter.InterruptedError {
+		detail["interrupted"] = true
+	}
+	if d.auth != nil {
+		d.auth.Record(context.WithoutCancel(d.ctx), a, "conversion.finish", j.ID, detail)
+		return
+	}
+	d.log.Info("audit", "action", "conversion.finish", "target", j.ID, "detail", detail)
 }

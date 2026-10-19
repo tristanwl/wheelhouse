@@ -382,4 +382,6 @@ export interface ConverterSettings {
   mediaRoots: string[];
   includeHdr: boolean;
   effectiveRoots: string[];
+  /** Where the roots in use come from. */
+  source?: "database" | "environment" | "default";
 }
