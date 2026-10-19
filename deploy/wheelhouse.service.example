@@ -17,7 +17,9 @@
 # are only needed for the Codecs "Convert" feature.
 #
 # The image runs as a non-root user, and any numeric user works. /config must be
-# writable by it (it holds settings.json). With rootless Podman, --userns=keep-id
+# writable by it and by nobody else (it holds the database, the master key and
+# settings.json; the server will not start from a world-writable directory; see
+# docs/operations.md). With rootless Podman, --userns=keep-id
 # --user=%U:%G maps the container user to YOUR host user, so it can read and
 # write your host-owned /config and media. Without it the container's user
 # maps to an unrelated sub-UID and cannot write to them. Tested together with

@@ -126,9 +126,15 @@ media). The open question below covers a later read-and-add role.
 
 ## Work plan
 
-Status: **item 1 is done** (threat model, `internal/store`, `internal/secrets`,
-`wheelhouse backup` and `rekey`; the server does not use the database yet, that
-starts with item 2). Items 2 to 10 are open.
+Status: **items 1 and 2 are done.** Item 1: threat model, `internal/store`,
+`internal/secrets`, `wheelhouse backup` and `rekey`. Item 2: the server opens the
+database and key at start; users, Argon2id passwords, sessions, CSRF, login
+throttling, the `Guard` that enforces the route levels, the audit log, a minimal
+`POST /api/auth/setup` with the setup token, the user and audit API, `wheelhouse
+reset-password` and `forget-secrets`, [docs/operations.md](operations.md), and an
+authenticated mode in the acceptance suite. Items 3 to 10 are open. The web UI
+cannot log in until item 6, so nothing is released before then (a browser smoke
+test borrows the acceptance harness's session meanwhile).
 
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`
@@ -137,8 +143,8 @@ without a release; the release after item 6 is 0.3.0.
 | # | PR | Notes |
 |---|---|---|
 | 1 | Threat model and storage foundation (done) | `docs/threat-model.md`; SQLite package, migrations, backups, secret encryption, `rekey`; first third-party dependency, justified |
-| 2 | Users, sessions and login | Argon2id, session store, CSRF, throttling, `authorize` middleware enforcing levels, audit log; acceptance suite gets an authenticated mode (setup then login helper; no server backdoor) |
-| 3 | First-run setup and recovery | setup token, 503 until set up, `reset-password`, upgrade path for 0.2.x installs |
+| 2 | Users, sessions and login (done) | Argon2id, session store, CSRF, throttling, `authorize` middleware enforcing levels, audit log; acceptance suite gets an authenticated mode (setup then login helper; no server backdoor) |
+| 3 | First-run setup and recovery | the setup token flow, 503 until set up and `reset-password` landed with item 2; left: the setup wizard routes' polish (wizard steps, import of environment services), the upgrade path for 0.2.x installs in the UI |
 | 4 | Stored configuration | `DatabaseConfigSource`, environment seed and import, instance CRUD and test-connection routes, feature toggles, runtime reload |
 | 5 | Local-network bypass | CIDRs, trusted proxies, role cap, tests for header spoofing |
 | 6 | Web: login, setup wizard, account, route guards | session handling, CSRF header, 401 handling, user menu |
@@ -154,7 +160,7 @@ after item 10, **1.0.0** after a soak period with no open security findings. The
 ## Acceptance criteria for 1.0.0
 
 1. A fresh container serves only setup until an admin exists, and the setup
-   token is required (test).
+   token is required (test: `acceptance/auth-setup.test.ts`).
 2. Every registered route has a level and an unauthenticated request to any
    non-public route gets 401, verified by an enumerating test.
 3. A `user` gets 403 on every `admin` route (enumerating test).

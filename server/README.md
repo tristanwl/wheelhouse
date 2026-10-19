@@ -46,14 +46,16 @@ answers a generic 500 and never logs the panic value.
 | `PORT`     | `3000`    | TCP port (the image sets `3050`) |
 | `WHEELHOUSE_LISTEN` | `0.0.0.0:$PORT` | Address to listen on, `host:port` (`:3050`, `127.0.0.1:3050`, `[::]:3050`); overrides `PORT` |
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
-| `WHEELHOUSE_DB` | `/config/wheelhouse.db` | SQLite file used by `backup` and `rekey`; the server itself does not open it yet |
+| `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
+| `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
+| `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose `X-Forwarded-Proto: https` makes the session cookie `Secure` (default none; an unparsable entry is fatal) |
 | `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
 | `WHEELHOUSE_SECRET_KEY` | | The master key, base64 of 32 bytes; second choice |
 
 `HOSTNAME` is **not read**. Container runtimes set it to the container id (and
 to the machine's name with host networking), so using it as the bind address
 broke the listener; the old Next image forced `HOSTNAME=0.0.0.0` for the same
-reason. Settings are saved to `/config/settings.json`.
+reason. Settings are saved to `settings.json` in the config directory.
 
 The services are configured with the same variables as the 0.1.x Next app (`SONARR_URL`,
 `SONARR_API_KEY`, ..., `TMDB_API_KEY`; see the main README). A service URL must
@@ -62,8 +64,8 @@ not contain `user:pass@`: such an instance is an invalid config.
 ## Routes and access levels
 
 Routes are registered only through `app.Router`, which makes each one state its
-access level (`Public`, `Authenticated`, `Admin`; all enforced as public until
-Phase 2). Add a route group as a `register...(r *Router, d deps)` function called
+access level (`Public`, `Authenticated`, `Admin`), which the `Guard` enforces from
+the session (see [Accounts and sessions](#accounts-and-sessions)). Add a route group as a `register...(r *Router, d deps)` function called
 from `Routes`:
 
 ```go
@@ -71,15 +73,15 @@ r.HandleFunc("GET /api/status", Public, handler)
 ```
 
 `router_test.go` enumerates the registered routes and fails if one has no valid
-level or is not listed there; a route registered with a missing level panics at
+level, is not listed there with that level, or differs from `acceptance/routes.ts`; a route registered with a missing level panics at
 startup. `app.Options{Source: ...}` (or `Runtime`) injects the config source, so
 tests build the whole app over fake services. Provider wiring lives in
 `internal/providers/all`.
 
 Library routes (`routes_library.go`, logic in `internal/library`): the two
-`DELETE /api/library/...` routes are `Admin` and require `?confirm=true`
-(issue #41), otherwise 400 and nothing is sent upstream; each confirmed delete
-logs an `audit` line. The UI in `web/` sends `confirm` after its own confirm dialog.
+`DELETE /api/library/...` routes are `Authenticated` (users manage media) and require
+`?confirm=true` (issue #41), otherwise 400 and nothing is sent upstream; each
+confirmed delete is an `audit_log` row with the acting user. The UI in `web/` sends `confirm` after its own confirm dialog.
 
 The server stops gracefully on SIGINT or SIGTERM (in-flight requests get 10 s).
 
@@ -112,23 +114,70 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
 
 ## Commands
 
-`wheelhouse backup <file>` and `wheelhouse rekey` are described under
-[Storage and secrets](#storage-and-secrets). `wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
+`wheelhouse backup <file>`, `wheelhouse rekey` and `wheelhouse forget-secrets --yes`
+are described under [Storage and secrets](#storage-and-secrets), and
+`wheelhouse reset-password <user>` under [Accounts and sessions](#accounts-and-sessions).
+`wheelhouse` runs the server. `wheelhouse healthcheck` exits 0 when the server on
 this machine (at `WHEELHOUSE_LISTEN` or `PORT`) answers `/healthz`, for the
 image's `HEALTHCHECK`. `wheelhouse version` (or `--version`) prints the version,
 which `-ldflags "-X github.com/tristanwl/wheelhouse/server/internal/version.Version=0.2.0"`
 sets (the Dockerfile reads it from the root `package.json`; a plain `go build`
 says `dev`). The version is also in `/healthz` and the startup log line.
 
+## Accounts and sessions
+
+Phase 2 item 2 ([plan](../docs/wheelhouse-phase2-plan.md), [threat
+model](../docs/threat-model.md), [architecture](../docs/architecture.md#accounts-and-sessions)):
+the server enforces authentication. `internal/auth` is the account service (SQL
+for `users`, `sessions` and `audit_log`, Argon2id, sessions, throttling, the setup
+token); `internal/app/guard.go` is the single place the route levels, the
+same-origin check, the CSRF token and the must-change rule are enforced;
+`routes_auth.go` and `routes_users.go` are the API.
+
+| Method and path | Level | |
+|---|---|---|
+| `GET /api/auth/setup` | public | `{"setupRequired": bool}` |
+| `POST /api/auth/setup` | public | `{token, username, password}`; only with no accounts, only with the setup token; 201, 403 (token), 409 (done), 400 (policy) |
+| `POST /api/auth/login` | public | `{username, password}`; 200 with the cookie and `{user, csrfToken, sessionId, expiresAt, absoluteExpiresAt}`; every failure is the same 401 `invalid username or password` |
+| `POST /api/auth/logout` | authenticated | ends the session, clears the cookie |
+| `GET /api/auth/session` | authenticated | the user, role, CSRF token and expiry |
+| `POST /api/auth/password` | authenticated | `{currentPassword, newPassword}`; rotates the session, ends the others |
+| `GET /api/auth/sessions`, `DELETE /api/auth/sessions/{id}` | authenticated | own sessions (no tokens) |
+| `GET /api/users`, `POST /api/users` | admin | list; create `{username, password, role, mustChangePassword?}` |
+| `PATCH /api/users/{id}` | admin | `{username?, role?, disabled?}`; the last admin is refused (409) |
+| `POST /api/users/{id}/password` | admin | `{password}`; ends the user's sessions, forces a change at the next login |
+| `DELETE /api/users/{id}` | admin | the last admin is refused (409) |
+| `GET /api/users/{id}/sessions`, `DELETE /api/users/{id}/sessions` | admin | list; end all of that user's sessions |
+| `GET /api/audit?limit=&before=` | admin | newest first, paged by `nextBefore` |
+
+Bodies are strict JSON (`application/json`, unknown fields refused, 8 KiB cap).
+Every other route is `authenticated`, except saving codec settings (`admin`). A
+request is checked in this order: same-origin (state changes only), set-up (503
+`setup required`), session (401 `authentication required`), CSRF token (403),
+password-change-required (403 `password-change-required`), role (403 `forbidden`).
+
+The clock and the Argon2 cost are constructor options of `auth.New`
+(`auth.Options{Clock, Params}`), used by the tests; they are not environment
+variables, so a running server cannot be told to skip a timeout. Tests of the
+routes build the app with `accounts_test.go`'s helper (a temporary database and a
+signed-in administrator) and send its cookie and `X-CSRF-Token`; an app built
+without an account service answers 503 on every guarded route. The Go tests that
+walk the whole router are `router_test.go` and `guard_test.go`; the black-box
+equivalents are `acceptance/auth-*.test.ts`.
+
+`wheelhouse reset-password <user>` sets a generated 20-character one-time password
+(printed once, to stdout), sets `must_change_password`, ends the account's
+sessions, lifts a login lockout (a password changed after the failures began
+clears them) and records the reset in the audit log as `cli`. There is no
+`create-admin`: the first administrator comes from the setup token flow only.
+
 ## Storage and secrets
 
-Phase 2 keeps accounts, stored service settings and an audit log in a SQLite
-database ([plan](../docs/wheelhouse-phase2-plan.md), [threat
-model](../docs/threat-model.md)). Item 1 of that plan, merged first, is only the
-foundation: two packages and two commands. **The server does not open the
-database or create a key at start-up** and its behaviour is unchanged; the
-`backup` and `rekey` commands and the tests are the only users until the next
-items wire it in.
+The storage layer under the accounts ([plan](../docs/wheelhouse-phase2-plan.md),
+item 1). The server opens the database and the master key at start (fatal, with a
+message that says what to fix, if it cannot); stored service configuration, the
+first user of the secret columns, comes in item 4. What to back up, and what
+losing the key means, is in [docs/operations.md](../docs/operations.md).
 
 ### `internal/store`
 
@@ -162,9 +211,12 @@ was edited is an error). A database whose newest migration is **newer than the
 binary** is refused with `ErrSchemaTooNew`: restore a backup or run the newer
 version. Pending migrations run in one `BEGIN IMMEDIATE` transaction, so two
 processes starting together apply them once and a failure leaves nothing behind.
-Migration `0001_meta` creates the `meta` key/value table; the users, sessions,
-instances and audit tables come with the items that use them. Never edit an
-applied migration: add a new one.
+Migration `0001_meta` creates the `meta` key/value table; `0002_auth` creates
+`users` (case-insensitive unique names, Argon2id hash, role, disabled and
+must-change flags, with triggers that keep the last enabled administrator),
+`sessions` (SHA-256 of the token, cascade on user delete) and the append-only
+`audit_log`; the instances table comes with item 4. Never edit an applied
+migration: add a new one.
 
 ### `internal/secrets`
 
@@ -189,8 +241,8 @@ The **master key** is 32 random bytes, from the first of:
    (symlinks are followed, as secret mounts use them; anything group- or
    world-accessible is refused with the `chmod` to run);
 2. `WHEELHOUSE_SECRET_KEY`: base64 (standard alphabet) of 32 bytes;
-3. `/config/secret.key`, created with `O_EXCL` and mode 0600 on first use by a
-   command or feature that owns the key (never merely by starting the server).
+3. `/config/secret.key`, created with `O_EXCL` and mode 0600 at the first start of the
+   server or the first use by a command that owns the key.
 
 A source that is set but unusable is an error; it never falls through to the
 next. Make a key file with `head -c 32 /dev/urandom > key && chmod 600 key`.
@@ -204,9 +256,9 @@ in `slog` and in JSON.
 (`meta.secret_key_check`); its envelope header carries the current key version
 and only the right key opens it, so a wrong or swapped key is `ErrWrongKey`
 at start instead of garbage later. The columns that hold secrets are listed in
-`store.SecretColumns` (none yet; a test checks each exists and is a `BLOB`).
+`store.SecretColumns` (none yet; a test checks each exists and is a `BLOB`, and another that no account table is ever one).
 
-### Backup and key rotation
+### Backup, key rotation and key loss
 
 Both run inside the container, as the container's user, with the same
 environment as the server (`docker exec` bypasses the image's entrypoint, so the
@@ -221,7 +273,9 @@ podman exec wheelhouse wheelhouse rekey
   while the server runs, mode 0600, built under a temporary name and linked into
   place when complete. It **refuses to overwrite**, needs the directory to exist,
   does not create or migrate the database, and secrets in the copy are encrypted.
-  The master key is **not** in it: keep `secret.key` (or your key file) elsewhere.
+  The master key is **not** in it, and without it the stored provider credentials
+  can never be recovered: keep `secret.key` (or your key file) elsewhere, see
+  [docs/operations.md](../docs/operations.md#key-loss). The command's output says so.
   Restore by stopping Wheelhouse and copying the backup over `wheelhouse.db`
   (remove a leftover `-wal`/`-shm`).
 - `wheelhouse rekey` makes a new master key (version n+1) and re-encrypts every
@@ -237,13 +291,20 @@ podman exec wheelhouse wheelhouse rekey
   it. The key is never printed. With no secrets stored it still works and moves
   the key version on (it creates the database and generated key if they do not
   exist; this command owns them). Old backups need the old key.
+- `wheelhouse forget-secrets --yes` is the recovery from a key that is lost for
+  good. The server refuses to start when the key does not match the database;
+  this discards every value in the secret columns (nothing can decrypt them),
+  replaces the key check by one under the key configured now, and prints how many
+  values went. It refuses without `--yes`, and when the configured key does open
+  the database. Users, sessions and the audit log are untouched.
 
 ## Container image
 
 The root `Dockerfile` builds the web UI, then this binary with the UI embedded,
 then an Alpine image with ffmpeg and the VA-API drivers; see the main README for
 running it and `docs/architecture.md` for the reasoning. The binary needs a
-writable `/config` (settings) and writes converted files next to the originals
+`/config` that its user owns and nobody else can write (database, master key,
+setup token, settings; it refuses to start from a world-writable one) and writes converted files next to the originals
 under the media roots; it uses `TMPDIR`/`/tmp` for nothing of its own, and the
 GPU drivers cache under `$HOME` (`/tmp` in the image), so a read-only root
 filesystem with a tmpfs `/tmp` works.

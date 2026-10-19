@@ -15,8 +15,11 @@ services:
     # match the owner of your media and ./config instead (needed for Convert to
     # write files with the right ownership), set it here. ./config must be
     # writable by that user: create it yourself first (`mkdir config`, and chown
-    # it to the user). If Docker creates it, it is owned by root and the
-    # container cannot save settings.
+    # it to the user, and do not make it world-writable: the server refuses to
+    # start from such a directory). If Docker creates it, it is owned by root and
+    # the server cannot start. It holds the database, the master key and the
+    # setup token: keep a copy of secret.key apart from your backups
+    # (docs/operations.md).
     # user: "1000:1000"
     # Optional hardening: nothing is written outside /config, the media mounts
     # and /tmp (GPU driver caches).
