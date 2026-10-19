@@ -80,6 +80,15 @@ func (r *Runtime) resolveAll(ctx context.Context) ([]resolution, error) {
 			}})
 			continue
 		}
+		if inst.Problem != "" {
+			out = append(out, resolution{ResolvedInstance: ResolvedInstance{
+				Instance:   inst,
+				Definition: def,
+				Status:     StatusInvalidConfig,
+				Error:      inst.Problem,
+			}})
+			continue
+		}
 		cfg, err := def.Decode(inst.Config)
 		if err != nil {
 			out = append(out, resolution{ResolvedInstance: ResolvedInstance{

@@ -42,6 +42,7 @@ internal/app          the router (every route states its access level), middlewa
 internal/config       listen address, database path
 internal/store        SQLite: open (modes, WAL, pools), embedded migrations, backup, secret-column rekey
 internal/secrets      AES-256-GCM envelopes, master key loading, redacting key and secret types
+internal/runlock      the advisory lock a running server holds on <config>/wheelhouse.lock (rekey, forget-secrets refuse)
 internal/features     feature gating (what the nav shows)
 internal/status       GET /api/status
 internal/downloads    GET /api/downloads
@@ -859,6 +860,14 @@ created and checked at start so that a wrong key is noticed at once.
   database is under, so a wrong key fails immediately, `rekey` can re-encrypt
   every secret column in one transaction, and `forget-secrets` is the recovery
   when the key is gone for good.
+- **One owner of the key at a time.** The server takes an exclusive `flock` on
+  `<config>/wheelhouse.lock` before it opens the database and keeps it until it exits;
+  `rekey` and `forget-secrets` take the same lock and refuse while it is held (the kernel
+  frees it when the process dies, so nothing needs cleaning up after a crash). As a second
+  line of defence `store.DB.CheckKey` compares the database's key record with the key the
+  process unlocked, inside every transaction that seals a secret: a mismatch is
+  `ErrKeyChanged`, which the API answers with 503 and a restart instruction, and which the
+  services' status text reports (`core.Instance.Problem`) instead of "is required".
 - **Backups** are `VACUUM INTO` snapshots taken while the server runs, mode 0600,
   never overwriting; they contain ciphertext, **not the key**. Losing the key
   loses the stored provider credentials for good; [operations.md](operations.md)

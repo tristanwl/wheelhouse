@@ -139,6 +139,9 @@ func (a *configAPI) writeConfigError(w http.ResponseWriter, err error) {
 		errorJSON(w, http.StatusBadRequest, ie.Msg)
 	case errors.Is(err, instances.ErrNotFound):
 		errorJSON(w, http.StatusNotFound, "not found")
+	case errors.Is(err, instances.ErrKeyChanged):
+		a.d.log.Error("a configuration change was refused: the secret key in the database changed while Wheelhouse was running; restart Wheelhouse")
+		errorJSON(w, http.StatusServiceUnavailable, "The secret key was changed while Wheelhouse was running, so credentials cannot be saved safely. Restart Wheelhouse, then try again.")
 	case errors.Is(err, instances.ErrExists), errors.Is(err, instances.ErrEnvironmentID), errors.Is(err, instances.ErrReadOnly):
 		errorJSON(w, http.StatusConflict, err.Error())
 	default:

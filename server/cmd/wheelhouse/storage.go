@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/config"
+	"github.com/tristanwl/wheelhouse/server/internal/runlock"
 	"github.com/tristanwl/wheelhouse/server/internal/secrets"
 	"github.com/tristanwl/wheelhouse/server/internal/store"
 )
@@ -23,6 +25,27 @@ type cliEnv struct {
 }
 
 func (e cliEnv) dbPath() string { return config.DBPath(e.getenv, e.configDir) }
+
+// exclusive takes the lock a running server holds for its whole life, for a
+// command that rewrites the key or the secrets. Such a command must never run
+// beside a server: the server keeps the old key in memory and would seal every
+// credential saved afterwards with it, which the next start cannot open
+// (issue #83). Release the returned function when the command is done.
+func (e cliEnv) exclusive(command string) (func(), error) {
+	lock, err := acquireLock(e.configDir)
+	if errors.Is(err, runlock.ErrHeld) {
+		return nil, fmt.Errorf("refusing to run: a Wheelhouse server is running on %s%s. `wheelhouse %s` changes the key or the stored credentials, and a running server would keep using the old key and lose every credential saved afterwards.\n"+
+			"Stop the server first (for example `docker compose stop wheelhouse`), or run the command in a throwaway container with the same volume while the server is stopped (`docker compose run --rm wheelhouse %s`); see docs/operations.md, \"Locking\"",
+			e.configDir, strings.TrimPrefix(err.Error(), runlock.ErrHeld.Error()), command, command)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if why := lock.Degraded(); why != "" {
+		_, _ = fmt.Fprintf(e.stdout, "WARNING: cannot check whether a server is running (%s). Make sure the Wheelhouse server is stopped before this command: see docs/operations.md, \"Locking\".\n", why)
+	}
+	return func() { _ = lock.Release() }, nil
+}
 
 // runBackup implements `wheelhouse backup <file>`: a consistent copy of the
 // database, made while the server runs. It never creates the database, never
@@ -80,7 +103,8 @@ func runResetPassword(ctx context.Context, e cliEnv, args []string) error {
 
 // runRekey implements `wheelhouse rekey [--new-key-out <file>]`: it generates a
 // new master key (version n+1) and re-encrypts every stored secret under it in
-// one transaction. Stop the server first and take a backup.
+// one transaction. It refuses to run while a server holds the configuration
+// lock (see exclusive); take a backup first.
 //
 // A key Wheelhouse generated (secret.key in the config directory) is replaced in
 // place. A key the operator supplies (WHEELHOUSE_SECRET_KEY_FILE or
@@ -94,6 +118,11 @@ func runRekey(ctx context.Context, e cliEnv, args []string) error {
 		return errors.New("usage: wheelhouse rekey [--new-key-out <file>]")
 	}
 
+	release, err := e.exclusive("rekey")
+	if err != nil {
+		return err
+	}
+	defer release()
 	// This command owns the database and the key, so it creates them when they
 	// do not exist yet (rekeying an installation with no secrets is a no-op that
 	// still moves the key version on).
@@ -152,6 +181,11 @@ func runForgetSecrets(ctx context.Context, e cliEnv, args []string) error {
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || !*yes {
 		return errors.New("usage: wheelhouse forget-secrets --yes   (discards every stored provider API key and password; only for a master key that is lost for good, see docs/operations.md)")
 	}
+	release, err := e.exclusive("forget-secrets --yes")
+	if err != nil {
+		return err
+	}
+	defer release()
 	path := e.dbPath()
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("no database at %s", path)

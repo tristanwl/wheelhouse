@@ -59,6 +59,9 @@ var (
 	// ErrEnvironmentID means a new instance would take the id of an environment
 	// instance, which would silently replace it; import it instead.
 	ErrEnvironmentID = errors.New("that id is defined by the environment; import that instance to change it, or choose another id")
+	// ErrKeyChanged means the database's secret key was changed by another
+	// process while this one ran; nothing is saved until Wheelhouse restarts.
+	ErrKeyChanged = store.ErrKeyChanged
 )
 
 // InvalidError is a request the administrator can fix; Msg says how and
@@ -295,9 +298,13 @@ func (s *Source) readInstances(ctx context.Context, q queryer, id string) ([]cor
 func secretsAD(id string) []byte { return secrets.AD("instances", id, "secrets") }
 
 // mergeSecrets opens the sealed secret settings into inst.Config. One that
-// cannot be opened (the row was tampered with or copied from elsewhere) leaves
-// the instance without its credentials, so it reports them as missing and
-// nothing else is affected; it is logged once per instance.
+// cannot be opened leaves the instance without its credentials and says why in
+// inst.Problem, so the dashboard and the admin page show a plain sentence
+// instead of "is required"; nothing else is affected. It is logged once per
+// instance. The usual cause is a row that was tampered with or copied from
+// elsewhere; the one that matters most is another process having changed the
+// database's key under this one (ErrKeyChanged), which gets its own message and
+// log line because the fix is a restart, not typing the credentials again.
 func (s *Source) mergeSecrets(inst *core.Instance, sealed []byte) {
 	pt, err := s.cipher.Open(sealed, secretsAD(inst.ID))
 	if err == nil {
@@ -308,9 +315,27 @@ func (s *Source) mergeSecrets(inst *core.Instance, sealed []byte) {
 			return
 		}
 	}
-	if _, seen := s.warned.LoadOrStore(inst.ID, struct{}{}); !seen {
-		s.log.Warn("the stored credentials of an instance cannot be read; enter them again", "instance", inst.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	changed := errors.Is(s.db.CheckKey(ctx, nil, s.cipher), store.ErrKeyChanged)
+	cancel()
+	if changed {
+		inst.Problem = "The stored credentials cannot be read because the secret key was changed while Wheelhouse was running. Restart Wheelhouse."
+	} else {
+		inst.Problem = "The stored credentials cannot be read. Enter them again."
 	}
+	if _, seen := s.warned.LoadOrStore(inst.ID, struct{}{}); !seen {
+		if changed {
+			s.log.Error("the secret key in the database changed while Wheelhouse was running (rekey or forget-secrets run against a live server?); stored credentials cannot be read and none will be saved until Wheelhouse is restarted", "instance", inst.ID)
+		} else {
+			s.log.Warn("the stored credentials of an instance cannot be read; enter them again", "instance", inst.ID)
+		}
+	}
+}
+
+// keyCheck refuses a write that seals or merges secrets when the database's key
+// is no longer the one this process holds.
+func (s *Source) keyCheck(ctx context.Context, tx *sql.Tx) error {
+	return s.db.CheckKey(ctx, tx, s.cipher)
 }
 
 // ---- writes ----
@@ -532,6 +557,9 @@ func (s *Source) Create(ctx context.Context, in NewInstance) (Entry, error) {
 	enabled := in.Enabled == nil || *in.Enabled
 	var id string
 	err = s.db.Tx(ctx, func(tx *sql.Tx) error {
+		if err := s.keyCheck(ctx, tx); err != nil {
+			return err
+		}
 		taken := func(id string) (bool, error) {
 			var n int
 			err := tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE id = ?`, id).Scan(&n)
@@ -617,6 +645,9 @@ func (s *Source) Update(ctx context.Context, id string, p Patch) (Entry, Change,
 	var change Change
 	err := s.db.Tx(ctx, func(tx *sql.Tx) error {
 		change = Change{}
+		if err := s.keyCheck(ctx, tx); err != nil {
+			return err
+		}
 		rows, err := s.readInstances(ctx, tx, id)
 		if err != nil {
 			return err
@@ -741,6 +772,9 @@ func (s *Source) Import(ctx context.Context, id string) (Entry, error) {
 	}
 	plain, sec := splitRaw(def, env.Config)
 	err = s.db.Tx(ctx, func(tx *sql.Tx) error {
+		if err := s.keyCheck(ctx, tx); err != nil {
+			return err
+		}
 		var n int
 		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM instances WHERE id = ?`, id).Scan(&n); err != nil {
 			return err

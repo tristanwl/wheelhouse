@@ -4,7 +4,7 @@ What to back up, what to protect, and how to recover. The commands run as the
 container's user; being able to run them is the proof that you own the server. Two
 ways to run one, depending on whether the server is up:
 
-- **Server running** (`backup`, `reset-password`): `docker exec wheelhouse wheelhouse <command>`
+- **Server running** (`backup`, `reset-password`; the others refuse): `docker exec wheelhouse wheelhouse <command>`
   (or `podman exec`).
 - **Server stopped or unable to start** (`rekey`, `forget-secrets`, and anything after a
   failed start, because there is no container to `exec` into): a throwaway container on
@@ -15,10 +15,38 @@ ways to run one, depending on whether the server is up:
   environment variable or `-v` for a key file). Podman: the same with `podman`, plus
   `--userns=keep-id` when rootless.
 
-`rekey` and `forget-secrets` change the key the database is sealed with; **never run them
-against a running server**: it keeps the old key in memory and would seal anything saved
-afterwards with a key the database no longer trusts (those credentials then have to be
-entered again).
+`rekey` and `forget-secrets` change the key the database is sealed with, so they **refuse to
+run while the server is running** (see [Locking](#locking)): the server keeps the old key in
+memory and would seal anything saved afterwards with a key the database no longer trusts.
+
+## Locking
+
+While it runs, the server holds an exclusive advisory lock (`flock`) on
+`/config/wheelhouse.lock`. `rekey` and `forget-secrets` take the same lock before they
+touch anything and stop with a message when they cannot (`refusing to run: a Wheelhouse
+server is running on ...`): stop the container first, or run the command in a throwaway
+container on the same volume while the server is stopped (above). A second server on the
+same `/config` is refused for the same reason. `backup` and `reset-password` do not need
+the lock and keep working while the server runs (`backup` uses SQLite's online backup).
+
+- **A stale lock file is harmless.** The lock belongs to the open file, not to the file's
+  existence or contents, so the kernel releases it when the server dies for any reason
+  (clean stop, crash, `kill -9`, the container removed). `wheelhouse.lock` stays in the
+  directory with the last PID in it, which is only a hint for the refusal message. Never
+  delete it to "unlock" anything; there is nothing to unlock.
+- **It works across containers** that mount the same local directory or volume (the lock is
+  in the host kernel), which is exactly the `docker compose run --rm` case.
+- **Network filesystems.** On NFS (v3 with lockd, v4) Linux forwards `flock` to the server,
+  and it works when the NFS locking service does. On a share or mount that cannot lock
+  (some SMB/CIFS, FUSE and older NFS setups) the server starts anyway and logs a warning
+  (`this server does not hold the configuration lock`), and the commands print a warning:
+  there the lock is not protecting you, and "stop the server first" is on you. Keep `/config`
+  on a local disk or volume, which SQLite's WAL mode needs anyway.
+- **Defence in depth.** If the key in the database changes under a running server anyway
+  (a lock that did not work, someone editing the database), the server notices on the next
+  save: it refuses to save, answers `503` with "restart Wheelhouse", logs that the secret key
+  changed while it was running, and shows the affected services as needing a restart instead
+  of "required". Restarting loads the new key.
 
 ## Key loss
 

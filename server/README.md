@@ -321,8 +321,9 @@ podman exec wheelhouse wheelhouse rekey
   (remove a leftover `-wal`/`-shm`).
 - `wheelhouse rekey` makes a new master key (version n+1) and re-encrypts every
   stored secret **in one transaction**; any failure leaves the database and the
-  old key untouched. Stop the server and take a backup first (the running server
-  holds the old key and cannot read the new data). For the generated
+  old key untouched. It refuses to run while a server is running (the server holds
+  an exclusive `flock` on `<config>/wheelhouse.lock`, see `internal/runlock` and
+  [operations.md](../docs/operations.md#locking)); stop it and take a backup first. For the generated
   `secret.key` it stages `secret.key.next`, commits, then renames it over the key;
   if the process dies in between, the next start finishes or discards the swap
   (the stored check value says which key is right). For a key you supply
@@ -336,8 +337,8 @@ podman exec wheelhouse wheelhouse rekey
   good. The server refuses to start when the key does not match the database;
   this discards every value in the secret columns (nothing can decrypt them),
   replaces the key check by one under the key configured now, and prints how many
-  values went. It refuses without `--yes`, and when the configured key does open
-  the database. Users, sessions and the audit log are untouched.
+  values went. It refuses without `--yes`, while a server is running (same lock as
+  `rekey`), and when the configured key does open the database. Users, sessions and the audit log are untouched.
 
 ## Container image
 

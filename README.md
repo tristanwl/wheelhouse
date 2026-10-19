@@ -292,9 +292,9 @@ docker exec wheelhouse wheelhouse reset-password <user>                  # recov
 ```
 
 Two commands change the master key and **must run with the server stopped**, in a throwaway
-container that mounts the same volume (a running server keeps the old key in memory and
-would seal anything it saves afterwards with it; and if the server cannot start there is
-nothing to `exec` into):
+container that mounts the same volume (a running server holds a lock on `/config` and they
+refuse to run against it, because it keeps the old key in memory and would lose every
+credential saved afterwards; and if the server cannot start there is nothing to `exec` into):
 
 ```sh
 docker compose stop wheelhouse
