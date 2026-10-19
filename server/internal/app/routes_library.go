@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tristanwl/wheelhouse/server/internal/auth"
 	"github.com/tristanwl/wheelhouse/server/internal/library"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	mm "github.com/tristanwl/wheelhouse/server/internal/providers/mediamanager"
@@ -75,19 +76,25 @@ func kindParam(s string) (mm.Kind, bool) {
 	return "", false
 }
 
-// audit records a destructive action. There are no users yet; once there are,
-// the actor belongs here (issue #41).
-func audit(log *slog.Logger, r *http.Request, action string, args ...any) {
-	if log == nil {
+// audit records an action in the audit log with the acting account and the
+// client address: never a body, a token or a secret, only ids and names. An app
+// built without accounts (tests) falls back to a log line.
+func (d deps) audit(r *http.Request, action, target string, detail map[string]any) {
+	a := auth.Actor{Name: "system", Addr: clientAddr(r)}
+	if id := IdentityOf(r.Context()); id != nil {
+		a = id.Actor(clientAddr(r))
+	}
+	if d.auth != nil {
+		d.auth.Record(r.Context(), a, action, target, detail)
 		return
 	}
-	log.LogAttrs(r.Context(), slog.LevelInfo, "audit", slog.String("action", action), slog.Group("target", args...))
+	d.log.LogAttrs(r.Context(), slog.LevelInfo, "audit", slog.String("action", action), slog.String("target", target), slog.Any("detail", detail))
 }
 
 // registerLibrary registers the library group: library, storage, search, add
 // and the per-item routes.
 func registerLibrary(r *Router, d deps) {
-	r.HandleFunc("GET /api/library", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/library", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		entries, err := mm.ListManagers(req.Context(), d.rt, "")
 		if err != nil {
 			internalError(w)
@@ -96,7 +103,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, library.Library(req.Context(), entries))
 	})
 
-	r.HandleFunc("GET /api/storage", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/storage", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		entries, err := mm.ListManagers(req.Context(), d.rt, "")
 		if err != nil {
 			internalError(w)
@@ -105,7 +112,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, library.Storage(req.Context(), entries))
 	})
 
-	r.HandleFunc("GET /api/library/{instanceId}/{id}/details", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/library/{instanceId}/{id}/details", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		id, ok := integer(req.PathValue("id"))
 		if !ok {
 			errorJSON(w, http.StatusBadRequest, "invalid id")
@@ -123,7 +130,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, details)
 	})
 
-	r.HandleFunc("GET /api/library/{instanceId}/{id}/seasons", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/library/{instanceId}/{id}/seasons", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		e, ok := resolveManager(w, req, d, req.PathValue("instanceId"))
 		if !ok {
 			return
@@ -148,7 +155,7 @@ func registerLibrary(r *Router, d deps) {
 
 	// Deletes need ?confirm=true (see confirmed). The id and the instance are
 	// checked first so a malformed request keeps its specific answer.
-	r.HandleFunc("DELETE /api/library/{instanceId}/{id}", Admin, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("DELETE /api/library/{instanceId}/{id}", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		id, ok := integer(req.PathValue("id"))
 		if !ok {
 			errorJSON(w, http.StatusBadRequest, "invalid id")
@@ -158,7 +165,7 @@ func registerLibrary(r *Router, d deps) {
 		if !ok || !confirmed(w, req) {
 			return
 		}
-		audit(d.log, req, "library.delete", "instanceId", e.InstanceID, "id", id)
+		d.audit(req, "library.delete", e.InstanceID+"/"+strconv.Itoa(id), map[string]any{"instanceId": e.InstanceID, "id": id})
 		if err := e.Client.Remove(req.Context(), id); err != nil {
 			errorJSON(w, http.StatusBadGateway, core.ErrorText(err))
 			return
@@ -166,7 +173,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
 
-	r.HandleFunc("DELETE /api/library/{instanceId}/{id}/seasons/{season}", Admin, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("DELETE /api/library/{instanceId}/{id}/seasons/{season}", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		e, ok := resolveManager(w, req, d, req.PathValue("instanceId"))
 		if !ok {
 			return
@@ -185,7 +192,7 @@ func registerLibrary(r *Router, d deps) {
 		if !confirmed(w, req) {
 			return
 		}
-		audit(d.log, req, "library.deleteSeason", "instanceId", e.InstanceID, "id", id, "season", season)
+		d.audit(req, "library.deleteSeason", e.InstanceID+"/"+strconv.Itoa(id)+"/"+strconv.Itoa(season), map[string]any{"instanceId": e.InstanceID, "id": id, "season": season})
 		n, err := series.DeleteSeason(req.Context(), id, season)
 		if err != nil {
 			errorJSON(w, http.StatusBadGateway, core.ErrorText(err))
@@ -194,7 +201,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "filesDeleted": n})
 	})
 
-	r.HandleFunc("GET /api/search", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/search", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		q := req.URL.Query()
 		kind, ok := kindParam(q.Get("kind"))
 		if !ok {
@@ -225,7 +232,7 @@ func registerLibrary(r *Router, d deps) {
 
 	// Either ?instanceId=radarr-4k, or ?kind=movies for the first ready instance
 	// of that kind.
-	r.HandleFunc("GET /api/add-meta", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/add-meta", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		q := req.URL.Query()
 		instanceID := q.Get("instanceId")
 		kind, _ := kindParam(q.Get("kind"))
@@ -273,7 +280,7 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, meta)
 	})
 
-	r.HandleFunc("POST /api/add", Admin, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("POST /api/add", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			InstanceID          string  `json:"instanceId"`
 			ID                  int     `json:"id"` // tvdbId (series) or tmdbId (movies)
@@ -333,6 +340,11 @@ func registerLibrary(r *Router, d deps) {
 			errorJSON(w, http.StatusBadGateway, core.ErrorText(err))
 			return
 		}
+		newID := 0
+		if created.ID != nil {
+			newID = *created.ID
+		}
+		d.audit(req, "library.add", body.InstanceID+"/"+strconv.Itoa(newID), map[string]any{"instanceId": body.InstanceID, "id": newID, "externalId": body.ID})
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "id": created.ID, "title": created.Title})
 	})
 }

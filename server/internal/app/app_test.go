@@ -17,13 +17,16 @@ import (
 	"github.com/tristanwl/wheelhouse/server/internal/version"
 )
 
-func testHandler(ffmpeg bool, buf *bytes.Buffer) http.Handler {
+// testHandler is the full app with a signed-in administrator on every request.
+func testHandler(t *testing.T, ffmpeg bool, buf *bytes.Buffer) http.Handler {
+	t.Helper()
 	log := slog.New(slog.DiscardHandler)
 	if buf != nil {
 		log = slog.New(slog.NewTextHandler(buf, nil))
 	}
 	// The placeholder, not the embedded build: these tests must pass with or without `npm run embed`.
-	return Handler(Options{Logger: log, Ffmpeg: func() bool { return ffmpeg }, UI: ui.Placeholder()})
+	acc := newAccounts(t)
+	return acc.As(Handler(Options{Logger: log, Ffmpeg: func() bool { return ffmpeg }, UI: ui.Placeholder(), Auth: acc.Svc}))
 }
 
 func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
@@ -33,14 +36,14 @@ func do(h http.Handler, method, target string) *httptest.ResponseRecorder {
 }
 
 func TestHealthz(t *testing.T) {
-	rec := do(testHandler(false, nil), "GET", "/healthz")
+	rec := do(testHandler(t, false, nil), "GET", "/healthz")
 	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"status":"ok","version":"`+version.Version+`"}` {
 		t.Fatalf("%d %q", rec.Code, rec.Body.String())
 	}
 }
 
 func TestFeaturesWithNoProviders(t *testing.T) {
-	rec := do(testHandler(false, nil), "GET", "/api/features")
+	rec := do(testHandler(t, false, nil), "GET", "/api/features")
 	if rec.Code != 200 || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
@@ -72,7 +75,7 @@ func TestFeaturesWithNoProviders(t *testing.T) {
 }
 
 func TestUnknownAPIPathsAreJSON404(t *testing.T) {
-	h := testHandler(false, nil)
+	h := testHandler(t, false, nil)
 	for _, p := range []string{"/api", "/api/", "/api/does-not-exist", "/api/features/extra", "/api/a/b/c"} {
 		rec := do(h, "GET", p)
 		if rec.Code != 404 || rec.Header().Get("Content-Type") != "application/json" {
@@ -85,14 +88,14 @@ func TestUnknownAPIPathsAreJSON404(t *testing.T) {
 }
 
 func TestWrongMethodOnAPIIsA4xx(t *testing.T) {
-	rec := do(testHandler(false, nil), "DELETE", "/api/features")
+	rec := do(testHandler(t, false, nil), "DELETE", "/api/features")
 	if rec.Code < 400 || rec.Code >= 500 {
 		t.Fatalf("status = %d", rec.Code)
 	}
 }
 
 func TestNonAPIPathsGetTheUI(t *testing.T) {
-	h := testHandler(false, nil)
+	h := testHandler(t, false, nil)
 	for _, p := range []string{"/", "/library", "/explore", "/codecs", "/library/radarr/123"} {
 		rec := do(h, "GET", p)
 		if rec.Code != 200 || !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
@@ -102,7 +105,7 @@ func TestNonAPIPathsGetTheUI(t *testing.T) {
 }
 
 func TestEveryResponseHasSecurityHeadersAndRequestID(t *testing.T) {
-	h := testHandler(false, nil)
+	h := testHandler(t, false, nil)
 	for _, p := range []string{"/", "/healthz", "/api/features", "/api/nope", "/missing.js"} {
 		rec := do(h, "GET", p)
 		if rec.Header().Get("Content-Security-Policy") == "" || rec.Header().Get("X-Content-Type-Options") != "nosniff" ||
@@ -139,7 +142,7 @@ func TestServeOnARandomPort(t *testing.T) {
 	defer cancel()
 	log := slog.New(slog.DiscardHandler)
 	done := make(chan error, 1)
-	go func() { done <- Serve(ctx, ln, testHandler(false, nil), log) }()
+	go func() { done <- Serve(ctx, ln, testHandler(t, false, nil), log) }()
 
 	base := "http://" + ln.Addr().String()
 	client := &http.Client{Timeout: 5 * time.Second}

@@ -28,6 +28,11 @@ linters:
         linters:
           - gosec
         text: G101
+      # Tests build request cookies by hand; attributes matter on the Set-Cookie side only.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: G124
       # The table of environment variable names (SONARR_API_KEY, ...) is not a credential.
       - path: internal/providers/core/envsource\.go
         linters:

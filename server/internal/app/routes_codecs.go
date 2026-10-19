@@ -88,7 +88,7 @@ func registerCodecs(r *Router, d deps) {
 		})
 	}
 
-	r.HandleFunc("GET /api/codec-analysis", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/codec-analysis", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		kind := mediamanager.KindMovies
 		if req.URL.Query().Get("kind") == "series" {
 			kind = mediamanager.KindSeries
@@ -121,11 +121,11 @@ func registerCodecs(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, resp)
 	})
 
-	r.HandleFunc("GET /api/codec-analysis/settings", Public, func(w http.ResponseWriter, _ *http.Request) {
+	r.HandleFunc("GET /api/codec-analysis/settings", Authenticated, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, store.Get())
 	})
 
-	r.HandleFunc("PUT /api/codec-analysis/settings", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("PUT /api/codec-analysis/settings", Admin, func(w http.ResponseWriter, req *http.Request) {
 		obj, ok := readObject(w, req)
 		hd, hdOK := str(obj, "hd")
 		uhd, uhdOK := str(obj, "uhd")
@@ -144,15 +144,15 @@ func registerCodecs(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, store.Get())
 	})
 
-	r.HandleFunc("GET /api/codec-analysis/encoders", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/codec-analysis/encoders", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"encoders": detector.Detect(req.Context())})
 	})
 
-	r.HandleFunc("GET /api/codec-analysis/convert", Public, func(w http.ResponseWriter, _ *http.Request) {
+	r.HandleFunc("GET /api/codec-analysis/convert", Authenticated, func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"jobs": queue.List()})
 	})
 
-	r.HandleFunc("POST /api/codec-analysis/convert", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("POST /api/codec-analysis/convert", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		badBody := func() {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		}
@@ -208,10 +208,14 @@ func registerCodecs(r *Router, d deps) {
 			TargetFamily: family,
 			ResolvedPath: resolved,
 		})
+		d.audit(req, "conversion.start", job.ID, map[string]any{
+			"instanceId": instanceID, "itemId": int(itemID), "title": clip(title, 200), "file": clip(filePath, 400),
+			"backend": backendS, "targetFamily": familyS,
+		})
 		writeJSON(w, http.StatusOK, job)
 	})
 
-	r.HandleFunc("GET /api/codec-analysis/convert/{jobId}", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("GET /api/codec-analysis/convert/{jobId}", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		job, ok := queue.Get(req.PathValue("jobId"))
 		if !ok {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
@@ -220,13 +224,26 @@ func registerCodecs(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, job)
 	})
 
-	r.HandleFunc("POST /api/codec-analysis/convert/{jobId}/cancel", Public, func(w http.ResponseWriter, req *http.Request) {
+	r.HandleFunc("POST /api/codec-analysis/convert/{jobId}/cancel", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		id := req.PathValue("jobId")
 		if !queue.Cancel(id) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "job not found or not cancelable"})
 			return
 		}
 		job, _ := queue.Get(id)
+		d.audit(req, "conversion.cancel", id, map[string]any{"instanceId": job.InstanceID, "itemId": job.ItemID})
 		writeJSON(w, http.StatusOK, job)
 	})
+}
+
+// clip shortens text recorded in the audit log, on a character boundary.
+func clip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	r := []rune(s)
+	for len(string(r)) > n {
+		r = r[:len(r)-1]
+	}
+	return string(r)
 }

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -77,11 +79,50 @@ func Load(getenv func(string) string) (Config, error) {
 // DBFileName is the SQLite database's name inside the config directory.
 const DBFileName = "wheelhouse.db"
 
+// DefaultConfigDir is the config directory in the image: a volume that holds
+// the database, the generated secret.key, the setup token and settings.json.
+const DefaultConfigDir = "/config"
+
+// ConfigDir returns the config directory: WHEELHOUSE_CONFIG_DIR when set,
+// otherwise /config. The image never sets it; it exists so the server can run
+// outside a container (and so the acceptance suite can give every server its
+// own directory).
+func ConfigDir(getenv func(string) string) string {
+	if v := getenv("WHEELHOUSE_CONFIG_DIR"); v != "" {
+		return filepath.Clean(v)
+	}
+	return DefaultConfigDir
+}
+
+// TrustedProxies parses WHEELHOUSE_TRUSTED_PROXIES: a comma-separated list of
+// addresses and CIDR ranges of reverse proxies whose X-Forwarded-Proto header is
+// believed (it decides whether the session cookie is Secure). The default is
+// empty: no proxy is trusted, the header is ignored. A malformed entry is an
+// error, so a typo cannot silently leave the list empty.
+func TrustedProxies(getenv func(string) string) ([]netip.Prefix, error) {
+	var out []netip.Prefix
+	for _, part := range strings.Split(getenv("WHEELHOUSE_TRUSTED_PROXIES"), ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if p, err := netip.ParsePrefix(part); err == nil {
+			out = append(out, p.Masked())
+			continue
+		}
+		a, err := netip.ParseAddr(part)
+		if err != nil {
+			return nil, fmt.Errorf("WHEELHOUSE_TRUSTED_PROXIES: %q is not an address or CIDR range", part)
+		}
+		out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+	}
+	return out, nil
+}
+
 // DBPath returns where the SQLite database lives: WHEELHOUSE_DB when set,
 // otherwise <configDir>/wheelhouse.db. configDir is the single config directory
-// the rest of the server uses (codecs.DefaultConfigDir, /config in the image),
-// which also holds the generated secret.key. Nothing opens the database at
-// server start yet; the backup and rekey commands do.
+// the rest of the server uses (ConfigDir), which also holds the generated
+// secret.key and the setup token.
 func DBPath(getenv func(string) string, configDir string) string {
 	if v := getenv("WHEELHOUSE_DB"); v != "" {
 		return v

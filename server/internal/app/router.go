@@ -8,9 +8,8 @@ import (
 	"strings"
 )
 
-// Level is who may call a route. Authentication arrives in Phase 2; until then
-// every level is treated as public, but each route already says what it needs,
-// so turning enforcement on is one change in Router.authorize.
+// Level is who may call a route. The Guard enforces it on every request
+// (guard.go): there is no way to register a route that skips it.
 type Level string
 
 // The access levels.
@@ -39,11 +38,13 @@ type Route struct {
 // goes through authorize.
 type Router struct {
 	mux    *http.ServeMux
+	guard  *Guard
 	routes []Route
 }
 
-// NewRouter returns an empty router.
-func NewRouter() *Router { return &Router{mux: http.NewServeMux()} }
+// NewRouter returns an empty router whose routes are enforced by g. A nil Guard
+// refuses every route that is not public.
+func NewRouter(g *Guard) *Router { return &Router{mux: http.NewServeMux(), guard: g} }
 
 // Handle registers h for a ServeMux pattern ("GET /api/status", "/") at an
 // access level. It panics on an invalid level or a duplicate pattern, which are
@@ -56,7 +57,7 @@ func (r *Router) Handle(pattern string, level Level, h http.Handler) {
 		panic(fmt.Sprintf("route %q registered twice", pattern))
 	}
 	r.routes = append(r.routes, Route{Pattern: pattern, Level: level})
-	r.mux.Handle(pattern, authorize(level, h))
+	r.mux.Handle(pattern, r.guard.authorize(pattern, level, h))
 }
 
 // HandleFunc is Handle for a function.
@@ -76,15 +77,6 @@ type levelKey struct{}
 func LevelOf(ctx context.Context) Level {
 	l, _ := ctx.Value(levelKey{}).(Level)
 	return l
-}
-
-// authorize is the single server-side authorization hook. It does not refuse
-// anything yet: there are no users, so every level is allowed. Phase 2 checks
-// the session against level here.
-func authorize(level Level, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), levelKey{}, level)))
-	})
 }
 
 // IsAPI reports whether a pattern is under /api (for tests and docs).

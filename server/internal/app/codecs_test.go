@@ -59,8 +59,10 @@ func newCodecEnv(t *testing.T, vars env, ffmpegBody string) codecEnv {
 	configDir := filepath.Join(t.TempDir(), "config")
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
+	acc := newAccounts(t)
 	h := Handler(Options{
 		Logger:  slog.New(slog.DiscardHandler),
+		Auth:    acc.Svc,
 		Source:  core.NewEnvConfigSource(vars),
 		Ffmpeg:  func() bool { return true },
 		Context: ctx,
@@ -68,7 +70,7 @@ func newCodecEnv(t *testing.T, vars env, ffmpegBody string) codecEnv {
 			MediaRoots: []string{root}, ConfigDir: configDir, Ffmpeg: ffmpeg, Ffprobe: ffprobe,
 		},
 	})
-	return codecEnv{h: h, root: root, file: file, configDir: configDir, ffmpegArgs: args}
+	return codecEnv{h: acc.As(h), root: root, file: file, configDir: configDir, ffmpegArgs: args}
 }
 
 func (c codecEnv) do(method, path, body string) (int, map[string]any, string) {
