@@ -334,6 +334,7 @@ with the regression entry that fails on the old code:
 | # | Severity | Finding | Fix and regression test | Status |
 |---|---|---|---|---|
 | F1 | Low | A secret echoed percent-encoded in a mix of conventions was not redacted: a space as `%20` next to a mark (`! * ' ( )`) and a reserved character (`$ & + = : @`) matched none of the three encoders the redactor knew (`encodeURIComponent`, Go's query and path escapes). The same went for JSON written with `\uXXXX` escapes (Python, Java, .NET), PHP's `\/`, and HTML entities in an error page | `redact.go` now generates every combination of the three choices (and both hex cases), the ASCII-escaped and slash-escaped JSON forms, and both HTML entity styles. `FuzzRedact` seeds `bug_redact_*` | Fixed |
+| F2 | Low | `MaxValues` in the JSON scan counted commas, so the first element of every container was never counted: `[[1],[1],[1]]` has two commas and six values. Bodies made of many one-element containers got up to a nesting depth's multiple of the intended total (bounded in practice by the byte cap) | The scan also counts a container's first element when the container closes non-empty, and the comparison is now exactly "more than `MaxValues`". `FuzzDecodeJSON` seeds `bug_values_*` | Fixed |
 
 ## Phase 2 items and the threats they close
 

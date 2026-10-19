@@ -78,8 +78,12 @@ func CheckJSON(body []byte, lim JSONLimits) error {
 	// stack holds the member count of each open array or object.
 	stack := make([]int, 0, 16)
 	total := 0
+	// prev is the last byte seen outside a string (and '"' after one), so a
+	// closing bracket can tell an empty container from one with a single element.
+	var prev byte
 	for i := 0; i < len(body); i++ {
-		switch body[i] {
+		c := body[i]
+		switch c {
 		case '"':
 			start := i + 1
 			i++
@@ -100,6 +104,16 @@ func CheckJSON(body []byte, lim JSONLimits) error {
 		case ']', '}':
 			if len(stack) > 0 {
 				stack = stack[:len(stack)-1]
+				// Elements are counted at their commas, which misses the first
+				// element of every container: "[[1],[1],[1]]" has two commas and
+				// six values. Count it here, when the container turns out not to
+				// be empty.
+				if prev != '[' && prev != '{' {
+					total++
+					if total > lim.MaxValues {
+						return fmt.Errorf("%w: more than %d values", errJSONLimit, lim.MaxValues)
+					}
+				}
 			}
 		case ',':
 			if n := len(stack); n > 0 {
@@ -108,10 +122,16 @@ func CheckJSON(body []byte, lim JSONLimits) error {
 				if stack[n-1] >= lim.MaxElements {
 					return fmt.Errorf("%w: more than %d elements", errJSONLimit, lim.MaxElements)
 				}
-				if total >= lim.MaxValues {
+				if total > lim.MaxValues {
 					return fmt.Errorf("%w: more than %d values", errJSONLimit, lim.MaxValues)
 				}
 			}
+		}
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			prev = c
+		}
+		if c == '"' {
+			prev = '"'
 		}
 	}
 	return nil
