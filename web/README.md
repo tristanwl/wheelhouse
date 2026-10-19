@@ -4,7 +4,7 @@ The single-page UI served by the Go server in [../server](../server/README.md):
 Vite, React 19, React Router (data router, library mode), TypeScript, Tailwind CSS 4,
 SWR, Vitest + Testing Library, ESLint (flat config) and Prettier. Migration step 6 of
 [../docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md); since release
-0.2.0 it is the only UI (it replaced the Next app's pages, with the same URLs
+0.3.0 it is the only UI (it replaced the Next app's pages, with the same URLs
 `/`, `/library`, `/explore`, `/explore/:category`, `/codecs`, polling intervals and look).
 
 Node 22.12+ (24 recommended).

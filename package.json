@@ -1,6 +1,6 @@
 {
   "name": "wheelhouse",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Tooling for the Wheelhouse repository: the black-box acceptance suite (acceptance/) and the single source of the release version. The server is in server/, the UI in web/.",
   "scripts": {

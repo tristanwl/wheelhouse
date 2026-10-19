@@ -5,7 +5,7 @@
 # (and `loginctl enable-linger $USER` so it starts at boot without a login).
 #
 # Pull the image first, so the first start doesn't have to download it:
-#   podman pull docker.io/tristanwl/wheelhouse:0.2.0
+#   podman pull docker.io/tristanwl/wheelhouse:0.3.0
 # To upgrade, change the version tag on the last ExecStart line below, then
 # `systemctl --user daemon-reload && systemctl --user restart
 # container-wheelhouse.service`. (There is no `latest` tag while Wheelhouse is
@@ -82,7 +82,7 @@ ExecStart=/usr/bin/podman run \
 	-v %h/wheelhouse/config:/config \
 	--device /dev/dri \
 	--group-add keep-groups \
-	--replace docker.io/tristanwl/wheelhouse:0.2.0
+	--replace docker.io/tristanwl/wheelhouse:0.3.0
 ExecStop=/usr/bin/podman stop \
 	--ignore -t 10 \
 	--cidfile=%t/%n.ctr-id

@@ -178,7 +178,7 @@ Everything that talks to another service goes through the provider layer in
   descriptions or issues.
 - Merge with a merge commit, not a squash, so separate commits stay separate.
 - Only a maintainer cuts releases. The tag (or GitHub release) is the bare
-  version with no `v` prefix (`0.2.0`) and **must equal the root `package.json`'s
+  version with no `v` prefix (`0.3.0`) and **must equal the root `package.json`'s
   `version`**: bump it in a PR first. `.github/workflows/release.yml` runs the
   CI checks, builds the Dockerfile (the binary reports that version), pushes
   `tristanwl/wheelhouse:<version>` to Docker Hub and creates or updates the
