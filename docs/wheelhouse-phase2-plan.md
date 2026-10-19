@@ -166,13 +166,12 @@ after item 10, **1.0.0** after a soak period with no open security findings. The
 
 ## Open questions
 
-- **Second factor:** TOTP for admins would raise the bar a lot for an app that
-  can delete media. Include it before 1.0 (one more PR after item 7) or after?
 - **Upgrade behaviour:** existing 0.2.x installs have no users. After upgrading
   they show setup with a token in the logs. Acceptable, or should there be a
   grace mode? (This plan assumes no grace mode.)
-- **API access for scripts:** personal access tokens for automation are left
-  for after 1.0.
+- **Second factor (TOTP) and API access:** decided to leave both until after
+  1.0. Sessions and the user table are designed so TOTP and personal access
+  tokens can be added without migrating existing accounts.
 - **Single sign-on (OIDC)** is left for after 1.0; the user table keeps room for
   an external identity.
 - **Audit retention** default of 180 days.
