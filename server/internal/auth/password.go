@@ -59,7 +59,18 @@ type hasher struct {
 	// computed counts Argon2 evaluations, so tests can show that every kind of
 	// failed login costs exactly one.
 	computed atomic.Int64
+	// waiting counts verifications queued for a slot; past maxQueued more are
+	// refused with errBusy instead of piling up (memory and latency).
+	waiting atomic.Int32
 }
+
+// maxQueuedVerifies bounds how many verifications may wait for one of the
+// maxConcurrentHashes slots. Each waiter holds only a goroutine, but an
+// unbounded queue would turn a flood into minutes of latency for everyone.
+const maxQueuedVerifies = 32
+
+// errBusy means too many verifications are already waiting.
+var errBusy = errors.New("auth: too many password checks are waiting")
 
 func newHasher(p Params) *hasher {
 	if p == (Params{}) {
@@ -75,6 +86,22 @@ func (h *hasher) acquire(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// acquireBounded is acquire for attacker-reachable work: when the queue is
+// already maxQueuedVerifies long it fails at once with errBusy.
+func (h *hasher) acquireBounded(ctx context.Context) error {
+	select {
+	case h.sem <- struct{}{}:
+		return nil
+	default:
+	}
+	if h.waiting.Add(1) > maxQueuedVerifies {
+		h.waiting.Add(-1)
+		return errBusy
+	}
+	defer h.waiting.Add(-1)
+	return h.acquire(ctx)
 }
 
 func (h *hasher) release() { <-h.sem }
@@ -101,6 +128,9 @@ func encode(p Params, salt, key []byte) string {
 	return fmt.Sprintf("$argon2id$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		argon2.Version, p.Memory, p.Time, p.Threads, b64.EncodeToString(salt), b64.EncodeToString(key))
 }
+
+// errSkipped means the caller's proceed check refused the work.
+var errSkipped = errors.New("auth: password check skipped")
 
 var errBadHash = errors.New("auth: the stored password hash is not a valid Argon2id hash")
 
@@ -147,16 +177,32 @@ func parseHash(encoded string) (Params, []byte, []byte, error) {
 // constant time. params are the hash's own, so the caller can decide to rehash.
 // A hash that cannot be parsed never matches (and still costs a full hash, so
 // it is not distinguishable by timing from a wrong password).
-func (h *hasher) Verify(ctx context.Context, encoded, password string) (ok bool, params Params, err error) {
+//
+// proceed, when not nil, is asked once a slot is held, immediately before the
+// expensive work: if it says no, nothing is computed and errSkipped comes back.
+// Login uses it to re-check the lock after the wait in the queue.
+func (h *hasher) Verify(ctx context.Context, encoded, password string, proceed func() bool) (ok bool, params Params, err error) {
 	p, salt, key, perr := parseHash(encoded)
 	if perr != nil {
-		_, _ = h.Hash(ctx, password) // spend the same time
+		// Spend the same time, within the same bounds as a real check.
+		if err := h.acquireBounded(ctx); err != nil {
+			return false, Params{}, err
+		}
+		defer h.release()
+		if proceed != nil && !proceed() {
+			return false, Params{}, errSkipped
+		}
+		h.computed.Add(1)
+		_ = argon2.IDKey([]byte(password), make([]byte, saltLen), h.params.Time, h.params.Memory, h.params.Threads, keyLen)
 		return false, Params{}, perr
 	}
-	if err := h.acquire(ctx); err != nil {
+	if err := h.acquireBounded(ctx); err != nil {
 		return false, p, err
 	}
 	defer h.release()
+	if proceed != nil && !proceed() {
+		return false, p, errSkipped
+	}
 	h.computed.Add(1)
 	got := argon2.IDKey([]byte(password), salt, p.Time, p.Memory, p.Threads, uint32(len(key))) //nolint:gosec // 16 to 64, checked by parseHash
 	return subtle.ConstantTimeCompare(got, key) == 1, p, nil
