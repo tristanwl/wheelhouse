@@ -95,7 +95,7 @@ export default function AuditPage() {
 
       {error && <ErrorNote>Could not load the audit log. {errorText(error, "")}</ErrorNote>}
       {data && (
-        <div className={`${CARD} overflow-x-auto`}>
+        <div className={`${CARD} relative overflow-x-auto`}>
           <table className="w-full min-w-[44rem] text-left text-sm">
             <caption className="sr-only">Audit log, newest first</caption>
             <thead className="text-xs uppercase tracking-wide text-slate-500">

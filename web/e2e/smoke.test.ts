@@ -98,6 +98,8 @@ describe.skipIf(reason)("browser smoke test", () => {
     session?: boolean;
     /** The server to visit (default: the main one). Its administrator's cookie is used unless `session` is false. */
     on?: { baseUrl: string; admin?: { cookie?: { name: string; value: string } } };
+    /** Browser width in pixels (default 1100); 400 is a phone. */
+    width?: number;
     /** HTTP statuses this visit is expected to see (e.g. the 401 of the session probe on the login page). */
     allow?: number[];
   }
@@ -106,7 +108,9 @@ describe.skipIf(reason)("browser smoke test", () => {
   async function open(path: string, opts: OpenOptions = {}): Promise<Visit> {
     const target = opts.on ?? server;
     const allowed = opts.allow ?? [];
-    const context = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+    const context = await browser.newContext({
+      viewport: { width: opts.width ?? 1100, height: 900 },
+    });
     // The harness already set up and signed in the administrator through the API, so
     // the browser can start with that session cookie. The UI gets the CSRF token
     // itself from GET /api/auth/session and sends it, as it does for every person.
@@ -239,7 +243,8 @@ describe.skipIf(reason)("browser smoke test", () => {
       const v = await open(path);
       try {
         await ready(v.page);
-        await expect(v.page.title()).resolves.toBe("wheelhouse");
+        // Every page names itself in the tab ("Library · wheelhouse").
+        await expect(v.page.title()).resolves.toMatch(/ · wheelhouse$/);
         await v.page.getByRole("link", { name: "wheelhouse home" }).waitFor({ state: "visible" });
         await expectClean(v);
       } finally {
@@ -247,6 +252,37 @@ describe.skipIf(reason)("browser smoke test", () => {
       }
     });
   }
+
+  it("every main and admin page fits a 400px screen without sideways scrolling", async () => {
+    const paths = [
+      ...pages.map((p) => p.path),
+      "/account",
+      "/admin/services",
+      "/admin/services/new",
+      "/admin/features",
+      "/admin/users",
+      "/admin/sessions",
+      "/admin/network",
+      "/admin/converter",
+      "/admin/audit",
+    ];
+    const wide: string[] = [];
+    for (const path of paths) {
+      const v = await open(path, { width: 400 });
+      try {
+        await v.page.getByRole("link", { name: "wheelhouse home" }).waitFor({ state: "visible" });
+        await v.page.waitForLoadState("networkidle");
+        const [scroll, inner] = await v.page.evaluate(() => [
+          document.documentElement.scrollWidth,
+          window.innerWidth,
+        ]);
+        if (scroll > inner) wide.push(`${path}: ${scroll}px wide in ${inner}px`);
+      } finally {
+        await v.page.context().close();
+      }
+    }
+    expect(wide).toEqual([]);
+  });
 
   it("the page, as served, has no inline script or style and the CSP names only the image hosts", async () => {
     const res = await fetch(`${server.baseUrl}/library`);
