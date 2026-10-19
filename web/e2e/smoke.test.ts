@@ -12,7 +12,7 @@
  * (`npx playwright-core install chromium`). Without them the tests are skipped
  * with the reason, unless WHEELHOUSE_SMOKE_REQUIRED=1 (CI), where that is a failure.
  */
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,31 +90,38 @@ describe.skipIf(reason)("browser smoke test", () => {
     problems: string[];
     hosts: Set<string>;
     urls: string[];
+    origin: string;
+  }
+
+  interface OpenOptions {
+    /** Start with the harness administrator's session cookie (default). False: a visitor with no session. */
+    session?: boolean;
+    /** The server to visit (default: the main one). */
+    on?: { baseUrl: string };
+    /** HTTP statuses this visit is expected to see (e.g. the 401 of the session probe on the login page). */
+    allow?: number[];
   }
 
   /** Opens a page, collecting everything that should never happen. */
-  async function open(path: string): Promise<Visit> {
+  async function open(path: string, opts: OpenOptions = {}): Promise<Visit> {
+    const target = opts.on ?? server;
+    const allowed = opts.allow ?? [];
     const context = await browser.newContext({ viewport: { width: 1100, height: 900 } });
-    // The server needs a login: the harness already set up and signed in the
-    // administrator through the API, so the browser starts with that session
-    // cookie. The UI does not send the CSRF header yet (the login screen and
-    // session handling arrive with the web auth work, plan item 6), so the header
-    // is added to the UI's own API calls here; the server requires it on mutations.
-    const session = server.admin.cookie!;
-    await context.addCookies([
-      {
-        name: session.name,
-        value: session.value,
-        url: server.baseUrl,
-        httpOnly: true,
-        sameSite: "Strict",
-      },
-    ]);
-    await context.route(`${server.baseUrl}/api/**`, (route) =>
-      route.continue({
-        headers: { ...route.request().headers(), "x-csrf-token": server.admin.csrf! },
-      })
-    );
+    // The harness already set up and signed in the administrator through the API, so
+    // the browser can start with that session cookie. The UI gets the CSRF token
+    // itself from GET /api/auth/session and sends it, as it does for every person.
+    if (opts.session !== false) {
+      const session = server.admin.cookie!;
+      await context.addCookies([
+        {
+          name: session.name,
+          value: session.value,
+          url: server.baseUrl,
+          httpOnly: true,
+          sameSite: "Strict",
+        },
+      ]);
+    }
     const page = await context.newPage();
     const problems: string[] = [];
     const hosts = new Set<string>();
@@ -136,7 +143,10 @@ describe.skipIf(reason)("browser smoke test", () => {
     });
 
     page.on("console", (m) => {
-      if (m.type() === "error") problems.push(`console error: ${m.text()}`);
+      if (m.type() !== "error") return;
+      // The browser logs every failed load as a console error; expected statuses are not problems.
+      if (allowed.some((st) => m.text().includes(`status of ${st}`))) return;
+      problems.push(`console error: ${m.text()}`);
     });
     page.on("pageerror", (e) => problems.push(`page error: ${e.message}`));
     page.on("request", (r) => {
@@ -147,11 +157,12 @@ describe.skipIf(reason)("browser smoke test", () => {
       problems.push(`request failed: ${r.url()} (${r.failure()?.errorText})`);
     });
     page.on("response", (r) => {
-      if (r.status() >= 400) problems.push(`HTTP ${r.status()}: ${r.url()}`);
+      if (r.status() >= 400 && !allowed.includes(r.status()))
+        problems.push(`HTTP ${r.status()}: ${r.url()}`);
     });
 
-    await page.goto(`${server.baseUrl}${path}`, { waitUntil: "load" });
-    const visit: Visit = { page, problems, hosts, urls };
+    await page.goto(`${target.baseUrl}${path}`, { waitUntil: "load" });
+    const visit: Visit = { page, problems, hosts, urls, origin: new URL(target.baseUrl).host };
     return visit;
   }
 
@@ -161,8 +172,7 @@ describe.skipIf(reason)("browser smoke test", () => {
     const csp = await v.page.evaluate(() => (window as unknown as { __csp: string[] }).__csp);
     expect(csp, "CSP violations").toEqual([]);
     expect(v.problems).toEqual([]);
-    const origin = new URL(server.baseUrl).host;
-    const outside = [...v.hosts].filter((h) => h !== origin);
+    const outside = [...v.hosts].filter((h) => h !== v.origin);
     expect(
       outside.filter((h) => !IMAGE_HOSTS.includes(h)),
       "requests to hosts outside the allow-list"
@@ -339,6 +349,141 @@ describe.skipIf(reason)("browser smoke test", () => {
       expect(new URL(sent.url()).searchParams.get("confirm")).toBe("true");
       await expect.poll(() => radarrDeletes().length).toBe(1);
       await expect.poll(() => v.page.getByRole("row", { name: /Example Movie 1/ }).count()).toBe(1);
+      await expectClean(v);
+    } finally {
+      await v.page.context().close();
+    }
+  });
+
+  // ---- Authentication, through the UI ----
+
+  const PASSWORD = "smoke-test-passphrase-1";
+
+  async function fillSignIn(p: Page, username: string, password: string) {
+    await p.getByLabel("Username").fill(username);
+    await p.getByLabel("Password").fill(password);
+    await p.getByRole("button", { name: "Sign in" }).click();
+  }
+
+  /** Nothing the session needs is readable by page script: no storage, no cookie. */
+  async function expectNoScriptReadableSession(p: Page) {
+    const seen = await p.evaluate(() => ({
+      local: localStorage.length,
+      session: sessionStorage.length,
+      cookie: document.cookie,
+    }));
+    expect(seen).toEqual({ local: 0, session: 0, cookie: "" });
+  }
+
+  it("a visitor with no session is sent to the login page, signs in, and lands where they were going", async () => {
+    const { ADMIN } = await import("../../acceptance/harness");
+    const v = await open("/library?path=%2Fmovies", { session: false, allow: [401] });
+    try {
+      await v.page.getByRole("heading", { name: "Sign in" }).waitFor();
+      const url = new URL(v.page.url());
+      expect(url.pathname).toBe("/login");
+      expect(url.searchParams.get("redirect")).toBe("/library?path=%2Fmovies");
+      expect(await v.page.getByLabel("Username").getAttribute("autocomplete")).toBe("username");
+      expect(await v.page.getByLabel("Password").getAttribute("autocomplete")).toBe(
+        "current-password"
+      );
+      await fillSignIn(v.page, ADMIN.username, ADMIN.password);
+      await v.page.getByRole("heading", { name: /^Library \(/ }).waitFor();
+      const landed = new URL(v.page.url());
+      expect(landed.pathname + landed.search).toBe("/library?path=%2Fmovies");
+      expect(JSON.stringify(v.urls)).not.toContain(ADMIN.password);
+      await expectNoScriptReadableSession(v.page);
+
+      // Account page: role, own sessions; the user menu signs out.
+      await v.page.getByRole("button", { name: /admin/ }).click();
+      await v.page.getByRole("menuitem", { name: "Account" }).click();
+      await v.page.getByRole("heading", { name: "Account" }).waitFor();
+      await v.page.getByText("This session").waitFor();
+      await v.page.getByRole("button", { name: /admin/ }).click();
+      await v.page.getByRole("menuitem", { name: "Sign out" }).click();
+      await v.page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await expectClean(v);
+    } finally {
+      await v.page.context().close();
+    }
+  });
+
+  it("first-run setup in the UI: token from the config dir, admin created, signed in, banner, sign-out and a wrong password", async () => {
+    const { startServer } = await import("../../acceptance/harness");
+    const fresh = await startServer({ auth: "none" });
+    try {
+      const token = readFileSync(join(fresh.configDir, "setup-token"), "utf8").trim();
+      // A fresh server answers 503 "setup required" to the session probe until the wizard is done.
+      const v = await open("/", { session: false, on: fresh, allow: [503, 401, 403] });
+      try {
+        await v.page.getByRole("heading", { name: "Set up Wheelhouse" }).waitFor();
+        expect(new URL(v.page.url()).pathname).toBe("/setup");
+        await v.page.getByLabel("Setup token").fill(token);
+        await v.page.getByLabel("Administrator username").fill("owner");
+        await v.page.getByLabel("Password", { exact: true }).fill("short");
+        await v.page.getByText(/Too short/).waitFor();
+        await v.page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+        await v.page.getByLabel("Confirm password").fill(PASSWORD);
+        await v.page.getByRole("button", { name: "Create administrator" }).click();
+
+        const banner = v.page.getByRole("status").filter({ hasText: "Add your services" });
+        await banner.waitFor();
+        expect(await banner.getByRole("link").getAttribute("href")).toBe("/admin");
+        expect(new URL(v.page.url()).pathname).toBe("/");
+        expect(existsSync(join(fresh.configDir, "setup-token"))).toBe(false);
+        await expectNoScriptReadableSession(v.page);
+
+        // /admin exists for the administrator (a placeholder until the admin pages land).
+        await v.page.goto(`${fresh.baseUrl}/admin`);
+        await v.page.getByRole("heading", { name: "Page not found" }).waitFor();
+
+        await v.page.getByRole("button", { name: /owner/ }).click();
+        await v.page.getByRole("menuitem", { name: "Sign out" }).click();
+        await v.page.getByRole("heading", { name: "Sign in" }).waitFor();
+
+        await fillSignIn(v.page, "owner", "not-the-right-passphrase");
+        const alert = v.page.getByRole("alert");
+        await alert.waitFor();
+        expect(await alert.textContent()).toMatch(/Invalid username or password/);
+        expect(await v.page.getByLabel("Password").inputValue()).toBe("");
+
+        await v.page.waitForTimeout(1500); // the throttle's first delay is short
+        await fillSignIn(v.page, "owner", PASSWORD);
+        await v.page.getByRole("heading", { name: "Service status" }).waitFor();
+        await expectClean(v);
+      } finally {
+        await v.page.context().close();
+      }
+    } finally {
+      await fresh.stop();
+    }
+  });
+
+  it("an account with a temporary password must choose a new one first, and a user cannot open /admin", async () => {
+    const created = await server.request("/api/users", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: "member",
+        password: "temporary-passphrase-1",
+        role: "user",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const v = await open("/codecs", { session: false, allow: [401] });
+    try {
+      await v.page.getByRole("heading", { name: "Sign in" }).waitFor();
+      await fillSignIn(v.page, "member", "temporary-passphrase-1");
+      await v.page.getByRole("heading", { name: "Choose a new password" }).waitFor();
+      expect(new URL(v.page.url()).pathname).toBe("/change-password");
+      await v.page.getByLabel("Current password").fill("temporary-passphrase-1");
+      await v.page.getByLabel("New password", { exact: true }).fill(PASSWORD);
+      await v.page.getByLabel("Confirm new password").fill(PASSWORD);
+      await v.page.getByRole("button", { name: "Change password" }).click();
+      await v.page.getByRole("heading", { name: "Codec Analysis" }).waitFor();
+
+      await v.page.goto(`${server.baseUrl}/admin/users`);
+      await v.page.getByRole("heading", { name: "Not authorised" }).waitFor();
       await expectClean(v);
     } finally {
       await v.page.context().close();

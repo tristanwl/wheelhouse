@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useRef, useState } from "react";
 import useSWR from "swr";
 import { Link } from "react-router";
@@ -53,7 +54,7 @@ export function ExploreSection({
     setAdding(true);
     setAddError(null);
     try {
-      const res = await fetch("/api/add", {
+      const res = await apiFetch("/api/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

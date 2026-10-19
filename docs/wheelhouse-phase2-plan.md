@@ -126,15 +126,13 @@ media). The open question below covers a later read-and-add role.
 
 ## Work plan
 
-Status: **items 1, 2 and 4 are done.** Item 1: threat model, `internal/store`,
+Status: **items 1, 2, 4 and 6 are done.** Item 1: threat model, `internal/store`,
 `internal/secrets`, `wheelhouse backup` and `rekey`. Item 2: the server opens the
 database and key at start; users, Argon2id passwords, sessions, CSRF, login
 throttling, the `Guard` that enforces the route levels, the audit log, a minimal
 `POST /api/auth/setup` with the setup token, the user and audit API, `wheelhouse
 reset-password` and `forget-secrets`, [docs/operations.md](operations.md), and an
-authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Items 3 and 5 to 10 are open. The web UI
-cannot log in until item 6, so nothing is released before then (a browser smoke
-test borrows the acceptance harness's session meanwhile).
+authenticated mode in the acceptance suite. **Item 4 is done:** `internal/instances`, the `/api/admin/*` routes, feature toggles and the link-local deny. Item 6 (web login, setup wizard, account, route guards): the UI has its own session handling and the browser smoke test drives the real login and setup flows. Items 3, 5 and 7 to 10 are open.
 
 Each item is one PR (or a short series), built by a sub-agent against this plan
 and re-verified before merging, as in the migration. Items 1 to 6 land on `main`

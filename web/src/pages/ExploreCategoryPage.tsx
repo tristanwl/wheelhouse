@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useEffect, useState } from "react";
 import useSWRInfinite from "swr/infinite";
 import { Link, useParams } from "react-router";
@@ -73,7 +74,7 @@ export default function ExploreCategoryPage() {
     setAdding(true);
     setAddError(null);
     try {
-      const res = await fetch("/api/add", {
+      const res = await apiFetch("/api/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

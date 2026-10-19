@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import useSWR, { mutate as globalMutate } from "swr";
@@ -91,7 +92,7 @@ export default function LibraryPage() {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const res = await fetch(confirmedDeleteUrl(pending.instanceId, pending.id), {
+      const res = await apiFetch(confirmedDeleteUrl(pending.instanceId, pending.id), {
         method: "DELETE",
       });
       if (!res.ok) {

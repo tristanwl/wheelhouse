@@ -3,7 +3,7 @@
 A self-hosted dashboard and companion for the *arr media stack: status, library
 management, movie discovery and codec-aware conversion. Alpha: the released 0.2.x
 has **no authentication** (trusted networks only); `main` enforces accounts and
-sessions on the server and the web UI's login arrives later in Phase 2, so no
+sessions, and the web UI has its login, setup wizard and account pages (Phase 2 item 6), so no
 release is cut until the Phase 2 items land.
 
 Read [docs/architecture.md](docs/architecture.md) for how things work and
@@ -50,9 +50,11 @@ definition of "the API works": a new route must be added to `acceptance/routes.t
 (and to the Go router test, which lists every route with its access level).
 
 A UI change must keep the CSP (no inline script/style) and send `?confirm=true`
-on library deletes only after its confirm dialog. The server now needs a session
-and an `X-CSRF-Token` on every state change; the browser smoke test (`web/e2e`)
-gets both from the acceptance harness until the UI has its own login (plan item 6).
+on library deletes only after its confirm dialog. Every UI request goes through
+`web/src/lib/http.ts` (session cookie, `X-CSRF-Token` on non-GETs, central 401 and
+503 handling); never call `fetch` elsewhere and never put the session or CSRF
+token in browser storage. The browser smoke test (`web/e2e`) uses the real login
+and setup pages.
 
 ## How it is built
 

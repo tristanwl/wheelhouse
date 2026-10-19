@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/http";
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -118,7 +119,7 @@ export function ConvertModal({
     setStarting(true);
     setStartError(null);
     try {
-      const res = await fetch("/api/codec-analysis/convert", {
+      const res = await apiFetch("/api/codec-analysis/convert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -152,7 +153,7 @@ export function ConvertModal({
     stopRequested.current = true;
     setStopping(true);
     try {
-      await fetch(`/api/codec-analysis/convert/${jobId}/cancel`, {
+      await apiFetch(`/api/codec-analysis/convert/${jobId}/cancel`, {
         method: "POST",
       });
       // Don't wait for the next 2s poll — refetch right away so "Stopping…"

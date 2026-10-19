@@ -10,6 +10,7 @@ export interface Call {
   /** Path and query, as the UI asked for it. */
   url: string;
   body: unknown;
+  headers: Record<string, string>;
 }
 
 type Reply = unknown | { status: number; body: unknown } | ((call: Call) => unknown);
@@ -21,6 +22,7 @@ type Reply = unknown | { status: number; body: unknown } | ((call: Call) => unkn
  * on exactly what the UI sent.
  */
 export function mockApi(replies: Record<string, Reply>) {
+  replies = { "GET /api/auth/session": ADMIN_SESSION, ...replies };
   const calls: Call[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -29,6 +31,7 @@ export function mockApi(replies: Record<string, Reply>) {
       method,
       url,
       body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
     };
     calls.push(call);
     const path = url.split("?")[0];
@@ -59,6 +62,16 @@ function jsonResponse(status: number, body: unknown): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+/** The session answer of a signed-in administrator (the default for mockApi). */
+export const ADMIN_SESSION = {
+  user: { id: "a1", username: "admin", role: "admin", mustChangePassword: false },
+  csrfToken: "csrf-test-token",
+};
+export const USER_SESSION = {
+  user: { id: "u1", username: "alice", role: "user", mustChangePassword: false },
+  csrfToken: "csrf-test-token",
+};
 
 export const ALL_FEATURES: FeaturesResponse = {
   features: [

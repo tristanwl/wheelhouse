@@ -12,8 +12,8 @@ hardware encoding when available.
 The released 0.2.x has no authentication, so run it only on a trusted network.
 The development branch enforces it on the server (accounts, sessions, login,
 CSRF, throttling, an audit log; see "Accounts and sessions" below) while the web
-UI's login and setup screens, a setup wizard and a database-backed configuration
-are still to come — see [wheelhouse-spec.md](./wheelhouse-spec.md),
+UI has its login, setup and account pages (see "Web sign-in" below); the
+admin pages and a database-backed configuration are still to come — see [wheelhouse-spec.md](./wheelhouse-spec.md),
 [wheelhouse-spec-phase2.md](./wheelhouse-spec-phase2.md) and
 [wheelhouse-phase2-plan.md](./wheelhouse-phase2-plan.md). Operating a server
 (backups, the master key, recovery) is in [operations.md](./operations.md).
@@ -652,6 +652,41 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
 - **Recovery.** `wheelhouse reset-password <user>` (generated one-time password,
   `must_change_password`, sessions ended, audited as `cli`); a flagged account can
   call only the session, password and logout routes until it has changed it.
+
+### Web sign-in (`web/src`, plan item 6)
+
+- **One client.** Every request goes through `lib/http.ts` (`apiFetch`/`apiJson`);
+  a test fails if anything else calls `fetch`. It sends the cookie
+  (`credentials: "same-origin"`), adds `X-CSRF-Token` to every non-GET request and,
+  on a CSRF refusal, fetches the session again and retries once. The token comes
+  from `GET /api/auth/session` or the login answer and lives only in module
+  memory: no `localStorage`, `sessionStorage` or script-readable cookie holds
+  anything (the session cookie is `HttpOnly`).
+- **Central handling.** A 401 on a normal request makes the session provider
+  (`components/SessionProvider.tsx`) anonymous and clears every SWR cache; the
+  route guard then goes to `/login?redirect=<where you were>` (only in-app paths
+  are honoured, see `lib/redirect.ts`). A 503 `setup required` goes to `/setup`;
+  a 403 `password-change-required` goes to `/change-password`. Login, setup and the
+  session probe are `anonymous` requests whose 401/503 are ordinary results.
+- **Session shape.** The UI reads `{"user": {id, username, role, mustChangePassword},
+  "csrfToken": "...", "bypass": true|false}`. `bypass` is set by the server when
+  the local-network bypass (plan item 5) let the request in without a login; a
+  missing `bypass` is false, a bypass answer is never treated as admin, a missing
+  `user` on a bypass answer is a `user` called "Local network", and a missing
+  `csrfToken` just means no header is sent. Adapt `lib/session-context.ts`
+  (`parseSession`) if the final shape differs.
+- **Routes.** `/login` and `/setup` are open; everything else is behind
+  `RequireAuth` (loading, error, setup, login redirect, forced password change).
+  `/admin/*` is behind `RequireAdmin`: a `user` sees "Not authorised", a bypass
+  visitor is sent to the login page for an administrator login. The pages item 7
+  adds replace the placeholder children of the `/admin` route in `routes.tsx`.
+- **Pages.** Login (generic error for 401, a throttling message for 429), setup
+  wizard step 1 (token, username, password with the 12-character hint, confirm;
+  then signs in and lands on the Dashboard with an "Add your services" banner
+  linking to `/admin`), account (role, change password, own sessions with revoke;
+  for a bypass visitor only "signed in from the local network"), forced password
+  change, and a header user menu (name, role, Account, Sign out; no Sign out for
+  bypass).
 
 ### Stored configuration
 
