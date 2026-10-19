@@ -166,6 +166,8 @@ func (s *configSpec) decode(raw map[string]any) (any, error) {
 				fail(f.Name, "must not be empty")
 			case f.Format == "url" && !validHTTPURL(str):
 				fail(f.Name, "must be an http or https URL")
+			case f.Format == "url" && hasQueryOrFragment(str):
+				fail(f.Name, "must not contain a query string (?...) or a fragment (#...)")
 			case f.Format == "url" && hasURLCredentials(str):
 				fail(f.Name, "must not contain a username or password")
 			default:
@@ -220,6 +222,14 @@ func validHTTPURL(s string) bool {
 		return false
 	}
 	return (u.Scheme == "http" || u.Scheme == "https") && u.Hostname() != ""
+}
+
+// hasQueryOrFragment reports whether a URL has a "?" or "#" part. Instance URLs
+// are bases that API paths are appended to: a fragment would swallow the path
+// (the request would go to the base address alone, with the credentials), and a
+// query string would be attached to every request or break the join.
+func hasQueryOrFragment(s string) bool {
+	return strings.ContainsAny(s, "?#")
 }
 
 // hasURLCredentials reports whether a URL carries "user:pass@". The Next app

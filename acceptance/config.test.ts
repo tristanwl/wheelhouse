@@ -212,7 +212,22 @@ describe("stored configuration", () => {
     });
     expect((await test({ id: "radarr" })).json.ok).toBe(true);
     expect((await test({ id: "radarr", config: { url } })).json.ok).toBe(true); // stored key filled in
-    expect((await test({ id: "radarr", config: { url: await closedUrl() } })).json.ok).toBe(false);
+    // An edited address never gets the stored key: the secret must be re-entered, for
+    // the connection test and for the update alike (a server at the new address
+    // would otherwise be handed the key).
+    const elsewhere = await closedUrl();
+    const moved = await test({ id: "radarr", config: { url: elsewhere } });
+    expect(moved.status).toBe(400);
+    expect(moved.raw).toContain("entered again");
+    expect(moved.raw).not.toContain(GOOD.arr);
+    expect((await test({ id: "radarr", config: { url: elsewhere, apiKey: GOOD.arr } })).json.ok).toBe(false);
+    const movedUpdate = await send("/api/admin/instances/radarr", "PUT", { config: { url: elsewhere } });
+    expect(movedUpdate.status).toBe(400);
+    expect((await server.request("/api/admin/instances")).json.instances[0].config.url).toBe(url);
+    // A URL with a fragment or a query string is refused with a clear message.
+    const fragment = await test({ providerId: "radarr", config: { url: url + "#/api", apiKey: GOOD.arr } });
+    expect(fragment.status).toBe(400);
+    expect(fragment.raw).toContain("fragment");
     expect((await test({ id: "nothing-here" })).status).toBe(404);
     const list = await server.request("/api/admin/instances");
     expect(list.json.instances[0].lastTest).toMatchObject({ ok: true });

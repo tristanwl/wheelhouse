@@ -29,6 +29,43 @@ func TestAddressDeniedByDefault(t *testing.T) {
 	}
 }
 
+func TestMoreMetadataAddressesAreDeniedByDefault(t *testing.T) {
+	for _, a := range []string{
+		"[64:ff9b::a9fe:a9fe]:80",       // NAT64 form of 169.254.169.254
+		"[64:ff9b::7f00:1]:80",          // any address in the NAT64 prefix
+		"[64:ff9b::169.254.169.254]:80", // dotted form
+		"100.100.100.200:80",            // Alibaba Cloud
+		"192.0.0.192:80",                // Oracle Cloud
+	} {
+		if !addressDenied(a) {
+			t.Errorf("%s: allowed, want denied", a)
+		}
+	}
+	for _, a := range []string{"100.100.100.201:80", "100.64.0.1:80", "192.0.0.193:80", "[64:ff9a::1]:80", "[64:ff9b:1::1]:80"} {
+		if addressDenied(a) {
+			t.Errorf("%s: denied, want allowed", a)
+		}
+	}
+}
+
+// An administrator's own list replaces the defaults, but a NAT64 address is
+// still judged by the IPv4 address inside it.
+func TestNAT64IsJudgedByTheEmbeddedAddressUnderACustomList(t *testing.T) {
+	p, _ := ParseDeniedNetworks("169.254.0.0/16")
+	SetDeniedNetworks(p)
+	defer SetDeniedNetworks(DefaultDeniedNetworks())
+	if !addressDenied("[64:ff9b::a9fe:a9fe]:80") {
+		t.Error("NAT64 form of a denied IPv4 address was allowed")
+	}
+	if addressDenied("[64:ff9b::c000:201]:80") || addressDenied("100.100.100.200:80") {
+		t.Error("the override list should not carry the other defaults")
+	}
+	SetDeniedNetworks(nil)
+	if addressDenied("[64:ff9b::a9fe:a9fe]:80") || addressDenied("169.254.169.254:80") {
+		t.Error(`"none" allows everything`)
+	}
+}
+
 func TestParseDeniedNetworks(t *testing.T) {
 	if p, err := ParseDeniedNetworks(""); err != nil || len(p) != len(DefaultDeniedNetworks()) {
 		t.Errorf("default: %v %v", p, err)
