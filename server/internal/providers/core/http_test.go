@@ -343,7 +343,7 @@ func TestHTTPClientAllowsExactlyTheLimitAndPerCallOverride(t *testing.T) {
 	if _, err := c.Do(context.Background(), "/", Request{MaxBytes: 99}); err == nil {
 		t.Fatal("per-call limit not applied")
 	}
-	if c.maxBytes != 100 || DefaultMaxResponseBytes != 64<<20 {
+	if c.maxBytes != 100 || DefaultMaxResponseBytes != 8<<20 {
 		t.Fatalf("defaults wrong: %d", c.maxBytes)
 	}
 }

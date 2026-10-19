@@ -208,12 +208,12 @@ type client struct {
 }
 
 // api calls one mode and decodes the JSON answer into out.
-func (c *client) api(ctx context.Context, mode string, extra url.Values, out any) error {
+func (c *client) api(ctx context.Context, mode string, extra url.Values, maxBytes int64, out any) error {
 	q := url.Values{"mode": {mode}, "output": {"json"}, "apikey": {c.apiKey}}
 	for k, v := range extra {
 		q[k] = v
 	}
-	res, err := c.http.Do(ctx, "/api", core.Request{Query: q})
+	res, err := c.http.Do(ctx, "/api", core.Request{Query: q, MaxBytes: maxBytes})
 	if err != nil {
 		// SABnzbd 4.x answers a wrong key with 403 and a plain-text body.
 		var pe *core.ProviderError
@@ -221,6 +221,9 @@ func (c *client) api(ctx context.Context, mode string, extra url.Values, out any
 			return &core.ProviderError{Message: c.label + ": API key incorrect", Status: 403}
 		}
 		return err
+	}
+	if err := core.CheckJSON(res.Body, core.JSONLimits{}); err != nil {
+		return &core.ProviderError{Message: c.label + " /api " + core.InvalidJSONText(err)}
 	}
 	// Some SABnzbd versions answer errors with 200 and an error field.
 	var probe struct {
@@ -231,9 +234,9 @@ func (c *client) api(ctx context.Context, mode string, extra url.Values, out any
 			return &core.ProviderError{Message: c.redactor.Redact(c.label + ": " + msg)}
 		}
 	}
-	if err := json.Unmarshal(res.Body, out); err != nil {
+	if err := core.DecodeJSON(ctx, res.Body, out, core.JSONLimits{}); err != nil {
 		// Not err.Error(): decoder errors can quote parts of the body.
-		return &core.ProviderError{Message: c.label + " /api returned invalid JSON"}
+		return &core.ProviderError{Message: c.label + " /api " + core.InvalidJSONText(err)}
 	}
 	return nil
 }
@@ -244,7 +247,7 @@ func (c *client) unexpected() error {
 
 func (c *client) queue(ctx context.Context, extra url.Values) (*queue, error) {
 	var r queueResponse
-	if err := c.api(ctx, "queue", extra, &r); err != nil {
+	if err := c.api(ctx, "queue", extra, core.MediumListBytes, &r); err != nil {
 		return nil, err
 	}
 	if r.Queue == nil {
@@ -272,8 +275,10 @@ func (c *client) Status(ctx context.Context) (dc.Status, error) {
 		wg       sync.WaitGroup
 	)
 	wg.Go(func() { q, errs[0] = c.queue(ctx, nil) })
-	wg.Go(func() { errs[1] = c.api(ctx, "get_config", url.Values{"section": {"servers"}}, &cfg) })
-	wg.Go(func() { errs[2] = c.api(ctx, "warnings", nil, &warnings) })
+	wg.Go(func() {
+		errs[1] = c.api(ctx, "get_config", url.Values{"section": {"servers"}}, core.SmallResponseBytes, &cfg)
+	})
+	wg.Go(func() { errs[2] = c.api(ctx, "warnings", nil, core.SmallResponseBytes, &warnings) })
 	wg.Wait()
 	if err := firstNonNil(errs[:]); err != nil {
 		return dc.Status{}, err
@@ -358,7 +363,7 @@ func (c *client) Items(ctx context.Context) ([]dc.Item, error) {
 		wg   sync.WaitGroup
 	)
 	wg.Go(func() { q, errs[0] = c.queue(ctx, nil) })
-	wg.Go(func() { errs[1] = c.api(ctx, "history", url.Values{"limit": {"25"}}, &hist) })
+	wg.Go(func() { errs[1] = c.api(ctx, "history", url.Values{"limit": {"25"}}, core.SmallResponseBytes, &hist) })
 	wg.Wait()
 	if err := firstNonNil(errs[:]); err != nil {
 		return nil, err

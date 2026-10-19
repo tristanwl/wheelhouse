@@ -6,7 +6,6 @@ package qbittorrent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -301,8 +300,8 @@ func (c *client) renewCall(ctx context.Context, staleGen int) (*loginCall, error
 	return c.wait(ctx, call)
 }
 
-func (c *client) get(ctx context.Context, path, cookie string) (*core.Response, error) {
-	req := core.Request{}
+func (c *client) get(ctx context.Context, path, cookie string, maxBytes int64) (*core.Response, error) {
+	req := core.Request{MaxBytes: maxBytes}
 	if cookie != "" {
 		req.Header = http.Header{"Cookie": {cookie}}
 	}
@@ -315,12 +314,12 @@ func isAuthStatus(err error) bool {
 }
 
 // authed GETs path with the session cookie, signing in first or again as needed.
-func (c *client) authed(ctx context.Context, path string) (*core.Response, error) {
+func (c *client) authed(ctx context.Context, path string, maxBytes int64) (*core.Response, error) {
 	cookie, gen, err := c.session(ctx)
 	if err != nil {
 		return nil, err
 	}
-	res, err := c.get(ctx, path, cookie)
+	res, err := c.get(ctx, path, cookie, maxBytes)
 	if err == nil || !isAuthStatus(err) {
 		return res, err
 	}
@@ -328,7 +327,7 @@ func (c *client) authed(ctx context.Context, path string) (*core.Response, error
 	if cookie, err = c.renew(ctx, gen); err != nil {
 		return nil, err
 	}
-	res, err = c.get(ctx, path, cookie)
+	res, err = c.get(ctx, path, cookie, maxBytes)
 	var pe *core.ProviderError
 	if errors.As(err, &pe) && pe.Status == http.StatusForbidden {
 		return nil, &core.ProviderError{Message: c.label + ": not authorized after signing in", Status: 403}
@@ -336,21 +335,21 @@ func (c *client) authed(ctx context.Context, path string) (*core.Response, error
 	return res, err
 }
 
-func (c *client) json(ctx context.Context, path string, out any) error {
-	res, err := c.authed(ctx, path)
+func (c *client) json(ctx context.Context, path string, maxBytes int64, out any) error {
+	res, err := c.authed(ctx, path, maxBytes)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(res.Body, out); err != nil {
+	if err := core.DecodeJSON(ctx, res.Body, out, core.JSONLimits{}); err != nil {
 		// Not err.Error(): decoder errors can quote parts of the body.
-		return &core.ProviderError{Message: c.label + " " + path + " returned invalid JSON"}
+		return &core.ProviderError{Message: c.label + " " + path + " " + core.InvalidJSONText(err)}
 	}
 	return nil
 }
 
 func (c *client) version(ctx context.Context) (string, error) {
 	// Plain text: "v5.2.4".
-	res, err := c.authed(ctx, "/api/v2/app/version")
+	res, err := c.authed(ctx, "/api/v2/app/version", core.SmallResponseBytes)
 	if err != nil {
 		return "", err
 	}
@@ -375,8 +374,8 @@ func (c *client) Status(ctx context.Context) (dc.Status, error) {
 		errs     [3]error
 		wg       sync.WaitGroup
 	)
-	wg.Go(func() { errs[0] = c.json(ctx, "/api/v2/transfer/info", &transfer) })
-	wg.Go(func() { errs[1] = c.json(ctx, "/api/v2/torrents/info", &torrents) })
+	wg.Go(func() { errs[0] = c.json(ctx, "/api/v2/transfer/info", core.SmallResponseBytes, &transfer) })
+	wg.Go(func() { errs[1] = c.json(ctx, "/api/v2/torrents/info", core.LargeListBytes, &torrents) })
 	wg.Go(func() { ver, errs[2] = c.version(ctx) })
 	wg.Wait()
 	for _, err := range errs {
@@ -436,7 +435,7 @@ func (c *client) Status(ctx context.Context) (dc.Status, error) {
 // Items implements dc.Client.
 func (c *client) Items(ctx context.Context) ([]dc.Item, error) {
 	var torrents []torrent
-	if err := c.json(ctx, "/api/v2/torrents/info", &torrents); err != nil {
+	if err := c.json(ctx, "/api/v2/torrents/info", core.LargeListBytes, &torrents); err != nil {
 		return nil, err
 	}
 	// A finished, stopped torrent is just a file on disk; everything else is worth a row.
