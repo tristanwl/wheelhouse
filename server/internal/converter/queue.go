@@ -687,21 +687,23 @@ func (q *JobQueue) runJob(j *job) {
 	userCanceled := q.isCanceled(j)
 	switch {
 	case userCanceled || (errors.Is(err, errCanceled) && q.base.Err() == nil):
-		q.update(j, func(jj *Job) { jj.Status = StatusCanceled; jj.FinishedAt = now })
+		// The log line first: a reader that sees the final status must also
+		// see why (a test and the UI poll the status and then read the log).
 		q.appendLog(j, "Canceled.\n")
+		q.update(j, func(jj *Job) { jj.Status = StatusCanceled; jj.FinishedAt = now })
 	case q.base.Err() != nil:
 		// The server is shutting down: not the user's choice, so it is the same
 		// "interrupted" failure a crash leaves behind.
-		q.update(j, func(jj *Job) { jj.Status = StatusFailed; jj.Error = InterruptedError; jj.FinishedAt = now })
 		q.appendLog(j, "Failed: "+InterruptedError+"\n")
+		q.update(j, func(jj *Job) { jj.Status = StatusFailed; jj.Error = InterruptedError; jj.FinishedAt = now })
 	default:
 		msg := err.Error()
 		var f fail
 		if !errors.As(err, &f) {
 			msg = "conversion failed"
 		}
-		q.update(j, func(jj *Job) { jj.Status = StatusFailed; jj.Error = msg; jj.FinishedAt = now })
 		q.logf(j, "Failed: %s\n", msg)
+		q.update(j, func(jj *Job) { jj.Status = StatusFailed; jj.Error = msg; jj.FinishedAt = now })
 	}
 	if tempPath != "" {
 		_ = os.Remove(tempPath)
