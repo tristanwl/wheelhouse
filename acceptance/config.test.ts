@@ -312,7 +312,7 @@ describe("stored configuration", () => {
       (e: { action: string; detail: { secrets?: string[] } }) =>
         e.action === "instance.update" && e.detail.secrets
     );
-    expect(update.detail.secrets).toEqual(["apiKey"]);
+    expect(update.detail.secrets).toEqual(["API key"]);
   });
 
   it("keeps every secret out of responses, logs and the database files", async () => {

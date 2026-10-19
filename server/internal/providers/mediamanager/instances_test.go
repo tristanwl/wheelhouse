@@ -162,7 +162,7 @@ func TestCollectFromManagersReportsProblemsWithoutHidingTheOthers(t *testing.T) 
 		t.Errorf("problems = %v", got)
 	}
 	// radarr-broken has a URL but no key: invalid config, reported as the problem.
-	if len(problems) != 3 || !strings.Contains(got["radarr-broken"], "apiKey: is required") {
+	if len(problems) != 3 || got["radarr-broken"] != "API key is required" {
 		t.Errorf("problems = %v", got)
 	}
 

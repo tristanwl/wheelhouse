@@ -355,7 +355,7 @@ func TestDefinition(t *testing.T) {
 	if _, err := d.Decode(map[string]any{"url": "http://plex:32400"}); err != nil {
 		t.Errorf("a missing token must be accepted: %v", err)
 	}
-	if _, err := d.Decode(map[string]any{"token": "t"}); err == nil || !strings.Contains(err.Error(), "url") {
+	if _, err := d.Decode(map[string]any{"token": "t"}); err == nil || err.Error() != "URL is required" {
 		t.Errorf("a missing url must be rejected: %v", err)
 	}
 	if _, err := d.Decode(map[string]any{"url": "http://plex:32400", "token": ""}); err == nil {
@@ -389,7 +389,7 @@ func TestThroughTheRuntime(t *testing.T) {
 		t.Errorf("status = %s", list[0].Status)
 	}
 	list, _ = mk(map[string]any{"token": "t"}).ListInstances(ctx)
-	if list[0].Status != core.StatusInvalidConfig || !strings.Contains(list[0].Error, "url") {
+	if list[0].Status != core.StatusInvalidConfig || list[0].Error != "URL is required" {
 		t.Errorf("bad = %+v", list[0])
 	}
 

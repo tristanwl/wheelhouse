@@ -30,6 +30,27 @@ type Definition struct {
 // Fields lists the provider's settings in declaration order.
 func (d *Definition) Fields() []Field { return slices.Clone(d.spec.fields) }
 
+// Label is the name people see for the setting with this key ("API key" for
+// "apiKey"), or "a setting" for a key the provider does not have. Text shown to
+// people (notices, form errors, audit entries) uses it, never the key.
+func (d *Definition) Label(key string) string {
+	for _, f := range d.spec.fields {
+		if f.Name == key {
+			return f.Label
+		}
+	}
+	return "a setting"
+}
+
+// Labels maps keys to Label, keeping the order.
+func (d *Definition) Labels(keys []string) []string {
+	out := make([]string, len(keys))
+	for i, k := range keys {
+		out[i] = d.Label(k)
+	}
+	return out
+}
+
 // SecretKeys lists the settings that hold credentials.
 func (d *Definition) SecretKeys() []string {
 	var keys []string

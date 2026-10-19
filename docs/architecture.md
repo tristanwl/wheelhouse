@@ -101,7 +101,13 @@ See [server/README.md](../server/README.md) for the server and
   it (unknown keys ignored, empty strings rejected, optional `Validate()` hook)
   and builds a JSON Schema description of it (`Definition.Schema()`, with
   `writeOnly` and `x-secret` on credentials) for the future admin page.
-  Validation errors name the field and the rule, never the value.
+  Every field must have a `label` (a definition without one is refused). Validation
+  errors read `<label> <rule>` ("API key is required"), never the JSON key and
+  never the value; `FieldError.Field` keeps the key only so the admin form can put
+  the message next to its input (`fields` in the 400 response), and audit entries
+  record changed settings by label. `TestNoUserFacingStringNamesACamelCaseSettingKey`
+  and `TestEveryConfigurationProblemIsWrittenWithLabels` (`internal/guards`) fail
+  when text names a key or falls back to the `key: message` form.
 - **Config sources.** `ConfigSource.Instances(ctx)`. `EnvConfigSource` reads the
   environment variables (see Config below), including extra Sonarr and Radarr
   instances (`RADARR_4K_URL` gives `radarr-4k`). A database source comes in

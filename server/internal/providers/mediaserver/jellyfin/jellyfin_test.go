@@ -380,7 +380,7 @@ func TestDefinition(t *testing.T) {
 	if _, err := d.Decode(map[string]any{"url": "http://jellyfin:8096"}); err != nil {
 		t.Errorf("a missing key must be accepted: %v", err)
 	}
-	if _, err := d.Decode(map[string]any{"apiKey": "k"}); err == nil || !strings.Contains(err.Error(), "url") {
+	if _, err := d.Decode(map[string]any{"apiKey": "k"}); err == nil || err.Error() != "URL is required" {
 		t.Errorf("a missing url must be rejected: %v", err)
 	}
 	if _, err := d.Decode(map[string]any{"url": "http://jellyfin:8096", "apiKey": ""}); err == nil {
@@ -406,7 +406,7 @@ func TestThroughTheRuntime(t *testing.T) {
 		t.Errorf("status = %s", list[0].Status)
 	}
 	list, _ = mk(map[string]any{"apiKey": "k"}).ListInstances(ctx)
-	if list[0].Status != core.StatusInvalidConfig || !strings.Contains(list[0].Error, "url") {
+	if list[0].Status != core.StatusInvalidConfig || list[0].Error != "URL is required" {
 		t.Errorf("bad = %+v", list[0])
 	}
 	clients, err := mk(map[string]any{"url": srv.URL, "apiKey": jellyfintest.GoodKey}).Clients(ctx, core.RoleMediaServer)

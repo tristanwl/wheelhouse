@@ -203,7 +203,7 @@ func canaryRuntime(t *testing.T) (*Runtime, []Instance) {
 
 // A Validate hook that carelessly echoes a secret must still be redacted.
 type leakyConfig struct {
-	Token string `json:"token" config:"required,secret"`
+	Token string `json:"token" label:"Token" config:"required,secret"`
 }
 
 func (c leakyConfig) Validate() error { return fmt.Errorf("token %s is not allowed", c.Token) }

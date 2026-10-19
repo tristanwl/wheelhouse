@@ -72,7 +72,7 @@ func TestThroughTheRuntime(t *testing.T) {
 		if err != nil || len(res) != 1 {
 			t.Fatal(err)
 		}
-		if res[0].Status != core.StatusInvalidConfig || !strings.Contains(res[0].Error, "apiKey") {
+		if res[0].Status != core.StatusInvalidConfig || res[0].Error != "API key is required" {
 			t.Errorf("%+v", res[0])
 		}
 	})

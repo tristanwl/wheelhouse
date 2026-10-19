@@ -385,7 +385,7 @@ func split(def *core.Definition, provided, stored map[string]any) (plain, sec ma
 	merged := map[string]any{}
 	for k, v := range provided {
 		if !known[k] {
-			return nil, nil, invalid("unknown setting %q", clip(k))
+			return nil, nil, invalid("that setting does not exist for this type of service")
 		}
 		if v != nil {
 			merged[k] = v
@@ -401,7 +401,7 @@ func split(def *core.Definition, provided, stored map[string]any) (plain, sec ma
 			if v, ok := stored[k]; ok {
 				if moved {
 					return nil, nil, &core.ValidationError{Errors: []core.FieldError{{
-						Field: k, Message: "must be entered again when the URL changes (the stored value is not sent to a new address)",
+						Field: k, Label: def.Label(k), Message: "must be entered again when the URL changes (the stored value is not sent to a new address)",
 					}}}
 				}
 				merged[k] = v

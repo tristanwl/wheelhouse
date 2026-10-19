@@ -407,7 +407,9 @@ clients, err := rt.Clients(ctx, core.RoleMediaManager) // ready instances of a r
 ```
 
 A provider's settings are a struct; tags drive validation, secret masking and the
-JSON Schema the admin UI renders (`Definition.Schema()`):
+JSON Schema the admin UI renders (`Definition.Schema()`). The `label` tag is
+required: errors and notices say "API key is required", never `apiKey: is
+required`:
 
 ```go
 type SonarrConfig struct {

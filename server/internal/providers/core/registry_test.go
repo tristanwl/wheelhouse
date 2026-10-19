@@ -45,7 +45,7 @@ func TestRegistryRejectsMalformedDefinitions(t *testing.T) {
 		"pointer config":      func(d *Definition) { d.Config = &fakeConfig{} },
 		"unknown option": func(d *Definition) {
 			d.Config = struct {
-				X string `json:"x" config:"requird"`
+				X string `json:"x" label:"X" config:"requird"`
 			}{}
 		},
 		"missing json tag": func(d *Definition) {
@@ -53,12 +53,12 @@ func TestRegistryRejectsMalformedDefinitions(t *testing.T) {
 		},
 		"unsupported type": func(d *Definition) {
 			d.Config = struct {
-				X []string `json:"x"`
+				X []string `json:"x" label:"X"`
 			}{}
 		},
 		"url on bool": func(d *Definition) {
 			d.Config = struct {
-				X bool `json:"x" config:"url"`
+				X bool `json:"x" label:"X" config:"url"`
 			}{}
 		},
 	}
@@ -125,7 +125,7 @@ func TestSchemaForOptionalAndOtherTypes(t *testing.T) {
 	type cfg struct {
 		Token   string `json:"token" label:"Token" config:"secret"`
 		Port    int    `json:"port" label:"Port"`
-		Verbose bool   `json:"verbose"`
+		Verbose bool   `json:"verbose" label:"Verbose"`
 	}
 	r := mustRegistry(t, Definition{
 		ID: "x", Role: RoleMetadata, DisplayName: "X", Config: cfg{},
@@ -139,7 +139,7 @@ func TestSchemaForOptionalAndOtherTypes(t *testing.T) {
 	if s.Properties["port"].Type != FieldInteger || s.Properties["port"].MinLength != nil {
 		t.Fatalf("port = %+v", s.Properties["port"])
 	}
-	if s.Properties["verbose"].Type != FieldBoolean || s.Properties["verbose"].Title != "verbose" {
+	if s.Properties["verbose"].Type != FieldBoolean || s.Properties["verbose"].Title != "Verbose" {
 		t.Fatalf("verbose = %+v", s.Properties["verbose"])
 	}
 	raw, _ := json.Marshal(s)

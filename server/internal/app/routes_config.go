@@ -132,7 +132,8 @@ func (a *configAPI) writeConfigError(w http.ResponseWriter, err error) {
 	case errors.As(err, &ve):
 		fields := make([]map[string]string, 0, len(ve.Errors))
 		for _, fe := range ve.Errors {
-			fields = append(fields, map[string]string{"field": fe.Field, "message": fe.Message})
+			// "field" is the key the form maps the problem to; the text is human.
+			fields = append(fields, map[string]string{"field": fe.Field, "message": fe.Text()})
 		}
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid configuration", "fields": fields})
 	case errors.As(err, &ie):
@@ -320,11 +321,14 @@ func (a *configAPI) update(w http.ResponseWriter, req *http.Request) {
 		if change.Enabled {
 			detail["enabled"] = e.Enabled
 		}
+		// Settings are recorded by their label ("API key"), never their key, and
+		// secrets by name only, so the log reads the same as the form.
+		def, known := a.reg.Get(e.ProviderID)
 		if len(change.Fields) > 0 {
-			detail["fields"] = change.Fields
+			detail["fields"] = labelsOf(def, known, change.Fields)
 		}
 		if len(change.Secrets) > 0 {
-			detail["secrets"] = change.Secrets // names only
+			detail["secrets"] = labelsOf(def, known, change.Secrets)
 		}
 		a.audit(req, "instance.update", id, detail)
 	}
@@ -525,4 +529,12 @@ func (a *configAPI) putFeatures(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"features": list})
+}
+
+// labelsOf is the labels of setting keys, for text people read.
+func labelsOf(def *core.Definition, known bool, keys []string) []string {
+	if !known {
+		return []string{"settings"}
+	}
+	return def.Labels(keys)
 }

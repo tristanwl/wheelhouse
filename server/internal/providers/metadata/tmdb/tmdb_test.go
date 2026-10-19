@@ -150,7 +150,7 @@ func TestResolvesThroughTheRuntimeFromEnvironmentConfig(t *testing.T) {
 func TestRuntimeReportsAMissingKey(t *testing.T) {
 	src := core.NewEnvConfigSource(map[string]string{"TMDB_BASE_URL": "http://192.0.2.1/3"})
 	list, _ := core.NewRuntime(registry(t), src).ListInstances(ctx)
-	if len(list) != 1 || list[0].Status != core.StatusInvalidConfig || !strings.Contains(list[0].Error, "apiKey") {
+	if len(list) != 1 || list[0].Status != core.StatusInvalidConfig || list[0].Error != "API key is required" {
 		t.Errorf("list = %+v", list)
 	}
 }

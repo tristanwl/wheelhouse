@@ -93,7 +93,7 @@ func client(ctx context.Context, rt *core.Runtime) (*tmdb.Client, error) {
 			return nil, &core.ProviderError{Message: core.Redact("TMDB: " + r.Error)}
 		}
 	}
-	return nil, &core.ProviderError{Message: "TMDB is not configured. Set TMDB_API_KEY."}
+	return nil, &core.ProviderError{Message: "TMDB is not configured. An administrator can add it under Admin, Services."}
 }
 
 // libraryIDs maps each TMDB id to the movie instances that have it. Instances

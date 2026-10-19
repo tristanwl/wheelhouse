@@ -164,7 +164,7 @@ describe("services: adding", () => {
       status: 400,
       body: {
         error: "invalid configuration",
-        fields: [{ field: "url", message: "must be an http or https URL with a host" }],
+        fields: [{ field: "url", message: "URL must be an http or https URL with a host" }],
       },
     };
     mockApi({ ...base, "POST /api/admin/instances": () => answer });
@@ -172,7 +172,7 @@ describe("services: adding", () => {
     await user.type(await screen.findByLabelText(/^URL/), "http://192.0.2.10:7878");
     await user.type(screen.getByLabelText(/^API key/), KEY);
     await user.click(screen.getByRole("button", { name: "Add service" }));
-    const message = await screen.findByText("must be an http or https URL with a host");
+    const message = await screen.findByText("URL must be an http or https URL with a host");
     expect(screen.getByLabelText(/^URL/)).toHaveAttribute("aria-describedby", message.id);
     expect(screen.getByLabelText(/^URL/)).toHaveAttribute("aria-invalid", "true");
 
@@ -833,8 +833,8 @@ describe("audit log", () => {
       i === 0
         ? entry(1000, "instance.update", "admin", {
             provider: "radarr",
-            fields: ["url"],
-            secrets: ["apiKey"],
+            fields: ["URL"],
+            secrets: ["API key"],
           })
         : entry(1000 - i, "login.ok", i % 2 ? "alice" : "admin")
     );
@@ -849,7 +849,7 @@ describe("audit log", () => {
     renderApp("/admin/audit");
     const row = await screen.findByRole("row", { name: /Service changed/ });
     expect(row).toHaveTextContent(
-      "type: radarr; settings changed: url; credentials replaced: apiKey"
+      "type: radarr; settings changed: URL; credentials replaced: API key"
     );
     expect(row).toHaveTextContent("instance.update");
 

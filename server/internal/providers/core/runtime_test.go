@@ -32,7 +32,7 @@ func TestRuntimeResolvesStatuses(t *testing.T) {
 		t.Fatalf("statuses = %v", got)
 	}
 	broken := list[3]
-	if !strings.Contains(broken.Error, "url:") || !strings.Contains(broken.Error, "apiKey:") {
+	if broken.Error != "URL must be an http or https URL; API key is required" {
 		t.Fatalf("error = %q", broken.Error)
 	}
 	if broken.Definition == nil || list[2].Definition != nil {
