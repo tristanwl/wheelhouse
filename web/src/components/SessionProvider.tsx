@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { useSWRConfig } from "swr";
 import {
   apiFetch,
@@ -9,6 +9,7 @@ import {
   SESSION_URL,
   toApiError,
 } from "@/lib/http";
+import { titleFor } from "@/lib/titles";
 import {
   parseSession,
   SessionContext,
@@ -155,6 +156,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
 /** The route element that provides the session to every page below it. */
 export function SessionRoot() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    document.title = titleFor(pathname);
+  }, [pathname]);
   return (
     <SessionProvider>
       <Outlet />

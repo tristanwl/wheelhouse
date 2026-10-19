@@ -41,8 +41,14 @@ deps:
 # Everything CI runs.
 check: fmt-check vet test lint vuln deps build
 
+# A development config directory (database, master key, setup token), so that
+# `make run` works on a machine with no /config. Set WHEELHOUSE_CONFIG_DIR to use
+# another one. It is git-ignored and only for development.
+DEVCONFIG ?= $(CURDIR)/.devconfig
+
 run:
-	go run ./cmd/wheelhouse
+	@mkdir -p -m 700 $(DEVCONFIG)
+	WHEELHOUSE_CONFIG_DIR=$${WHEELHOUSE_CONFIG_DIR:-$(DEVCONFIG)} go run ./cmd/wheelhouse
 
 clean:
 	rm -f $(BIN)

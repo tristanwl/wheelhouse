@@ -34,6 +34,8 @@ jobs:
       # scripts/check-pins.allow).
       - name: pins
         run: scripts/check-pins.sh
+      - name: documentation links, file references and the environment variable table
+        run: python3 scripts/check-docs.py
 
   # Black-box HTTP suite (acceptance/README.md) against the real binary: the UI
   # is built and embedded first, as in the image. Runs alongside the other jobs.

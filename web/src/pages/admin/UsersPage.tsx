@@ -348,7 +348,7 @@ export default function UsersPage() {
       {error && <ErrorNote>Could not load the users. {errorText(error, "")}</ErrorNote>}
 
       {data && (
-        <div className={`${CARD} overflow-x-auto`}>
+        <div className={`${CARD} relative overflow-x-auto`}>
           <table className="w-full min-w-[40rem] text-left text-sm">
             <caption className="sr-only">Users</caption>
             <thead className="text-xs uppercase tracking-wide text-slate-500">

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ALL_FEATURES, mockApi, renderApp } from "./test-utils";
+import { ALL_FEATURES, USER_SESSION, mockApi, renderApp } from "./test-utils";
 import type { FeaturesResponse } from "./lib/types";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -137,9 +137,10 @@ describe("feature gating", () => {
     renderApp("/explore");
     expect(await screen.findByText("Explore isn't available yet")).toBeInTheDocument();
     expect(screen.getByText(/a TMDB API key/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /Configuration section of the README/ })
-    ).toHaveAttribute("href", "https://github.com/tristanwl/wheelhouse#configuration");
+    expect(screen.getByRole("link", { name: "Admin, Services" })).toHaveAttribute(
+      "href",
+      "/admin/services"
+    );
     // The gated page never ran, so it asked the server for nothing.
     expect(calls.some((c) => c.url.startsWith("/api/explore"))).toBe(false);
   });
@@ -149,6 +150,25 @@ describe("feature gating", () => {
     renderApp("/codecs");
     expect(await screen.findByText("Codecs isn't available yet")).toBeInTheDocument();
     expect(screen.getByText(/It needs ffmpeg/)).toBeInTheDocument();
+  });
+
+  it("tells a user who is not an administrator to ask one, never to read the README", async () => {
+    mockApi({ ...emptyStack, "GET /api/features": partial, "GET /api/auth/session": USER_SESSION });
+    renderApp("/explore");
+    expect(await screen.findByText("Explore isn't available yet")).toBeInTheDocument();
+    expect(screen.getByText(/Ask an administrator to set it up/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Admin, Services" })).not.toBeInTheDocument();
+  });
+
+  it("gives the Dashboard one heading and names the page in the tab title", async () => {
+    mockApi(emptyStack);
+    renderApp("/");
+    expect(await screen.findByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Dashboard · wheelhouse"));
+    expect(await screen.findByRole("link", { name: "Admin, Services" })).toHaveAttribute(
+      "href",
+      "/admin/services"
+    );
   });
 
   it("hides the global add/search box when Library is unavailable", async () => {

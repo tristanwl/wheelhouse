@@ -12,12 +12,14 @@ other admin tools in your *arr stack.
   before running one. The first start prints a one-time **setup token** in the
   log; it lets whoever knows it create the administrator, so create the
   administrator promptly and keep the log private until you have.
-- The release notes of a version say which of these applies.
+- The release notes of a version say which of these applies. What is deliberately not
+  covered (no second factor, no API tokens and so on) is listed under
+  [Known limitations](docs/release-1.0-checklist.md#known-limitations).
 
 The [threat model](docs/threat-model.md) lists what Wheelhouse protects, from
-whom, which mitigation is already in place, which comes with which planned
-change ([Phase 2 plan](docs/wheelhouse-phase2-plan.md)), and the risks that
-remain. A finding that contradicts it, or a gap it does not list, is worth
+whom, which mitigation is in place and which test enforces it, and the risks that
+remain; [docs/release-1.0-checklist.md](docs/release-1.0-checklist.md) checks each of
+them again before a release. A finding that contradicts it, or a gap it does not list, is worth
 reporting.
 
 ## Supported versions

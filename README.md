@@ -14,18 +14,16 @@ TMDB; and a codec analysis view that finds files worth converting to your
 preferred codec per resolution tier and can run the conversion with ffmpeg,
 using hardware encoding when your GPU supports it.
 
-> **Status: early.** Wheelhouse works today with Sonarr, Radarr, SABnzbd, qBittorrent and
-> Plex, configured by environment variables. **The released 0.2.x has no
-> authentication** — run it only on a trusted network. The development branch
-> (`main`, unreleased) has accounts, sessions and login on the server: every
-> route needs a signed-in user, and nothing works until the first administrator is
-> created ([First run](#first-run)). Its web UI has a login page, a setup wizard
-> and an account page; no release has them yet. Swappable providers, a setup
-> wizard and an admin page are planned; see
-> [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md). What is and is not
-> protected, and by which planned change, is in the
-> [threat model](docs/threat-model.md); how to run and recover a server is in
-> [docs/operations.md](docs/operations.md).
+> **Security model.** Every page and API route needs a signed-in user, and nothing
+> works until the first administrator has been created ([First run](#first-run)).
+> **Releases up to 0.2.x had no authentication at all; use 0.3.0 or later.** What
+> is and is not protected is in the [threat model](docs/threat-model.md), what is
+> deliberately not covered is in [Known limitations](docs/release-1.0-checklist.md#known-limitations),
+> and how to run, back up and recover a server is in
+> [docs/operations.md](docs/operations.md). When something does not work, start with
+> [docs/troubleshooting.md](docs/troubleshooting.md). It is still a young project:
+> do not expose it directly to the internet; put a TLS reverse proxy in front
+> ([Behind a reverse proxy](#behind-a-reverse-proxy)).
 
 Wheelhouse is a companion for the *arr stack, not a replacement for it, and
 is not affiliated with or endorsed by Plex, Sonarr, Radarr, SABnzbd, Jellyfin
@@ -36,13 +34,16 @@ or TMDB.
 ```sh
 git clone https://github.com/tristanwl/wheelhouse.git
 cd wheelhouse
-cp .env.example .env                               # fill in URLs and API keys
-cp docker-compose.example.yml docker-compose.yml   # adjust media paths
-mkdir config                                       # settings volume (create it yourself)
+cp .env.example .env                               # optional settings; everything in it is commented out
+cp docker-compose.example.yml docker-compose.yml   # adjust media paths (and the version tag)
+mkdir config                                       # the volume with the database and key (create it yourself)
 docker compose up -d
+docker compose logs wheelhouse 2>&1 | grep setup_token   # the one-time setup token
 ```
 
-Then open http://localhost:3050 and create the administrator ([First run](#first-run)).
+Then open http://localhost:3050, enter the setup token and create the administrator
+([First run](#first-run)), and add your services under **Admin** (no environment
+variables are needed for that).
 
 This pulls the published image, [`tristanwl/wheelhouse`](https://hub.docker.com/r/tristanwl/wheelhouse)
 on Docker Hub. It is a multi-architecture image (linux/amd64 and linux/arm64
@@ -51,7 +52,7 @@ amd64 only), so Raspberry Pi, ARM NAS boxes and Apple Silicon hosts pull the
 right one by themselves. On arm64, Intel VAAPI drivers are not part of the
 image and hardware encoding is untested; software x264/x265 conversion works.
 There is no `latest` tag while Wheelhouse is
-alpha; pin a version, for example `tristanwl/wheelhouse:0.3.0`. To build from
+a pre-release; pin a version, for example `tristanwl/wheelhouse:0.3.0`. To build from
 source instead, uncomment `build: .` in the compose file and run
 `docker compose up -d --build`. Release images from 1.0.0 on (earlier ones have
 none) carry signed build provenance and an SBOM; see
@@ -59,15 +60,13 @@ none) carry signed build provenance and an SBOM; see
 
 ### First run
 
-*Applies to builds with accounts (the development branch; not the released 0.2.x).*
-
 A new server has no users. Until you create the administrator it answers only the
 pages, `/healthz` and the setup routes (every other API route says `503 setup
 required`), and the person who reaches it first must not be able to claim it, so
 creating the administrator needs a **one-time setup token**:
 
 - It is printed once in the log when the server starts with no users:
-  `docker logs wheelhouse 2>&1 | grep setup_token`.
+  `docker logs wheelhouse 2>&1 | grep setup_token` (`podman logs` likewise).
 - It is also in `/config/setup-token` (mode 0600), which is deleted when setup
   succeeds: `docker exec wheelhouse cat /config/setup-token`.
 - A new token is made at every start while there are no users, so a token from an
@@ -94,16 +93,61 @@ are no other rules. After that `POST /api/auth/login` signs in (the response hol
 the CSRF token that state-changing requests send as `X-CSRF-Token`; the session
 itself is an `HttpOnly` cookie).
 
-**Upgrading from 0.2.x.** An existing installation has no users, so after the
-upgrade it shows setup with a token in the log and nothing else works until the
-administrator exists. There is no way to switch authentication off. `/config`
-must be owned by the container's user and **not writable by anyone else** (the
-server refuses to start from a world-writable directory), and it now also holds
-the database, the generated master key and, until setup, the token. Read
-[docs/operations.md](docs/operations.md) once: it covers backups, the master key
+Read [docs/operations.md](docs/operations.md) once: it covers backups, the master key
 (**losing it loses your stored service credentials for good**), recovery with
 `wheelhouse reset-password`, and running behind a TLS proxy
-(`WHEELHOUSE_TRUSTED_PROXIES`).
+(`WHEELHOUSE_TRUSTED_PROXIES`). Something not working? [docs/troubleshooting.md](docs/troubleshooting.md).
+
+### Adding services
+
+Sign in as the administrator and open **Admin, Services**: pick a service (Sonarr,
+Radarr, SABnzbd, qBittorrent, Plex, Jellyfin, TMDB), fill the form, press **Test
+connection**, then save. The key is stored encrypted and never shown again; edit the
+other fields later and leave the key box empty to keep it. A second Radarr or Sonarr
+is just another entry (no variables needed). Services defined by environment
+variables (`SONARR_URL`, see [Configuration](#configuration)) keep working and show
+as "from environment"; **Import** moves one into the database, after which the
+environment values for it are ignored. Instance addresses are trusted administrator
+input: Wheelhouse refuses link-local and cloud-metadata addresses but allows your
+LAN ([Known limitations](docs/release-1.0-checklist.md#known-limitations)).
+
+### Local-network bypass (optional)
+
+By default everybody signs in. If you want the people on your home network to use
+Wheelhouse without a login, an administrator can switch on **Admin, Network** and give
+the address ranges (for example `192.168.1.0/24`). Those requests then count as a
+signed-in `user`: they can browse, add, delete and convert media but never open
+configuration, users or secrets, and the admin pages still ask for the
+administrator's login. Two things make it work or fail:
+
+- Wheelhouse looks at the address the connection comes from. Behind a reverse proxy
+  (or Docker setups that hide the client address) every request seems to come from
+  the proxy, so list it under trusted proxies (`WHEELHOUSE_TRUSTED_PROXIES`) first.
+  **Admin, Network** shows the address, host and range match of your own request.
+- To stop attacks that make a browser on your network talk to Wheelhouse under a
+  hostile name (DNS rebinding), only requests that use an IP address, `localhost` or a
+  single-label name (`http://nas:3050`) get the bypass. A dotted name such as
+  `nas.example.lan` must be added to the allowed host names
+  (`WHEELHOUSE_ALLOWED_HOSTS`, or Admin, Network).
+
+Details and the trade-offs: [docs/operations.md](docs/operations.md#local-network-bypass).
+
+### Upgrading
+
+1. Take a backup (`wheelhouse backup`, [below](#backups-and-the-master-key)) and make sure
+   you have a copy of the master key.
+2. Change the version tag in your compose file, unit file or `docker run` line and
+   restart: `docker compose pull && docker compose up -d`. Your `/config` volume keeps
+   everything; schema changes are applied on start and are forward only.
+3. **There is no downgrade.** A database that a newer version has migrated is refused by
+   an older one (`the database schema is newer than this version of Wheelhouse
+   understands`); to go back, restore the backup you took in step 1 together with the key.
+4. Coming from 0.2.x or earlier (no authentication): your installation has no users, so it
+   shows setup with a token in the log and nothing else works until the administrator
+   exists. There is no way to switch authentication off. `/config` must be owned by the
+   container's user and **not writable by anyone else**.
+
+Pin a version tag; there is no `latest` tag until 1.0.0.
 
 ### Running the image
 
@@ -147,34 +191,58 @@ mkdir -p config && docker run -d --name wheelhouse --restart unless-stopped \
 - **Health.** The image has a `HEALTHCHECK` (`wheelhouse healthcheck`, which asks
   `/healthz`); no curl is involved. `wheelhouse version` prints the version.
 
-Podman/systemd users: see [deploy/wheelhouse.service.example](deploy/wheelhouse.service.example).
+**Podman.** `podman run` takes the same options as the `docker run` line above (`podman exec`,
+`podman logs` for everything below). Rootless Podman needs `--userns=keep-id --user "$(id -u):$(id -g)"`
+so the container's user can write your `./config`. For a systemd user service, see
+[deploy/wheelhouse.service.example](deploy/wheelhouse.service.example).
+
+### Behind a reverse proxy
+
+Wheelhouse speaks plain HTTP; terminate TLS in a proxy you run (Caddy, nginx, Traefik) and
+do not publish the plain port to the internet. Three settings matter, all explained with an
+nginx example in [docs/operations.md](docs/operations.md#behind-a-reverse-proxy): pass the `Host`
+header through unchanged, make the proxy **append** to `X-Forwarded-For`, and list the
+proxy's address in `WHEELHOUSE_TRUSTED_PROXIES` so the session cookie becomes `Secure` and
+the real client address is used for login limits, the audit log and the local-network bypass.
 
 ## Configuration
 
-Set via environment variables (see [.env.example](.env.example)):
+Everything about your services can be set in the app (**Admin, Services**), so you need
+none of the service variables below. They remain supported, read-only, so an existing
+`.env` keeps working; an instance saved in the database with the same id wins over the
+environment one (see [Adding services](#adding-services)). The server settings are
+environment variables only. This is the complete list of what the server reads
+(`scripts/check-docs.py` fails CI when the code and this table drift apart):
 
-| Variable | Required | Notes |
-|---|---|---|
-| `SONARR_URL`, `SONARR_API_KEY` | no | TV library; without it (and Radarr) Library and Codecs are hidden |
-| `RADARR_URL`, `RADARR_API_KEY` | no | Movie library; also needed for Explore |
-| `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | no | Extra instance, e.g. `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*`. See below |
-| `SABNZBD_URL`, `SABNZBD_API_KEY` | no | Download client; the dashboard shows "No download client configured" without it |
-| `QBITTORRENT_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD` | no | Download client (v4 and v5); shows torrents, including seeding, next to or instead of SABnzbd. The URL's host and port must be what qBittorrent's web UI expects (a remapped Docker port makes it answer 401) |
-| `PLEX_URL`, `PLEX_TOKEN` | no | Media server status card only |
-| `JELLYFIN_URL`, `JELLYFIN_API_KEY` | no | Media server status card only; key from Dashboard → API Keys in Jellyfin. Can run alongside Plex |
-| `TMDB_API_KEY` | no | Enables Explore (with Radarr); free key from themoviedb.org |
-| `TMDB_BASE_URL` | no | Override the TMDB API root, including the version (default `https://api.themoviedb.org/3`). For a caching proxy or a test double; leave unset normally |
-| `PORT` | no | TCP port to listen on (default `3000`; the image sets `3050`) |
-| `WHEELHOUSE_LISTEN` | no | Address to listen on as `host:port` (for example `127.0.0.1:3050`); overrides `PORT`. Default: all interfaces on `PORT`. `HOSTNAME` is never used |
-| `WHEELHOUSE_MEDIA_ROOTS` | no | Folders Convert may touch, separated like `PATH` (default `/movies:/tv`). A read-only seed: roots an administrator saves in the app (`GET/PUT /api/admin/converter`) take precedence |
-| `WHEELHOUSE_DB` | no | SQLite database file (accounts, sessions, audit log; default `/config/wheelhouse.db`). The server opens it at start and refuses to start if it cannot |
-| `WHEELHOUSE_CONFIG_DIR` | no | The config directory (default `/config`, which is what the image uses): database, master key, setup token, `settings.json`. Mainly for running outside a container |
-| `WHEELHOUSE_SECRET_KEY_FILE`, `WHEELHOUSE_SECRET_KEY` | no | Master key for secrets stored in the database: a file of 32 raw bytes (mode 0600), or the key in base64. Neither set: `/config/secret.key` is generated at first start. **Keep a copy: [docs/operations.md](docs/operations.md#key-loss)** |
-| `WHEELHOUSE_DENIED_NETWORKS` | no | Networks Wheelhouse refuses to connect to when it contacts your services (default: link-local and cloud-metadata addresses, including the NAT64 prefix `64:ff9b::/96`, `100.100.100.200` and `192.0.0.192`; `none` allows everything; private LAN ranges are always fine). Service URLs are trusted administrator input |
-| `WHEELHOUSE_ALLOWED_HOSTS` | no | Comma-separated host names (`nas.example.lan`, or `*.example.lan`) that may use the local-network bypass, in addition to IP addresses, `localhost` and single-label names. Read-only; an admin can store more. Protects against DNS rebinding (see [docs/operations.md](docs/operations.md)). Default empty |
-| `WHEELHOUSE_TRUSTED_PROXIES` | no | Comma-separated addresses and CIDR ranges of reverse proxies whose forwarded headers are believed (`X-Forwarded-Proto` makes the session cookie `Secure`; `X-Forwarded-For`, `Forwarded` and `X-Real-IP` give the client address, used by the audit log and the local-network bypass). Added to the proxies an admin stores in the database. Default empty: no proxy is trusted |
+| Variable | Default | Meaning | Kind |
+|---|---|---|---|
+| `PORT` | `3000` (image: `3050`) | TCP port to listen on, on all interfaces | setting |
+| `WHEELHOUSE_LISTEN` | all interfaces on `PORT` | `host:port` to listen on, for example `127.0.0.1:3050`; overrides `PORT`. `HOSTNAME` is never used | setting |
+| `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory with the database, master key, setup token and `settings.json`. Must exist, be yours and not be writable by others | setting |
+| `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log, stored services, queue) | setting |
+| `WHEELHOUSE_SECRET_KEY_FILE` | none (`<config dir>/secret.key` is generated) | A file of 32 raw bytes (mode 0600 or 0400): the master key for secrets in the database. **Keep a copy: [key loss](docs/operations.md#key-loss)** | **secret** (a path) |
+| `WHEELHOUSE_SECRET_KEY` | none | The same 32 bytes in base64. Used when no key file is set | **secret** |
+| `WHEELHOUSE_TRUSTED_PROXIES` | empty | Comma-separated addresses and CIDR ranges of reverse proxies whose `X-Forwarded-Proto`, `X-Forwarded-For`, `Forwarded` and `X-Real-IP` are believed. Added to the proxies an admin stores. Empty: none trusted | read-only seed |
+| `WHEELHOUSE_ALLOWED_HOSTS` | empty | Host names (`nas.example.lan`, `*.example.lan`) that may use the local-network bypass besides IP addresses, `localhost` and single-label names (DNS rebinding protection). An admin can store more | read-only seed |
+| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders Convert may touch, separated like `PATH`. Roots an admin saves in the app take precedence | read-only seed |
+| `WHEELHOUSE_DENIED_NETWORKS` | link-local and cloud-metadata addresses | Networks Wheelhouse refuses to connect to when it calls your services (includes `64:ff9b::/96`, `100.100.100.200`, `192.0.0.192`); `none` allows everything; private LAN ranges are always fine | setting |
+| `GOMEMLIMIT` | 80% of the container memory limit, when one is set | Go's soft memory limit; set it yourself to override | setting |
+| `SONARR_URL`, `SONARR_API_KEY` | none | TV library. Without it (and Radarr) Library and Codecs are hidden | read-only seed; the key is **secret** |
+| `RADARR_URL`, `RADARR_API_KEY` | none | Movie library; also needed for Explore | read-only seed; the key is **secret** |
+| `RADARR_<ID>_URL`, `RADARR_<ID>_API_KEY` | none | Extra instance: `RADARR_4K_URL` becomes `radarr-4k`, "Radarr 4K". Same for `SONARR_<ID>_*` | read-only seed; the key is **secret** |
+| `SABNZBD_URL`, `SABNZBD_API_KEY` | none | Download client | read-only seed; the key is **secret** |
+| `QBITTORRENT_URL`, `QBITTORRENT_USERNAME`, `QBITTORRENT_PASSWORD` | none | Download client (v4 and v5), with seeding. The URL's host and port must be what qBittorrent's web UI expects (a remapped Docker port makes it answer 401) | read-only seed; the password is **secret** |
+| `PLEX_URL`, `PLEX_TOKEN` | none | Media server status card | read-only seed; the token is **secret** |
+| `JELLYFIN_URL`, `JELLYFIN_API_KEY` | none | Media server status card; key from Dashboard, API Keys in Jellyfin. Can run next to Plex | read-only seed; the key is **secret** |
+| `TMDB_API_KEY` | none | Enables Explore (with Radarr); free key from themoviedb.org | read-only seed; **secret** |
+| `TMDB_BASE_URL` | `https://api.themoviedb.org/3` | TMDB API root including the version, for a caching proxy or a test double | read-only seed |
 
-The variable names are the same as in 0.1.x, so an existing `.env` keeps working.
+"Read-only seed" means the admin page shows the value as "from environment" and cannot edit it.
+A **secret** is never shown by the app, logs or API; the file you keep it in is yours to protect
+(anyone who can run `docker inspect` can read environment variables; prefer saving keys in the
+app and, for the master key, a key file on a secret mount). The variable names are the same as
+in 0.1.x, so an old `.env` keeps working. Variables only used by tests and development
+tooling are in [CONTRIBUTING.md](CONTRIBUTING.md#environment-variables-for-development-and-tests).
 
 ### What unlocks what
 
@@ -207,20 +275,33 @@ lowercased for the id; underscores in it become `-`, and spaces in the name).
 Library, storage, Explore's "In library" badge, search and the codec analysis
 cover every instance, and a misconfigured or unreachable one is reported
 without affecting the others. Setting only one of the two variables is
-reported as a configuration error. This environment convention is interim;
-Phase 2 moves instance configuration to the database.
+reported as a configuration error. With the admin page you do not need this
+convention: add a second instance under **Admin, Services**.
 
 ### Backups and the master key
 
-Accounts, sessions, the audit log and (from a later release) your service settings
-live in a SQLite database in `/config`; stored provider secrets are encrypted with
-a master key. The commands run inside the container, as the container's user:
+Accounts, sessions, the audit log, your service settings, the converter settings and
+the conversion queue live in a SQLite database in `/config`; stored provider secrets
+are encrypted with a master key. Two commands are safe while the server runs; run them
+inside the container, as the container's user:
 
 ```sh
-docker exec wheelhouse wheelhouse backup /config/wheelhouse-backup.db   # never overwrites; mode 0600
-docker exec wheelhouse wheelhouse rekey                                  # new master key, re-encrypts every secret
+docker exec wheelhouse wheelhouse backup /config/wheelhouse-backup.db   # never overwrites; mode 0600; copy it off the host
 docker exec wheelhouse wheelhouse reset-password <user>                  # recovery: prints a one-time password
 # Podman: the same with `podman exec`.
+```
+
+Two commands change the master key and **must run with the server stopped**, in a throwaway
+container that mounts the same volume (a running server keeps the old key in memory and
+would seal anything it saves afterwards with it; and if the server cannot start there is
+nothing to `exec` into):
+
+```sh
+docker compose stop wheelhouse
+docker compose run --rm wheelhouse rekey                  # new master key, re-encrypts every secret (take a backup first)
+docker compose run --rm wheelhouse forget-secrets --yes   # only for a key lost for good: discards stored credentials
+docker compose up -d
+# Plain Docker: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/config" tristanwl/wheelhouse:0.3.0 rekey
 ```
 
 > **The master key is not in the backup.** The backup holds your service
@@ -236,14 +317,23 @@ mount them at the same in-container paths Sonarr/Radarr use. Conversions
 keep a `.bak` of the original and never delete it. See
 [docs/architecture.md](docs/architecture.md) for how it works.
 
+## Troubleshooting and known limits
+
+[docs/troubleshooting.md](docs/troubleshooting.md) covers the setup token, lockouts, a lost key,
+`/config` permissions, a bypass that does not work, services refused as unsafe addresses, a
+database from a newer version, hardware encoding and a missing ffmpeg.
+[Known limitations](docs/release-1.0-checklist.md#known-limitations) lists what Wheelhouse
+deliberately does not do (no two-factor login, no API tokens, a library response cap and more).
+
 ## Development
 
 Wheelhouse is a Go server (`server/`, standard library plus the SQLite driver and `golang.org/x/crypto` for Argon2id) that serves a Vite
 single-page UI (`web/`) embedded in the binary.
 
 ```sh
-# Terminal 1: the server, configured with your services
-set -a; . ./.env; set +a
+# Terminal 1: the server; it keeps its database and key in server/.devconfig (git-ignored),
+# or in WHEELHOUSE_CONFIG_DIR if you set one. Optional: service variables from a .env file
+# (set -a; . ./.env; set +a), or add services in the app.
 make -C server run          # http://localhost:3000 (a placeholder page until the UI is embedded)
 
 # Terminal 2: the UI with hot reload, proxying /api to the server
@@ -255,7 +345,7 @@ real thing: `cd web && npm run build && npm run embed`, then `make -C server
 build` gives one binary at `server/wheelhouse`. `docker build -t wheelhouse .`
 builds the image. `npm ci && make -C server build && npm run test:acceptance` in
 the repository root runs the black-box acceptance suite against the binary
-(`acceptance/README.md`); see [CONTRIBUTING.md](CONTRIBUTING.md) for the full
+(`acceptance/README.md`); `python3 scripts/check-docs.py` checks the documentation's links and the variable table; see [CONTRIBUTING.md](CONTRIBUTING.md) for the full
 pre-PR checklist.
 
 ## Credits

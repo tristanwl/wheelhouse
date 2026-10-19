@@ -13,7 +13,7 @@ export function NavLinks({
 }) {
   const links = visibleFeatures(features);
   return (
-    <nav aria-label="Main" className="flex gap-4 text-sm text-slate-300">
+    <nav aria-label="Main" className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-300">
       {(links.length > 0 ? links : [{ id: "dashboard", label: "Dashboard", route: "/" }]).map(
         (f) => (
           <Link key={f.id} to={f.route} className="hover:text-white">

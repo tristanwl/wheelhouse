@@ -1,9 +1,11 @@
 import { Link } from "react-router";
-import { README_CONFIG_URL, useFeatures } from "@/lib/features";
+import { useFeatures } from "@/lib/features";
+import { useSession } from "@/lib/session-context";
 import type { FeatureId } from "@/lib/types";
 
 /** Shown instead of a page whose feature isn't available, so a direct visit explains itself. */
 export function FeatureStub({ label, missing }: { label: string; missing: string[] }) {
+  const { isAdmin } = useSession();
   if (missing.includes("disabled by admin")) {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
@@ -22,16 +24,19 @@ export function FeatureStub({ label, missing }: { label: string; missing: string
     <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 text-sm text-slate-300">
       <h1 className="mb-2 text-lg font-medium">{label} isn&apos;t available yet</h1>
       <p>
-        It needs {missing.length > 0 ? missing.join(" and ") : "more configuration"}. See the{" "}
-        <a
-          href={README_CONFIG_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-white"
-        >
-          Configuration section of the README
-        </a>
-        . If you have already set it up, the{" "}
+        It needs {missing.length > 0 ? missing.join(" and ") : "more configuration"}.{" "}
+        {isAdmin ? (
+          <>
+            Add it under{" "}
+            <Link to="/admin/services" className="underline hover:text-white">
+              Admin, Services
+            </Link>
+            .
+          </>
+        ) : (
+          "Ask an administrator to set it up."
+        )}{" "}
+        If you have already set it up, the{" "}
         <Link to="/" className="underline hover:text-white">
           Dashboard
         </Link>{" "}

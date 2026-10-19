@@ -215,7 +215,7 @@ export default function CodecsPage() {
                 resolution tier (see below).
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-lg border border-slate-800">
+              <div className="relative overflow-x-auto rounded-lg border border-slate-800">
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-500">
                     <tr>
@@ -303,7 +303,7 @@ export default function CodecsPage() {
               <p className="mb-2 text-xs text-slate-500">
                 Already using the preferred codec for their resolution tier, nothing to do.
               </p>
-              <div className="overflow-x-auto rounded-lg border border-slate-800">
+              <div className="relative overflow-x-auto rounded-lg border border-slate-800">
                 <table className="w-full min-w-[480px] text-sm">
                   <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-500">
                     <tr>

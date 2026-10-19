@@ -1,8 +1,24 @@
 # Operating Wheelhouse
 
-What to back up, what to protect, and how to recover. Everything here runs inside
-the container as the container's user (`docker exec wheelhouse wheelhouse ...`,
-or `podman exec`); being able to do that is the proof that you own the server.
+What to back up, what to protect, and how to recover. The commands run as the
+container's user; being able to run them is the proof that you own the server. Two
+ways to run one, depending on whether the server is up:
+
+- **Server running** (`backup`, `reset-password`): `docker exec wheelhouse wheelhouse <command>`
+  (or `podman exec`).
+- **Server stopped or unable to start** (`rekey`, `forget-secrets`, and anything after a
+  failed start, because there is no container to `exec` into): a throwaway container on
+  the same volume. With Compose: `docker compose stop wheelhouse`, then
+  `docker compose run --rm wheelhouse <command>`, then `docker compose up -d`. With plain
+  Docker: `docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/config:/config"
+  tristanwl/wheelhouse:<version> <command>` (add `--env-file`/`-e` for a key supplied by
+  environment variable or `-v` for a key file). Podman: the same with `podman`, plus
+  `--userns=keep-id` when rootless.
+
+`rekey` and `forget-secrets` change the key the database is sealed with; **never run them
+against a running server**: it keeps the old key in memory and would seal anything saved
+afterwards with a key the database no longer trusts (those credentials then have to be
+entered again).
 
 ## Key loss
 
@@ -57,7 +73,9 @@ docker exec wheelhouse wheelhouse backup /config/wheelhouse-backup.db
 The backup is a consistent snapshot taken while the server runs, written with
 mode 0600, and it never overwrites an existing file (use a new name each time,
 for example with the date). The command's output repeats the key warning above.
-Copy the file out of `/config`. To restore: stop Wheelhouse, copy the backup over
+Copy the file out of `/config` (`docker cp wheelhouse:/config/wheelhouse-backup.db .`, or
+read it from the host directory you mounted), and delete it from `/config` once it is safe
+elsewhere. To restore: stop Wheelhouse, copy the backup over
 `wheelhouse.db` (delete a leftover `wheelhouse.db-wal` and `-shm`), put the
 **matching master key** back, and start it. A backup restored with a different
 key is the key-loss case below.
@@ -78,7 +96,7 @@ key is the key-loss case below.
   see the [threat model](threat-model.md).
 - **Make one yourself:** `head -c 32 /dev/urandom > wheelhouse.key && chmod 600 wheelhouse.key`.
 - **Rotate it** (for example after it may have leaked): stop Wheelhouse, take a
-  backup, run `wheelhouse rekey`. It makes a new key and re-encrypts every stored
+  backup, run `wheelhouse rekey` (in a throwaway container, see above). It makes a new key and re-encrypts every stored
   secret in one transaction; any failure leaves the old key in force. For a
   generated key it replaces `secret.key` itself; for a key you supply, use
   `wheelhouse rekey --new-key-out /config/new.key`, install that file as your key,
@@ -92,8 +110,8 @@ key is the key-loss case below.
    If you find it, put it back and start Wheelhouse. Nothing is lost.
 2. If it is gone for good, Wheelhouse stops at start with
    `the secret key does not match this database` and tells you what to do. Run
-   `wheelhouse forget-secrets --yes` (with the key you now have configured, or
-   the one Wheelhouse just generated). It discards every stored service
+   `wheelhouse forget-secrets --yes` in a throwaway container (see above) with the
+   key you now have configured, or the one Wheelhouse just generated. It discards every stored service
    credential, makes the current key the database's key, and refuses to run if the
    current key actually works. It does not touch users, sessions or the audit
    log. Start Wheelhouse and enter your service credentials again.
