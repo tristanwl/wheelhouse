@@ -86,11 +86,19 @@ done; this is the road from 0.2.x to 1.0.0.
   `TestConnection` on the unsaved values and returns only the redacted result.
 
 ### Local-network bypass
-- Off by default. When on, a request is treated as the `user` role (never
-  `admin`) only if the TCP peer address is inside the configured CIDR ranges.
-  Forwarded headers are ignored unless the peer is in an explicit trusted-proxy
-  list, and only then is the left-most untrusted entry used.
-- Admin actions always need a real login, even from the local network.
+- The admin account always has to exist first: nothing works until setup is
+  done, and only an admin can turn the bypass on, because it is configuration.
+- Once enabled (off by default), a request from inside the configured CIDR
+  ranges is treated as a signed-in `user` **without a login**. Those people can
+  browse, add and manage media (including deletes and conversions) as in 0.2.x.
+  They cannot see or change configuration, users or secrets. Only the `admin`
+  role gates configuration.
+- The match uses the TCP peer address. Forwarded headers are ignored unless the
+  peer is in an explicit trusted-proxy list, and only then is the left-most
+  untrusted entry used.
+- The bypass never grants `admin`. Opening the admin pages from the local network
+  asks for the admin's login; everything else stays login-free.
+- Setup itself is never covered by the bypass; it needs the setup token.
 - The admin page warns when the bypass range is wider than private address space.
 
 ### Audit log
@@ -166,9 +174,10 @@ after item 10, **1.0.0** after a soak period with no open security findings. The
 
 ## Open questions
 
-- **Upgrade behaviour:** existing 0.2.x installs have no users. After upgrading
-  they show setup with a token in the logs. Acceptable, or should there be a
-  grace mode? (This plan assumes no grace mode.)
+- **Upgrade behaviour:** decided. Existing 0.2.x installs have no users, so after
+  upgrading they show setup with a token in the logs and nothing else works
+  until the admin exists. There is no grace mode. The admin can then enable the
+  local-network bypass so household members keep using the app without a login.
 - **Second factor (TOTP) and API access:** decided to leave both until after
   1.0. Sessions and the user table are designed so TOTP and personal access
   tokens can be added without migrating existing accounts.
