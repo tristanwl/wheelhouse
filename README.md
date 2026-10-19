@@ -45,7 +45,12 @@ docker compose up -d
 Then open http://localhost:3050 and create the administrator ([First run](#first-run)).
 
 This pulls the published image, [`tristanwl/wheelhouse`](https://hub.docker.com/r/tristanwl/wheelhouse)
-on Docker Hub (linux/amd64). There is no `latest` tag while Wheelhouse is
+on Docker Hub. It is a multi-architecture image (linux/amd64 and linux/arm64
+under the same tag, from the first release that carries this note; 0.2.x is
+amd64 only), so Raspberry Pi, ARM NAS boxes and Apple Silicon hosts pull the
+right one by themselves. On arm64, Intel VAAPI drivers are not part of the
+image and hardware encoding is untested; software x264/x265 conversion works.
+There is no `latest` tag while Wheelhouse is
 alpha; pin a version, for example `tristanwl/wheelhouse:0.2.0`. To build from
 source instead, uncomment `build: .` in the compose file and run
 `docker compose up -d --build`.

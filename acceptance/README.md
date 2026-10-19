@@ -26,8 +26,13 @@ The default command is `./server/wheelhouse`, started with `PORT`,
 `WHEELHOUSE_LISTEN=127.0.0.1:<port>`, a container-style `HOSTNAME` (which the
 server must ignore), the service variables below, and its own empty config
 directory (`WHEELHOUSE_CONFIG_DIR` and `WHEELHOUSE_DB`, under the temp
-directory), on a free port picked per server. Readiness is `GET /healthz`
-answering 200.
+directory), on a free port picked per server. Readiness is the server's own
+`listening addr=127.0.0.1:<port>` log line (it is printed after a successful
+bind, and after the setup token is written) **and** `GET /healthz` answering
+200: a free port is only free for a moment, and another worker's server on that
+port would answer `/healthz` too. A server that fails to bind is started again on
+a new port. A command used with `WHEELHOUSE_CMD` must therefore log that line
+(the server and the image do, to stderr or stdout).
 
 ### Authenticated mode
 
