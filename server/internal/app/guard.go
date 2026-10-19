@@ -151,7 +151,7 @@ func (g *Guard) authorize(pattern string, level Level, next http.Handler) http.H
 			case !errors.Is(err, auth.ErrUnauthenticated):
 				errorJSON(w, http.StatusServiceUnavailable, "service unavailable")
 				return
-			case g.network().Bypasses(client):
+			case g.network().BypassesHost(client, r.Host):
 				id = auth.BypassIdentity(g.bypassCSRF(client))
 			default:
 				errorJSON(w, http.StatusUnauthorized, "authentication required")
