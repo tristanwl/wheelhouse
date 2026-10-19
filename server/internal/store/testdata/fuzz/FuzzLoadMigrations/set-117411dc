@@ -1,0 +1,6 @@
+go test fuzz v1
+string("0010_a.sql")
+string("0009_a.sql")
+string("0011_a.sql")
+string("select 1;")
+bool(false)
