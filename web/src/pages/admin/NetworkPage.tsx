@@ -9,7 +9,7 @@ import {
   StringListEditor,
   Switch,
 } from "@/components/admin/ui";
-import { validateRange, type NetworkSettings } from "@/lib/admin";
+import { validateHostName, validateRange, type NetworkSettings } from "@/lib/admin";
 import { fetcher } from "@/lib/fetcher";
 import { apiJson, jsonInit } from "@/lib/http";
 
@@ -34,9 +34,11 @@ function NetworkForm({
   settings: NetworkSettings;
   onSaved: (s: NetworkSettings) => void;
 }) {
+  const client = settings.client;
   const [enabled, setEnabled] = useState(settings.enabled);
   const [cidrs, setCidrs] = useState(settings.cidrs);
   const [proxies, setProxies] = useState(settings.trustedProxies);
+  const [hosts, setHosts] = useState(settings.allowedHosts ?? []);
   const [warnings, setWarnings] = useState(settings.warnings);
   const [showErrors, setShowErrors] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +51,7 @@ function NetworkForm({
     setError(null);
     setShowErrors(true);
     const rows = [...cidrs, ...proxies];
-    if (rows.some((r) => validateRange(r))) {
+    if (rows.some((r) => validateRange(r)) || hosts.some((h) => validateHostName(h))) {
       setError("Fix the entries marked below, then save again.");
       return;
     }
@@ -65,14 +67,20 @@ function NetworkForm({
           enabled,
           cidrs: cidrs.map((c) => c.trim()),
           trustedProxies: proxies.map((c) => c.trim()),
+          allowedHosts: hosts.map((h) => h.trim()),
         })
       );
       setWarnings(next.warnings ?? []);
       setCidrs(next.cidrs);
       setProxies(next.trustedProxies);
+      setHosts(next.allowedHosts ?? []);
       setShowErrors(false);
       onSaved(next);
-      setSaved("Network settings saved. They apply right away.");
+      setSaved(
+        next.addedHost
+          ? `Network settings saved. They apply right away. ${next.addedHost} was added to the allowed host names, because that is the address you are using.`
+          : "Network settings saved. They apply right away."
+      );
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -80,7 +88,6 @@ function NetworkForm({
     }
   }
 
-  const client = settings.client;
   return (
     <form onSubmit={(e) => void save(e)} noValidate className="space-y-5">
       <section className={`${CARD} space-y-4 p-4`}>
@@ -112,6 +119,49 @@ function NetworkForm({
           showErrors={showErrors}
           disabled={busy}
         />
+      </section>
+
+      <section className={`${CARD} space-y-4 p-4`}>
+        <h2 className="font-medium">Allowed host names</h2>
+        <p className="text-sm text-slate-400">
+          A malicious web page can trick a browser on your network into talking to Wheelhouse under
+          a domain name the attacker controls (&quot;DNS rebinding&quot;), which would otherwise
+          count as local. So the no-login access above only applies when the address typed in the
+          browser is an IP address, <code>localhost</code>, a name without a dot (such as{" "}
+          <code>nas</code>) or one of the names listed here. Signing in is not affected.
+        </p>
+        <StringListEditor
+          label="Allowed host names"
+          hint={
+            <>
+              For example <code>nas.example.lan</code>, or <code>*.example.lan</code> for every name
+              below it. Turning local-network access on adds the name you are using now.
+            </>
+          }
+          values={hosts}
+          onChange={setHosts}
+          validate={validateHostName}
+          placeholder="nas.example.lan"
+          addLabel="Add a host name"
+          showErrors={showErrors}
+          disabled={busy}
+        />
+        {settings.envAllowedHosts && settings.envAllowedHosts.length > 0 && (
+          <p className="text-xs text-slate-500">
+            Also allowed from the server&apos;s environment settings (not editable here):{" "}
+            {settings.envAllowedHosts.join(", ")}.
+          </p>
+        )}
+        {client?.host !== undefined && (
+          <p className="text-sm text-slate-300">
+            You are connected as <code>{client.host}</code>.{" "}
+            {client.hostAllowed ? (
+              <Badge tone="good">This name is allowed</Badge>
+            ) : (
+              <Badge tone="warn">This name is not allowed yet</Badge>
+            )}
+          </p>
+        )}
       </section>
 
       <section className={`${CARD} space-y-4 p-4`}>

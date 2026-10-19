@@ -76,8 +76,18 @@ const ContentSecurityPolicy = "default-src 'self'; script-src 'self'; style-src 
 	"font-src 'self'; connect-src 'self'; object-src 'none'; " +
 	"base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 
+// HSTS is the Strict-Transport-Security value. It is sent only on responses to
+// HTTPS requests (browsers ignore it on HTTP, but a header that claims HTTPS on
+// a plain-HTTP deployment is wrong and would pin a name the operator may still
+// serve over HTTP). No includeSubDomains and no preload: this server cannot
+// speak for the rest of the domain.
+const HSTS = "max-age=31536000"
+
 // SecurityHeaders sets the headers every response carries, errors included.
-func SecurityHeaders() Middleware {
+// secure reports whether the request arrived over HTTPS (directly, or through a
+// trusted proxy); Strict-Transport-Security is added only then. A nil secure
+// never sends it.
+func SecurityHeaders(secure func(*http.Request) bool) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			h := w.Header()
@@ -88,6 +98,9 @@ func SecurityHeaders() Middleware {
 			h.Set("Cross-Origin-Opener-Policy", "same-origin")
 			h.Set("Cross-Origin-Resource-Policy", "same-origin")
 			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			if secure != nil && secure(r) {
+				h.Set("Strict-Transport-Security", HSTS)
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

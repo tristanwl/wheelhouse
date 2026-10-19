@@ -8,7 +8,13 @@ services:
     container_name: wheelhouse
     restart: unless-stopped
     ports:
-      - "3050:3050"
+      # Published on this machine only, so nobody on the network can reach the
+      # setup page (and claim the instance with a setup token read from the
+      # logs) before you have created the administrator. To use it from other
+      # machines, put a TLS reverse proxy in front (docs/operations.md) or
+      # change this to "3050:3050" (all interfaces) or "192.168.1.10:3050:3050"
+      # (one LAN address), deliberately, after setup.
+      - "127.0.0.1:3050:3050"
     env_file:
       - .env
     # The container runs as UID/GID 1000 by default; any numeric user works. To

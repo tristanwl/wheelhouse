@@ -604,8 +604,59 @@ describe("network", () => {
     trustedProxies: [],
     envTrustedProxies: [],
     warnings: [],
-    client: { address: "192.168.1.20", forwarded: false, inRange: true },
+    allowedHosts: [],
+    envAllowedHosts: [],
+    client: {
+      address: "192.168.1.20",
+      forwarded: false,
+      inRange: true,
+      host: "nas.example.lan:3050",
+      hostAllowed: false,
+    },
   };
+
+  it("lets the admin edit allowed host names, shows env ones read-only and the current Host", async () => {
+    const user = userEvent.setup();
+    const { calls } = mockApi({
+      ...base,
+      "GET /api/admin/network": {
+        ...network,
+        allowedHosts: ["nas.example.lan"],
+        envAllowedHosts: ["env.example.lan"],
+      },
+      "PUT /api/admin/network": {
+        ...network,
+        enabled: true,
+        allowedHosts: ["nas.example.lan", "other.example.lan"],
+        addedHost: "other.example.lan",
+      },
+    });
+    renderApp("/admin/network");
+    expect(await screen.findByText(/DNS rebinding/)).toBeInTheDocument();
+    expect(screen.getByText("nas.example.lan:3050")).toBeInTheDocument();
+    expect(screen.getByText("This name is not allowed yet")).toBeInTheDocument();
+    expect(screen.getByText(/env\.example\.lan/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Allowed host names, entry 1")).toHaveValue("nas.example.lan");
+
+    await user.click(screen.getByRole("button", { name: "Add a host name" }));
+    await user.type(screen.getByLabelText("Allowed host names, entry 2"), "192.0.2.1");
+    await user.click(screen.getByRole("switch", { name: /without a login/ }));
+    await user.click(screen.getByRole("button", { name: "Save network settings" }));
+    expect(await screen.findByText(/IP addresses are always allowed/)).toBeInTheDocument();
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+    const entry = screen.getByLabelText("Allowed host names, entry 2");
+    await user.clear(entry);
+    await user.type(entry, "other.example.lan");
+    await user.click(screen.getByRole("button", { name: "Save network settings" }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PUT")).toBe(true));
+    expect(calls.find((c) => c.method === "PUT")!.body).toMatchObject({
+      allowedHosts: ["nas.example.lan", "other.example.lan"],
+    });
+    expect(
+      await screen.findByText(/other\.example\.lan was added to the allowed host names/)
+    ).toBeInTheDocument();
+  });
 
   it("shows the caller's address and whether it is in range, and explains the user-role rule", async () => {
     mockApi({ ...base, "GET /api/admin/network": network });
@@ -645,6 +696,7 @@ describe("network", () => {
       enabled: true,
       cidrs: ["192.168.1.0/24", "203.0.113.0/24"],
       trustedProxies: [],
+      allowedHosts: [],
     });
     expect(await screen.findByLabelText("Warnings")).toHaveTextContent(
       "wider than private address space"

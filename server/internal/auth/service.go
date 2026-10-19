@@ -329,7 +329,8 @@ func (s *Service) PrepareSetup(ctx context.Context) error {
 		}
 	}
 	// The one place the token is logged: the operator has to be able to find it.
-	s.log.Warn("setup required: open Wheelhouse in a browser and create the administrator with this one-time setup token",
+	s.log.Warn("setup required: open Wheelhouse in a browser and create the administrator with this one-time setup token. "+
+		"Anyone who can read this log line or the token file before setup completes can claim this instance",
 		"setup_token", token, "file", file)
 	return nil
 }
