@@ -109,6 +109,8 @@ These are acceptance criteria for 1.0, each with a test.
 
 ## Phase 2 features
 
+The detailed design and work plan are in [wheelhouse-phase2-plan.md](wheelhouse-phase2-plan.md).
+
 1. First-run setup: create the first admin, then add services.
 2. Local users with the admin and user roles above, and an optional
    local-network bypass (which grants the user role, never admin).
