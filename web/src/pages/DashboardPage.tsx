@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router";
+import { Link } from "react-router";
 import { useSession } from "@/lib/session-context";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -31,34 +31,39 @@ const TONE_BAR: Record<RowTone, string> = {
 };
 
 /**
- * Right after the setup wizard (it navigates here with `{ welcome: true }`), point
- * the new administrator at the administration pages, where services are added.
+ * The first-run checklist, for administrators only: until at least one service
+ * exists (stored or from the environment) it points at the Services page. It
+ * disappears by itself when the first service is added.
  */
-function WelcomeBanner() {
-  const location = useLocation();
-  const navigate = useNavigate();
+function SetupChecklist() {
   const { isAdmin } = useSession();
-  const welcome = (location.state as { welcome?: boolean } | null)?.welcome === true;
-  if (!welcome || !isAdmin) return null;
+  const { data } = useSWR<{ instances: unknown[] }>(
+    isAdmin ? "/api/admin/instances" : null,
+    fetcher
+  );
+  if (!isAdmin || !data || data.instances.length > 0) return null;
   return (
-    <div
-      role="status"
+    <aside
+      aria-label="Getting started"
       className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-900 bg-sky-950/40 p-4 text-sm"
     >
-      <p>
-        <strong className="font-medium">Add your services.</strong> Wheelhouse is set up. Connect
-        Radarr, Sonarr and the rest next.{" "}
-        <Link to="/admin" className="underline hover:text-white">
-          Add your services
-        </Link>
-      </p>
-      <button
-        onClick={() => void navigate(location.pathname, { replace: true, state: null })}
-        className="rounded-md px-3 py-1 text-slate-300 hover:bg-slate-800"
+      <div className="space-y-1">
+        <p>
+          <strong className="font-medium">Add your services.</strong> Wheelhouse is set up but does
+          not know about Radarr, Sonarr, your download client or your media server yet.
+        </p>
+        <p className="text-slate-400">
+          Add one and the dashboard fills in. You can add more any time, and invite other people
+          under Users.
+        </p>
+      </div>
+      <Link
+        to="/admin/services/new"
+        className="rounded-md bg-sky-700 px-3 py-1.5 font-medium text-white hover:bg-sky-600"
       >
-        Dismiss
-      </button>
-    </div>
+        Add your services
+      </Link>
+    </aside>
   );
 }
 
@@ -82,7 +87,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <WelcomeBanner />
+      <SetupChecklist />
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
           Service status

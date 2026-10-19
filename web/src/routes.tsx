@@ -1,4 +1,5 @@
-import type { RouteObject } from "react-router";
+import { Navigate, type RouteObject } from "react-router";
+import { AdminLayout } from "./components/admin/AdminLayout";
 import { FeatureGate } from "./components/FeatureGate";
 import { AuthFrame } from "./components/Form";
 import { RequireAdmin, RequireAuth } from "./components/Guards";
@@ -14,13 +15,21 @@ import LibraryPage from "./pages/LibraryPage";
 import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import SetupPage from "./pages/SetupPage";
+import AuditPage from "./pages/admin/AuditPage";
+import ConverterPage from "./pages/admin/ConverterPage";
+import FeaturesPage from "./pages/admin/FeaturesPage";
+import NetworkPage from "./pages/admin/NetworkPage";
+import ServiceFormPage from "./pages/admin/ServiceFormPage";
+import ServicesPage from "./pages/admin/ServicesPage";
+import SessionsPage from "./pages/admin/SessionsPage";
+import UsersPage from "./pages/admin/UsersPage";
 
 /**
  * The same URLs the Next app had, so deep links keep working, plus the
  * authentication pages. Only /login and /setup are open to someone who is not
- * signed in; every other page sits behind `RequireAuth`. `/admin/*` is reserved
- * for the administration pages (plan item 7), which replace the placeholder
- * children below; `RequireAdmin` already keeps everyone but administrators out.
+ * signed in; every other page sits behind `RequireAuth`. `/admin/*` holds the
+ * administration pages (plan item 7); `RequireAdmin` keeps everyone but
+ * administrators out of all of them.
  * Library, Explore and Codecs sit behind their feature: a page the server says is
  * not available shows the "not configured" stub instead.
  */
@@ -87,8 +96,22 @@ export const routes: RouteObject[] = [
                 path: "/admin",
                 element: <RequireAdmin />,
                 children: [
-                  { index: true, element: <NotFoundPage /> },
-                  { path: "*", element: <NotFoundPage /> },
+                  {
+                    element: <AdminLayout />,
+                    children: [
+                      { index: true, element: <Navigate to="/admin/services" replace /> },
+                      { path: "services", element: <ServicesPage /> },
+                      { path: "services/new", element: <ServiceFormPage /> },
+                      { path: "services/:id", element: <ServiceFormPage /> },
+                      { path: "features", element: <FeaturesPage /> },
+                      { path: "users", element: <UsersPage /> },
+                      { path: "sessions", element: <SessionsPage /> },
+                      { path: "network", element: <NetworkPage /> },
+                      { path: "converter", element: <ConverterPage /> },
+                      { path: "audit", element: <AuditPage /> },
+                      { path: "*", element: <NotFoundPage /> },
+                    ],
+                  },
                 ],
               },
               { path: "*", element: <NotFoundPage /> },
