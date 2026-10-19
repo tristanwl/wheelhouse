@@ -1,0 +1,5 @@
+go test fuzz v1
+uint8(4)
+uint8(25)
+uint8(0)
+[]byte("<html>\n  <head>\n    <script>\n      window.location = window.location.href.match(/(^.+\\/)[^\\/]*$/)[1] + \"web/index.html\";\n    </script>\n    <title>Unauthorized</title>\n  </head>\n  <body>\n    <h1>401 Unauthorized</h1>\n  </body>\n</html>\n")

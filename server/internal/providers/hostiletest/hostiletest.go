@@ -43,15 +43,22 @@ var Behaviours = []string{Reason, Redirect, BadJSON, Huge, Hangup, Stall}
 func Forms() []string {
 	var forms []string
 	for _, s := range []string{Key, Pass} {
-		b := []byte(s)
-		forms = append(forms, s,
-			url.QueryEscape(s), url.PathEscape(s),
-			strings.ReplaceAll(url.QueryEscape(s), "+", "%20"),
-			base64.StdEncoding.EncodeToString(b), base64.RawStdEncoding.EncodeToString(b),
-			base64.URLEncoding.EncodeToString(b), base64.RawURLEncoding.EncodeToString(b),
-			jsonEscaped(s, true), jsonEscaped(s, false))
+		forms = append(forms, SecretForms(s)...)
 	}
 	return forms
+}
+
+// SecretForms returns the plain and encoded variants of one secret: URL-encoded
+// (query, path, and the query form with %20 for spaces), base64 in all four
+// alphabets and JSON-escaped.
+func SecretForms(s string) []string {
+	b := []byte(s)
+	return []string{s,
+		url.QueryEscape(s), url.PathEscape(s),
+		strings.ReplaceAll(url.QueryEscape(s), "+", "%20"),
+		base64.StdEncoding.EncodeToString(b), base64.RawStdEncoding.EncodeToString(b),
+		base64.URLEncoding.EncodeToString(b), base64.RawURLEncoding.EncodeToString(b),
+		jsonEscaped(s, true), jsonEscaped(s, false)}
 }
 
 func jsonEscaped(s string, escapeHTML bool) string {
