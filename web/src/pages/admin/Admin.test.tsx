@@ -302,7 +302,9 @@ describe("services: editing and the list", () => {
     renderApp("/admin/services");
     await user.click(await screen.findByRole("button", { name: "Delete Radarr" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus()
+    );
     expect(calls.some((c) => c.method === "DELETE")).toBe(false);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

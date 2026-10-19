@@ -95,7 +95,7 @@ describe("login", () => {
     const user = userEvent.setup();
     const name = await screen.findByLabelText("Username");
     expect(name).toHaveAttribute("autocomplete", "username");
-    expect(name).toHaveFocus();
+    await waitFor(() => expect(name).toHaveFocus());
     expect(screen.getByLabelText("Password")).toHaveAttribute("autocomplete", "current-password");
     expect(screen.getByLabelText("Password")).toHaveAttribute("type", "password");
 
@@ -151,7 +151,7 @@ describe("login", () => {
     expect(alert).toHaveTextContent(/locked/);
     expect(alert.textContent).not.toMatch(/user (does not|doesn't) exist|wrong password/i);
     expect(screen.getByLabelText("Password")).toHaveValue("");
-    expect(screen.getByLabelText("Password")).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText("Password")).toHaveFocus());
     // The 401 of a login attempt must not bounce the page.
     expect(screen.getByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
@@ -387,7 +387,7 @@ describe("user menu and account page", () => {
     await user.click(button);
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-    expect(button).toHaveFocus();
+    await waitFor(() => expect(button).toHaveFocus());
   });
 
   it("lists sessions, revokes another one and changes the password", async () => {
