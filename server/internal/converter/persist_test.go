@@ -434,7 +434,7 @@ func TestValidateRoots(t *testing.T) {
 	for name, in := range map[string][]string{
 		"none":             {},
 		"relative":         {"movies"},
-		"dotdot":           {a + "/sub/../.."},
+		"dotdot":           {b + "/../" + filepath.Base(a)},
 		"root":             {"/"},
 		"etc":              {"/etc"},
 		"etc subfolder":    {"/etc/ssl"},
