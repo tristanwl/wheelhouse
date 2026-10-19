@@ -48,6 +48,18 @@ func TestExploreMarksMoviesInEitherRadarr(t *testing.T) {
 		if !slices.Equal(ids, []int{inA, inB, neitherID}) || !slices.Equal(added, []bool{true, true, false}) {
 			t.Errorf("%s: ids %v added %v", cat, ids, added)
 		}
+		// The mark says which instance has the movie.
+		var where []string
+		for _, r := range body["results"].([]any) {
+			var names []string
+			for _, ref := range r.(map[string]any)["libraryInstances"].([]any) {
+				names = append(names, ref.(map[string]any)["instanceId"].(string))
+			}
+			where = append(where, strings.Join(names, "+"))
+		}
+		if !slices.Equal(where, []string{"radarr", "radarr-4k", ""}) {
+			t.Errorf("%s: libraryInstances %v", cat, where)
+		}
 	}
 
 	_, body, _ := getJSON(t, h, "/api/explore?category=popular&limit=2")

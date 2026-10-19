@@ -6,12 +6,14 @@ import { fetcher } from "@/lib/fetcher";
 import { ModalCloseButton } from "./ModalCloseButton";
 import { AddQualityModal } from "./AddQualityModal";
 import type { QualityProfile } from "@/lib/quality";
-import type { ExploreDetail } from "@/lib/types";
+import type { ExploreDetail, InstanceRef } from "@/lib/types";
+import { libraryStatus } from "@/lib/explore-library";
 
 interface TmdbDetailModalProps {
   id: number;
   fallbackTitle: string;
   instanceId: string | null;
+  instances?: InstanceRef[];
   qualityProfiles: QualityProfile[];
   rootFolderPath: string | null;
   monitored: boolean;
@@ -32,6 +34,7 @@ export function TmdbDetailModal({
   id,
   fallbackTitle,
   instanceId,
+  instances = [],
   qualityProfiles,
   rootFolderPath,
   monitored,
@@ -48,7 +51,13 @@ export function TmdbDetailModal({
 
   const trailerUrl = data ? youtubeWatchUrl(data.trailerKey) : null;
   const runtime = data ? formatRuntime(data.runtime) : null;
-  const isAdded = data?.alreadyAdded || added;
+  const lib = libraryStatus(
+    data?.alreadyAdded ?? false,
+    data?.libraryInstances,
+    instanceId,
+    instances
+  );
+  const isAdded = lib.inTarget || added;
 
   async function confirmAdd(qualityProfileId: number) {
     if (!rootFolderPath || !instanceId) return;
@@ -152,7 +161,7 @@ export function TmdbDetailModal({
                   )}
                   {isAdded ? (
                     <span className="rounded-md bg-emerald-900 px-3 py-1.5 text-xs text-emerald-300">
-                      {data.alreadyAdded ? "In library" : "Added ✓"}
+                      {lib.inTarget ? lib.label : "Added ✓"}
                     </span>
                   ) : (
                     <button
@@ -162,6 +171,9 @@ export function TmdbDetailModal({
                     >
                       Add to library
                     </button>
+                  )}
+                  {!isAdded && lib.elsewhere && (
+                    <span className="self-center text-xs text-slate-500">{lib.elsewhere}</span>
                   )}
                 </div>
 
@@ -179,6 +191,11 @@ export function TmdbDetailModal({
           title={data.title}
           posterUrl={data.posterUrl}
           qualityProfiles={qualityProfiles}
+          target={
+            instances.length > 1
+              ? (instances.find((i) => i.instanceId === instanceId)?.name ?? null)
+              : null
+          }
           busy={adding}
           error={addError}
           onConfirm={confirmAdd}

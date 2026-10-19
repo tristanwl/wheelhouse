@@ -37,13 +37,16 @@ func ParseCategory(s string) (Category, bool) {
 
 // Hit is one movie in a list.
 type Hit struct {
-	ID           int     `json:"id"`
-	AlreadyAdded bool    `json:"alreadyAdded"`
-	Title        string  `json:"title"`
-	Year         *int    `json:"year"`
-	Overview     string  `json:"overview"`
-	PosterURL    *string `json:"posterUrl"`
-	VoteAverage  float64 `json:"voteAverage"`
+	ID           int  `json:"id"`
+	AlreadyAdded bool `json:"alreadyAdded"`
+	// LibraryInstances are the movie instances that have it (empty when none),
+	// in configured order, so the UI can say which.
+	LibraryInstances []mm.Ref `json:"libraryInstances"`
+	Title            string   `json:"title"`
+	Year             *int     `json:"year"`
+	Overview         string   `json:"overview"`
+	PosterURL        *string  `json:"posterUrl"`
+	VoteAverage      float64  `json:"voteAverage"`
 }
 
 // List is the body of GET /api/explore.
@@ -54,17 +57,19 @@ type List struct {
 
 // Detail is the body of GET /api/explore/{id}.
 type Detail struct {
-	ID           int      `json:"id"`
-	AlreadyAdded bool     `json:"alreadyAdded"`
-	Title        string   `json:"title"`
-	Overview     string   `json:"overview"`
-	Year         *int     `json:"year"`
-	Genres       []string `json:"genres"`
-	Runtime      *int     `json:"runtime"`
-	VoteAverage  float64  `json:"voteAverage"`
-	PosterURL    *string  `json:"posterUrl"`
-	BackdropURL  *string  `json:"backdropUrl"`
-	TrailerKey   *string  `json:"trailerKey"`
+	ID           int  `json:"id"`
+	AlreadyAdded bool `json:"alreadyAdded"`
+	// LibraryInstances are the movie instances that have it (see Hit).
+	LibraryInstances []mm.Ref `json:"libraryInstances"`
+	Title            string   `json:"title"`
+	Overview         string   `json:"overview"`
+	Year             *int     `json:"year"`
+	Genres           []string `json:"genres"`
+	Runtime          *int     `json:"runtime"`
+	VoteAverage      float64  `json:"voteAverage"`
+	PosterURL        *string  `json:"posterUrl"`
+	BackdropURL      *string  `json:"backdropUrl"`
+	TrailerKey       *string  `json:"trailerKey"`
 }
 
 // client is the configured TMDB client. The errors are safe to show: the same
@@ -91,9 +96,9 @@ func client(ctx context.Context, rt *core.Runtime) (*tmdb.Client, error) {
 	return nil, &core.ProviderError{Message: "TMDB is not configured. Set TMDB_API_KEY."}
 }
 
-// libraryIDs is the set of TMDB ids in any movie instance. Instances that fail
-// are left out.
-func libraryIDs(ctx context.Context, rt *core.Runtime) (map[int]bool, error) {
+// libraryIDs maps each TMDB id to the movie instances that have it. Instances
+// that fail are left out.
+func libraryIDs(ctx context.Context, rt *core.Runtime) (map[int][]mm.Ref, error) {
 	entries, err := mm.ListManagers(ctx, rt, mm.KindMovies)
 	if err != nil {
 		return nil, err
@@ -105,19 +110,24 @@ func libraryIDs(ctx context.Context, rt *core.Runtime) (map[int]bool, error) {
 		}
 		return movies.Movies(ctx)
 	})
-	ids := map[int]bool{}
+	ids := map[int][]mm.Ref{}
 	for _, r := range results {
+		ref := mm.Ref{InstanceID: r.Entry.InstanceID, Name: r.Entry.Name}
+		seen := map[int]bool{}
 		for _, m := range r.Value {
-			ids[m.TmdbID] = true
+			if !seen[m.TmdbID] {
+				seen[m.TmdbID] = true
+				ids[m.TmdbID] = append(ids[m.TmdbID], ref)
+			}
 		}
 	}
 	return ids, nil
 }
 
 // withLibrary runs fetch (the TMDB call) while the library is being read.
-func withLibrary(ctx context.Context, rt *core.Runtime, fetch func() error) (map[int]bool, error) {
+func withLibrary(ctx context.Context, rt *core.Runtime, fetch func() error) (map[int][]mm.Ref, error) {
 	var (
-		added  map[int]bool
+		added  map[int][]mm.Ref
 		libErr error
 		done   = make(chan struct{})
 	)
@@ -155,13 +165,14 @@ func Browse(ctx context.Context, rt *core.Runtime, cat Category, count, page int
 	out := List{Results: make([]Hit, 0, len(res.Results)), HasMore: res.HasMore}
 	for _, m := range res.Results {
 		out.Results = append(out.Results, Hit{
-			ID:           m.ID,
-			AlreadyAdded: added[m.ID],
-			Title:        m.Title,
-			Year:         m.Year(),
-			Overview:     m.Overview,
-			PosterURL:    nullable(tmdb.PosterURL(m.PosterPath)),
-			VoteAverage:  m.VoteAverage,
+			ID:               m.ID,
+			AlreadyAdded:     len(added[m.ID]) > 0,
+			LibraryInstances: orEmpty(added[m.ID]),
+			Title:            m.Title,
+			Year:             m.Year(),
+			Overview:         m.Overview,
+			PosterURL:        nullable(tmdb.PosterURL(m.PosterPath)),
+			VoteAverage:      m.VoteAverage,
 		})
 	}
 	return out, nil
@@ -186,17 +197,18 @@ func Movie(ctx context.Context, rt *core.Runtime, id int) (Detail, error) {
 		genres = append(genres, g.Name)
 	}
 	return Detail{
-		ID:           d.ID,
-		AlreadyAdded: added[d.ID],
-		Title:        d.Title,
-		Overview:     d.Overview,
-		Year:         d.Year(),
-		Genres:       genres,
-		Runtime:      d.Runtime,
-		VoteAverage:  d.VoteAverage,
-		PosterURL:    nullable(tmdb.PosterURL(d.PosterPath)),
-		BackdropURL:  nullable(tmdb.BackdropURL(d.BackdropPath)),
-		TrailerKey:   nullable(d.TrailerKey()),
+		ID:               d.ID,
+		AlreadyAdded:     len(added[d.ID]) > 0,
+		LibraryInstances: orEmpty(added[d.ID]),
+		Title:            d.Title,
+		Overview:         d.Overview,
+		Year:             d.Year(),
+		Genres:           genres,
+		Runtime:          d.Runtime,
+		VoteAverage:      d.VoteAverage,
+		PosterURL:        nullable(tmdb.PosterURL(d.PosterPath)),
+		BackdropURL:      nullable(tmdb.BackdropURL(d.BackdropPath)),
+		TrailerKey:       nullable(d.TrailerKey()),
 	}, nil
 }
 
@@ -206,4 +218,12 @@ func nullable(s string, ok bool) *string {
 		return nil
 	}
 	return &s
+}
+
+// orEmpty keeps an empty list as [] in the JSON, never null.
+func orEmpty(refs []mm.Ref) []mm.Ref {
+	if refs == nil {
+		return []mm.Ref{}
+	}
+	return refs
 }

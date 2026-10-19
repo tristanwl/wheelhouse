@@ -1,7 +1,8 @@
 name: Release
 
-# Pushing a tag like 0.0.1 runs the full CI checks, then builds the image,
-# pushes it to Docker Hub, and creates a GitHub release with generated notes.
+# Pushing a tag like 0.0.1 runs the full CI checks, then builds the multi-arch
+# image (linux/amd64 and linux/arm64), pushes it to Docker Hub, and creates a
+# GitHub release with generated notes.
 #
 # One-time setup (repo settings -> Secrets and variables -> Actions):
 #   secret   DOCKERHUB_PAT        Docker Hub access token with read/write
@@ -47,6 +48,17 @@ jobs:
           [ "$version" = "$GITHUB_REF_NAME" ] \
             || { echo "::error::Tag $GITHUB_REF_NAME does not match package.json ($version)"; exit 1; }
 
+      # Emulation is needed only for the apk layer of the arm64 image: the UI and
+      # the Go binary are built natively on the runner (the Dockerfile's first two
+      # stages run on $BUILDPLATFORM and cross-compile). The binfmt image is
+      # pinned by tag and digest like the actions; Dependabot cannot see it here,
+      # so bump it by hand when a newer qemu-v* tag is at least two weeks old.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+          cache-image: false
+
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -65,19 +77,29 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref_name, '0.0.') }}
 
-      # amd64 only until the arm64 image has been verified on real hardware
-      # (issue #14). The Dockerfile is multi-arch ready: it cross-compiles and
-      # installs the Intel drivers on x86 only. The version stamped into the
-      # binary is read from package.json, which the check above ties to the tag.
+      # One tag, one multi-arch manifest: linux/amd64 and linux/arm64 (issue #14).
+      # The Dockerfile cross-compiles the Go server natively and installs the
+      # Intel VAAPI drivers on x86 only. The version stamped into the binary is
+      # read from package.json, which the check above ties to the tag.
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Check the pushed tag is a multi-arch manifest
+        run: |
+          version="$GITHUB_REF_NAME"
+          out="$(docker buildx imagetools inspect "$IMAGE:$version")"
+          echo "$out"
+          for platform in linux/amd64 linux/arm64; do
+            grep -qE "^ +Platform: +$platform\$" <<< "$out" \
+              || { echo "::error::$IMAGE:$version has no $platform image"; exit 1; }
+          done
 
       # Works whether the release is created here (tag pushed from a terminal)
       # or by hand in the GitHub UI first (which also creates the tag): an

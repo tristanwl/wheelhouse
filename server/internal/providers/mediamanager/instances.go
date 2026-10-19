@@ -27,6 +27,13 @@ type Summary struct {
 	Error      string `json:"error,omitempty"`
 }
 
+// Ref names an instance in a response (the picker's choices, the instances a
+// movie is already in).
+type Ref struct {
+	InstanceID string `json:"instanceId"`
+	Name       string `json:"name"`
+}
+
 // Problem is an instance that could not answer.
 type Problem struct {
 	InstanceID string `json:"instanceId"`

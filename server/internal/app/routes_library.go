@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -242,8 +243,11 @@ func registerLibrary(r *Router, d deps) {
 		writeJSON(w, http.StatusOK, resp)
 	})
 
-	// Either ?instanceId=radarr-4k, or ?kind=movies for the first ready instance
-	// of that kind.
+	// Either ?instanceId=radarr-4k, or ?kind=movies for the first instance of
+	// that kind that answers (an instance that is misconfigured or down is
+	// skipped while another one works; only when none works is the first error
+	// reported). The body lists every ready instance of the kind in "instances",
+	// so a client can offer a picker.
 	r.HandleFunc("GET /api/add-meta", Authenticated, func(w http.ResponseWriter, req *http.Request) {
 		q := req.URL.Query()
 		instanceID := q.Get("instanceId")
@@ -261,18 +265,16 @@ func registerLibrary(r *Router, d deps) {
 			internalError(w)
 			return
 		}
-		var entry mm.Entry
-		found := false
+		var candidates []mm.Entry
 		if instanceID != "" {
 			if i := slices.IndexFunc(entries, func(e mm.Entry) bool { return e.InstanceID == instanceID }); i >= 0 {
-				entry, found = entries[i], true
+				candidates = entries[i : i+1]
+				kind = entries[i].Kind
 			}
-		} else if i := slices.IndexFunc(entries, func(e mm.Entry) bool { return e.Client != nil }); i >= 0 {
-			entry, found = entries[i], true
-		} else if len(entries) > 0 {
-			entry, found = entries[0], true
+		} else {
+			candidates = entries
 		}
-		if !found {
+		if len(candidates) == 0 {
 			if instanceID != "" {
 				errorJSON(w, http.StatusNotFound, fmt.Sprintf("unknown instance %q", instanceID))
 			} else {
@@ -280,14 +282,37 @@ func registerLibrary(r *Router, d deps) {
 			}
 			return
 		}
-		entry, ok := notReady(w, entry)
-		if !ok {
+		var (
+			meta     library.Meta
+			firstErr string
+			found    bool
+		)
+		for _, entry := range candidates {
+			var err error
+			if entry.Client == nil {
+				err = &core.ProviderError{Message: core.Redact(entry.Name + ": " + cmp.Or(entry.Error, "not ready"))}
+			} else {
+				meta, err = library.AddMeta(req.Context(), entry)
+			}
+			if err == nil {
+				found = true
+				break
+			}
+			if firstErr == "" {
+				firstErr = core.ErrorText(err)
+			}
+		}
+		if !found {
+			errorJSON(w, http.StatusBadGateway, firstErr)
 			return
 		}
-		meta, err := library.AddMeta(req.Context(), entry)
-		if err != nil {
-			errorJSON(w, http.StatusBadGateway, core.ErrorText(err))
-			return
+		// The picker's choices: every ready instance of this kind, so a second
+		// Radarr is offered even when the first one answered.
+		meta.Instances = []mm.Ref{}
+		for _, e := range entries {
+			if e.Client != nil && e.Kind == kind {
+				meta.Instances = append(meta.Instances, mm.Ref{InstanceID: e.InstanceID, Name: e.Name})
+			}
 		}
 		writeJSON(w, http.StatusOK, meta)
 	})

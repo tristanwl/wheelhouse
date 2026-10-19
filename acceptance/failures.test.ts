@@ -97,6 +97,22 @@ describe("one broken service at a time never breaks the others", () => {
     expect(series.json.error).toBeTypeOf("string");
   });
 
+  it("add-meta by kind skips the broken instance, by id it does not", async () => {
+    // radarr has the wrong key, radarr-4k is healthy: the first instance that
+    // answers is used, and the picker still lists both.
+    const { status, json } = await server.request("/api/add-meta?kind=movies");
+    expect(status).toBe(200);
+    expect(json.instanceId).toBe("radarr-4k");
+    expect(json.instances.map((i: { instanceId: string }) => i.instanceId)).toEqual([
+      "radarr",
+      "radarr-4k",
+    ]);
+    // The only series manager is down: its error is reported.
+    const series = await server.request("/api/add-meta?kind=series");
+    expect(series.status).toBe(502);
+    expect(series.json.error).toBeTypeOf("string");
+  });
+
   it("routes addressed to a broken instance fail with a 502 and its reason", async () => {
     for (const path of ["/api/library/radarr/1/details", "/api/add-meta?instanceId=radarr"]) {
       const { status, json } = await server.request(path);
