@@ -1,0 +1,7 @@
+go test fuzz v1
+string("GET")
+string("/api/status")
+string("X-Forwarded-For: 127.0.0.1\nX-Real-IP: 127.0.0.1\nForwarded: for=127.0.0.1")
+[]byte("")
+uint8(0)
+uint8(0)

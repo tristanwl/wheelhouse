@@ -1,0 +1,7 @@
+go test fuzz v1
+string("PUT")
+string("/api/admin/converter")
+string("Content-Type: application/json")
+[]byte("{\"mediaRoots\":[\"/\"],\"includeHdr\":true}")
+uint8(2)
+uint8(0)

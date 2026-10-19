@@ -1,0 +1,7 @@
+go test fuzz v1
+string("GET")
+string("/api/library/radarr/abc/details")
+string("")
+[]byte("")
+uint8(1)
+uint8(0)

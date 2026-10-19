@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/codec-analysis/convert")
+string("Content-Type: application/json")
+[]byte("{\"instanceId\":\"radarr\",\"itemId\":1,\"filePath\":\"/etc/passwd\",\"title\":\"Example Movie 1\",\"originalSize\":8,\"backend\":\"software\",\"targetFamily\":\"h264\"}")
+uint8(2)
+uint8(0)

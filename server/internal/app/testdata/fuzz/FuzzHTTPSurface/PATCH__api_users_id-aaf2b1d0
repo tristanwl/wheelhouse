@@ -1,0 +1,7 @@
+go test fuzz v1
+string("PATCH")
+string("/api/users/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+string("Content-Type: application/json")
+[]byte("{\"username\":\"renamed-user\"}")
+uint8(1)
+uint8(1)

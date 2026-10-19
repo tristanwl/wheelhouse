@@ -1,0 +1,7 @@
+go test fuzz v1
+string("GET")
+string("/assets/../index.html")
+string("")
+[]byte("")
+uint8(0)
+uint8(0)

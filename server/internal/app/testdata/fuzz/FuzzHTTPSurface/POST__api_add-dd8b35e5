@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/add")
+string("Content-Type: application/json")
+[]byte("{\"instanceId\":\"radarr\",\"id\":603,\"qualityProfileId\":1,\"rootFolderPath\":\"/movies\",\"monitored\":true,\"searchNow\":false}")
+uint8(1)
+uint8(0)

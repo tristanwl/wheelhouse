@@ -1,0 +1,7 @@
+go test fuzz v1
+string("DELETE")
+string("/api/library/x/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/seasons/1")
+string("Content-Type: application/json")
+[]byte("")
+uint8(2)
+uint8(0)

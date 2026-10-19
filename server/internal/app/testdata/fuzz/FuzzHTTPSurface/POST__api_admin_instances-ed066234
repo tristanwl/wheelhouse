@@ -1,0 +1,7 @@
+go test fuzz v1
+string("POST")
+string("/api/admin/instances")
+string("Content-Type: application/json")
+[]byte("{\"providerId\":\"sonarr\",\"id\":\"sonarr-4k\",\"name\":\"Sonarr 4K\",\"config\":{\"url\":\"http://user:CANARY-pass-3b2a1f0e@192.0.2.11:8989\",\"apiKey\":\"CANARY-key/+&\"9f8e7d6c\"}}")
+uint8(1)
+uint8(1)
