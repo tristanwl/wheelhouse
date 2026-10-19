@@ -163,18 +163,18 @@ func (b Base) Kind() Kind { return b.kind }
 
 // SystemStatus implements Manager.
 func (b Base) SystemStatus(ctx context.Context) (SystemStatus, error) {
-	return Get[SystemStatus](ctx, b.arr, "system/status", core.Request{})
+	return Get[SystemStatus](ctx, b.arr, "system/status", smallReq())
 }
 
 // Health implements Manager.
 func (b Base) Health(ctx context.Context) ([]HealthIssue, error) {
-	h, err := Get[[]HealthIssue](ctx, b.arr, "health", core.Request{})
+	h, err := Get[[]HealthIssue](ctx, b.arr, "health", smallReq())
 	return nonNil(h), err
 }
 
 // Indexers implements Manager.
 func (b Base) Indexers(ctx context.Context) ([]Indexer, error) {
-	i, err := Get[[]Indexer](ctx, b.arr, "indexer", core.Request{})
+	i, err := Get[[]Indexer](ctx, b.arr, "indexer", smallReq())
 	return nonNil(i), err
 }
 
@@ -189,19 +189,19 @@ func (b Base) QueueSummary(ctx context.Context) (QueueSummary, error) {
 
 // RootFolders implements Manager.
 func (b Base) RootFolders(ctx context.Context) ([]RootFolder, error) {
-	r, err := Get[[]RootFolder](ctx, b.arr, "rootfolder", core.Request{})
+	r, err := Get[[]RootFolder](ctx, b.arr, "rootfolder", smallReq())
 	return nonNil(r), err
 }
 
 // QualityProfiles implements Manager.
 func (b Base) QualityProfiles(ctx context.Context) ([]QualityProfile, error) {
-	p, err := Get[[]QualityProfile](ctx, b.arr, "qualityprofile", core.Request{})
+	p, err := Get[[]QualityProfile](ctx, b.arr, "qualityprofile", smallReq())
 	return nonNil(p), err
 }
 
 // Tags implements Manager.
 func (b Base) Tags(ctx context.Context) ([]Tag, error) {
-	t, err := Get[[]Tag](ctx, b.arr, "tag", core.Request{})
+	t, err := Get[[]Tag](ctx, b.arr, "tag", smallReq())
 	return nonNil(t), err
 }
 

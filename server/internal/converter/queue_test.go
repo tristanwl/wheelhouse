@@ -2,6 +2,7 @@ package converter
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -506,7 +507,7 @@ func TestRenameFallbackNeverClobbers(t *testing.T) {
 	src, bak := filepath.Join(dir, "a"), filepath.Join(dir, "a.bak")
 	mustWrite(t, src, "one")
 	mustWrite(t, bak, "two")
-	if _, err := createBackup(src, bak); err != errBackupExists {
+	if _, err := createBackup(src, bak); !errors.Is(err, errBackupExists) {
 		t.Errorf("createBackup over an existing file: %v", err)
 	}
 	if err := renameNoClobber(src, bak); err == nil {
