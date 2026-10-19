@@ -1,10 +1,11 @@
 # Wheelhouse
 
 A self-hosted dashboard and companion for the *arr media stack: status, library
-management, movie discovery and codec-aware conversion. Alpha: the released 0.2.x
-has **no authentication** (trusted networks only); `main` enforces accounts and
-sessions, and the web UI has its login, setup wizard and account pages (Phase 2 item 6), so no
-release is cut until the Phase 2 items land.
+management, movie discovery and codec-aware conversion. Releases up to 0.2.x had
+**no authentication**; since 0.3.0 every route needs a signed-in user, the first
+administrator is created through a setup wizard with a one-time token, and 1.0.0 is
+gated by [docs/release-1.0-checklist.md](docs/release-1.0-checklist.md) (each acceptance
+criterion with the test that enforces it, and the known limitations).
 
 Read [docs/architecture.md](docs/architecture.md) for how things work and
 [docs/wheelhouse-spec.md](docs/wheelhouse-spec.md) for decisions, positioning
@@ -19,7 +20,7 @@ acceptance suite (`acceptance/`) and the **single source of the release
 version**. Node 22.12+ (24 recommended, see `.nvmrc`).
 
 ```sh
-make -C server run                         # API on :3000; configure with the usual env vars
+make -C server run                         # API on :3000; config in server/.devconfig (git-ignored)
 cd web && npm ci && npm run dev            # UI on :5173, proxies /api to :3000
 ```
 
@@ -137,6 +138,11 @@ Everything that talks to another service goes through the provider layer in
   plaintext (use `secrets.Secret`), and keep the plaintext-on-disk canary test
   (`TestPlaintextNeverReachesDisk`) covering any new secret column. Update
   `docs/threat-model.md` when a PR changes a boundary or a mitigation.
+- **Documentation is tested.** `python3 scripts/check-docs.py` (CI job `check`) fails on a
+  broken relative link or file reference in any Markdown file and when the environment
+  variables the Go code reads and the README's Configuration table differ. A new variable
+  needs a row in that table (name, default, meaning, kind). A new user-visible limit or
+  trade-off goes in the Known limitations of `docs/release-1.0-checklist.md`.
 - **Accounts** (`server/internal/auth`). Passwords are Argon2id hashes and session
   tokens SHA-256 hashes: never store, log, audit or return a password, a token or
   a CSRF token (the acceptance sweep plants them and scans responses, logs and the
@@ -151,7 +157,9 @@ Everything that talks to another service goes through the provider layer in
   `govulncheck`, a license that works with GPL-3.0 (`make -C server deps` checks
   an allow-list) and a tidy `go.mod`/`go.sum`. `modernc.org/libc` stays at the
   version the SQLite driver pins. Pin GitHub Actions by commit SHA and the Docker
-  base images by digest.
+  base images by digest (`scripts/check-pins.sh` in the `check` job enforces it).
+  Releases publish an SBOM and signed provenance ([docs/verifying-releases.md](docs/verifying-releases.md));
+  the repository settings the owner must apply are in [docs/maintainer-settings.md](docs/maintainer-settings.md).
 
 ## Adding a provider
 
@@ -181,9 +189,10 @@ Everything that talks to another service goes through the provider layer in
   version with no `v` prefix (`0.3.0`) and **must equal the root `package.json`'s
   `version`**: bump it in a PR first. `.github/workflows/release.yml` runs the
   CI checks, builds the Dockerfile (the binary reports that version), pushes
-  `tristanwl/wheelhouse:<version>` to Docker Hub and creates or updates the
-  GitHub release. Every `0.x` is a pre-release, and there is no `latest` tag
-  until authentication ships. Branch protection requires the CI job named
+  `tristanwl/wheelhouse:<version>` to Docker Hub (with an SBOM, provenance and a
+  signed attestation) and creates or updates the GitHub release. A manual
+  run of the workflow is always a dry run (`gh workflow run Release --ref <branch> -f dry_run=true`). Every `0.x` is a pre-release, and there is no `latest` tag
+  until 1.0.0. Branch protection requires the CI job named
   `check`, so don't rename the jobs.
 - Claude Code keeps isolated worktrees in `.claude/`; it is ignored by git. Never
   commit it.

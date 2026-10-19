@@ -1,7 +1,7 @@
 # Wheelhouse Go server
 
-The Wheelhouse server: one static Go binary (standard library plus one
-dependency, the pure-Go SQLite driver; see [Dependencies](#dependencies)) that
+The Wheelhouse server: one static Go binary (standard library plus the pure-Go
+SQLite driver and `golang.org/x/crypto` for Argon2id; see [Dependencies](#dependencies)) that
 serves the API and the embedded UI. It replaced the Next.js app in release 0.3.0
 ([docs/wheelhouse-spec-phase2.md](../docs/wheelhouse-spec-phase2.md), migration
 steps 2 to 8). Comments in the code that mention `lib/...` or `app/...` refer to
@@ -41,6 +41,10 @@ answers a generic 500 and never logs the panic value.
 
 ## Configuration
 
+The operator-facing table, with the kind of each variable (secret, read-only seed), is in
+the [main README](../README.md#configuration); `scripts/check-docs.py` keeps it equal to what
+the code reads. The details of the server settings:
+
 | Variable   | Default   | Meaning                  |
 | ---------- | --------- | ------------------------ |
 | `PORT`     | `3000`    | TCP port (the image sets `3050`) |
@@ -48,7 +52,7 @@ answers a generic 500 and never logs the panic value.
 | `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH`. Read-only seed: roots saved in the database (`PUT /api/admin/converter`) win; the response says which `source` is in force |
 | `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
 | `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
-| `WHEELHOUSE_DENIED_NETWORKS` | link-local, cloud metadata | Comma-separated CIDRs or addresses provider clients refuse to connect to (default `169.254.0.0/16,fe80::/10,fd00:ec2::254`; `none` allows all; an unparsable entry is fatal). Private ranges and loopback are allowed unless listed |
+| `WHEELHOUSE_DENIED_NETWORKS` | link-local, cloud metadata | Comma-separated CIDRs or addresses provider clients refuse to connect to (default: link-local `169.254.0.0/16` and `fe80::/10`, `fd00:ec2::254`, the NAT64 prefix `64:ff9b::/96`, `100.100.100.200` and `192.0.0.192`; `none` allows all; an unparsable entry is fatal). Private ranges and loopback are allowed unless listed |
 | `WHEELHOUSE_ALLOWED_HOSTS` | | Comma-separated host names (`nas.example.lan`, `*.example.lan`) whose requests may get the local-network bypass, besides IP literals, `localhost` and single-label names (DNS-rebinding defence). Added to the list stored via `PUT /api/admin/network` (`allowedHosts`); an invalid entry is fatal |
 | `WHEELHOUSE_TRUSTED_PROXIES` | | Comma-separated addresses and CIDR ranges whose forwarded headers are believed: `X-Forwarded-Proto: https` makes the session cookie `Secure`, `X-Forwarded-For`/`Forwarded`/`X-Real-IP` give the client address (right-most untrusted entry). Added to the trusted proxies stored via `PUT /api/admin/network` (default none; an unparsable entry is fatal) |
 | `WHEELHOUSE_SECRET_KEY_FILE` | | File with the 32-byte master key (mode 0600 or 0400); first choice |
@@ -161,9 +165,9 @@ says `dev`). The version is also in `/healthz` and the startup log line.
 
 ## Accounts and sessions
 
-Phase 2 item 2 ([plan](../docs/wheelhouse-phase2-plan.md), [threat
-model](../docs/threat-model.md), [architecture](../docs/architecture.md#accounts-and-sessions)):
-the server enforces authentication. `internal/auth` is the account service (SQL
+([Plan](../docs/wheelhouse-phase2-plan.md), [threat
+model](../docs/threat-model.md), [architecture](../docs/architecture.md#accounts-and-sessions).)
+The server enforces authentication. `internal/auth` is the account service (SQL
 for `users`, `sessions` and `audit_log`, Argon2id, sessions, throttling, the setup
 token); `internal/app/guard.go` is the single place the route levels, the
 same-origin check, the CSRF token and the must-change rule are enforced;

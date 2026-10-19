@@ -2,8 +2,6 @@ import useSWR from "swr";
 import { fetcher } from "./fetcher";
 import type { FeatureId, FeaturesResponse } from "./types";
 
-export const README_CONFIG_URL = "https://github.com/tristanwl/wheelhouse#configuration";
-
 /** The server's feature list; `features` is undefined until it has loaded (or if it failed). */
 export function useFeatures() {
   // Rarely changes (only with the configuration), so revalidating on focus is plenty.

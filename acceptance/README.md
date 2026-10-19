@@ -4,7 +4,7 @@ A black-box HTTP suite that defines "done" for Wheelhouse's server. It starts
 the server under test as a child process, starts the fake services from the
 adapter fixtures, points the server at them with the environment variables the
 app reads, and talks to it only over HTTP. It was written against the Next.js
-app of release 0.1.x and passes, unchanged, against the Go server that replaced
+app of release 0.1.x (history; that app is gone) and passes, unchanged, against the Go server that replaced
 it (`docs/wheelhouse-spec-phase2.md`, "Migration plan"). It also runs against
 the container image, which is what CI's `docker` job does.
 

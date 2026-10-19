@@ -1,25 +1,87 @@
 version: 2
+
+# Every ecosystem waits 7 days after a release before Dependabot proposes it
+# (`cooldown`): a compromised or yanked release is usually caught within days.
+# Cooldown never delays security updates, which Dependabot opens at once.
+#
+# Pins that Dependabot cannot see (bump by hand, see docs/maintainer-settings.md):
+#   - the QEMU binfmt image digest in the `docker/setup-qemu-action` steps of
+#     .github/workflows/ci.yml and release.yml;
+#   - the golangci-lint version in ci.yml and the `go run ...@version` tools
+#     (govulncheck, go-licenses) in ci.yml and server/Makefile.
 updates:
   - package-ecosystem: gomod
     directory: /server
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+
+  # One PR for all workflow actions (each stays pinned by commit SHA).
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
   # The Vite UI.
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      # Build, lint, format and test tooling: one PR instead of a dozen. Runtime
+      # dependencies (react and friends) stay individual so they get a careful look.
+      web-dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # @types/node must not be newer than the Node major CI and the Docker image
+      # run (24, see .nvmrc and the Dockerfile). web/ is at 25.x today, ahead of
+      # Node 24: that is left alone, but no further major. Revisit (raise the
+      # bound) when .nvmrc, ci.yml and the Dockerfile move to a newer Node.
+      - dependency-name: "@types/node"
+        versions: [">=26.0.0"]
+      # typescript-eslint 8.71 declares `typescript >=4.8.4 <6.1.0`: TypeScript 6.1
+      # and 7 would break `npm run lint`. Revisit when a typescript-eslint release
+      # widens that range (check its package.json peerDependencies), then drop this.
+      - dependency-name: "typescript"
+        versions: [">=6.1.0"]
+
   # The tooling for the acceptance suite (root package.json).
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      root-dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # Same rule as in web/: nothing newer than the Node major in CI (24).
+      # Revisit when CI moves to a newer Node.
+      - dependency-name: "@types/node"
+        versions: [">=25.0.0"]
+      # The root package has no typescript-eslint, so TypeScript 7 is fine here.
+
   # The base images in the Dockerfile (tag and digest).
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:
+      # The Node major is a decision (it must match .nvmrc, the setup-node version
+      # in ci.yml and @types/node), not an automatic bump, and odd majors are not
+      # LTS. Revisit when moving to the next LTS, and change all of those together.
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

@@ -9,7 +9,6 @@ import {
   sortDownloads,
   type RowTone,
 } from "@/lib/download-rows";
-import { README_CONFIG_URL } from "@/lib/features";
 import { StatusCard } from "@/components/StatusCard";
 import { StorageBar } from "@/components/StorageBar";
 import type { DownloadsResponse } from "@/lib/types";
@@ -68,6 +67,7 @@ function SetupChecklist() {
 }
 
 export default function DashboardPage() {
+  const { isAdmin } = useSession();
   // Service links use whatever hostname the browser reached Wheelhouse by (IP, mDNS
   // name, Tailscale, ...), so they work the same way you got here.
   const host = window.location.hostname;
@@ -87,6 +87,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <h1 className="sr-only">Dashboard</h1>
       <SetupChecklist />
       <section>
         <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-500">
@@ -95,16 +96,18 @@ export default function DashboardPage() {
         {statusError && <p className="text-sm text-red-400">Failed to load status.</p>}
         {status && status.instances.length === 0 && (
           <p className="text-sm text-slate-500">
-            No services are configured yet. See the{" "}
-            <a
-              href={README_CONFIG_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              Configuration section of the README
-            </a>
-            .
+            No services are configured yet.{" "}
+            {isAdmin ? (
+              <>
+                Add them under{" "}
+                <Link to="/admin/services" className="underline">
+                  Admin, Services
+                </Link>
+                .
+              </>
+            ) : (
+              "Ask an administrator to add them."
+            )}
           </p>
         )}
         {STATUS_ROLES.map(({ role, heading }) => {

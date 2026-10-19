@@ -422,7 +422,7 @@ func describeNetworkError(err error) string {
 	case errors.Is(err, errRedirectHost):
 		return "redirected to another host (not followed)"
 	case errors.Is(err, ErrAddressDenied):
-		return "address not allowed"
+		return "address not allowed (link-local and cloud-metadata addresses are refused)"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timed out"
 	case errors.Is(err, context.Canceled):
