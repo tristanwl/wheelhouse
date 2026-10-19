@@ -41,7 +41,7 @@ How the evidence was produced, all on 2026-10-19:
 | 9 | Environment-only installs keep working (read-only seed) and can be imported | verified | `TestEnvironmentPrecedenceReadOnlyAndImport`; `acceptance/config.test.ts` ("environment instances": shows them read-only, imports them, then ignores the environment; credentials in a URL are never shown or stored); `acceptance/stack.test.ts` runs the whole suite on environment configuration | A Compose quick start with the shipped `.env.example` | 2026-10-19 |
 | 10 | Converter: media roots configurable, HDR excluded by default, queue survives a restart | verified | `TestValidateRoots`, `TestSettingsPrecedencePersistenceAndRefusal`, `TestStaleRowOutsideTheRootsNeverRuns`, `TestStoredJobWithoutHDRAcknowledgementDoesNotRunHDRFile`, `TestRestartMarksInterruptedCleansUpAndResumesQueuedJobsInOrder`, `TestSwapRecordedByTheQueueSurvivesACrash`; `acceptance/converter.test.ts` (roots, "excludes HDR by default", "a restart mid-conversion", settings and jobs after a restart) | Not driven by hand: a real conversion needs real media and ffmpeg (acceptance uses a fake ffmpeg) | 2026-10-19 |
 | 11 | The acceptance suite passes in authenticated mode against the binary and the image; the Phase 1 and migration criteria still pass | verified | Binary: 175 of 175. Image: 173 passed, 2 skipped (fake ffmpeg scenarios), plus `acceptance/docker-smoke.sh`. Phase 1 criteria: see the next table | | 2026-10-19 |
-| 12 | No known vulnerabilities; signed images with provenance and an SBOM; `SECURITY.md` current; threat model published | **gap** (partly verified) | `govulncheck`: code affected by 0 vulnerabilities (`GO-2026-5932`, the unmaintained `golang.org/x/crypto/openpgp` package, is in a module Wheelhouse requires but is not imported or called; only `argon2` and `blake2b` are used). `npm audit`: 0 in the root package and `web/`. `SECURITY.md` and `docs/threat-model.md` brought up to date in this PR. **Not met:** the release workflow does not yet sign images (cosign), attach provenance or publish an SBOM (`.github/workflows/release.yml` does none of these; it is being changed in a separate PR) | | 2026-10-19 |
+| 12 | No known vulnerabilities; signed images with provenance and an SBOM; `SECURITY.md` current; threat model published | **verified in the workflow, open until the first release** | `govulncheck`: code affected by 0 vulnerabilities (`GO-2026-5932`, the unmaintained `golang.org/x/crypto/openpgp` package, is in a module Wheelhouse requires but is not imported or called; only `argon2` and `blake2b` are used). `npm audit`: 0 in the root package and `web/`. `SECURITY.md` and `docs/threat-model.md` brought up to date in this PR. The release workflow (merged in #82) attaches an SPDX SBOM and BuildKit SLSA provenance and signs the provenance of the image digest with a GitHub artifact attestation (Sigstore keyless, not a cosign key pair; how to check it is in [verifying-releases.md](verifying-releases.md)), and its dry run checks that both attestations exist for each platform. **Not verifiable until a real release exists:** the first tagged release must be checked with those commands (`gh attestation verify`), and no release before it has attestations | | 2026-10-19 |
 
 Beyond the 12: a **gap** that does not block the criteria above but should be known before
 tagging: the audit-log retention (180 days, decided in the plan) is not enforced and rows are
@@ -90,7 +90,7 @@ named no test, the table says which test now enforces it.
 | E4 SQL injection | bound parameters everywhere; **new** `TestSQLIsNeverBuiltFromStringsOutsideTheSecretColumnCode` (only `store/secrets.go` may format SQL, from the fixed `SecretColumns` list; no concatenated statements) | verified, test added |
 | E5 SSRF | `TestHTTPClientRefusesMetadataAddresses`, `TestMoreMetadataAddressesAreDeniedByDefault`, `TestNAT64IsJudgedByTheEmbeddedAddressUnderACustomList`, `acceptance/config.test.ts`; by hand: an instance at `169.254.169.254` can be saved but every request is refused with `address not allowed (link-local and cloud-metadata addresses are refused)` | verified |
 | E6, E7 | `TestFfmpegAndFfprobeOnlyReadLocalFilesAndNeverStdin`, `TestAccessLogQuotesControlCharactersInPath` | verified (E6 accepted risk) |
-| E8 supply chain | CI `govulncheck`, `npm audit`, licence check, Dependabot, pinned actions and base images | partly; signing, provenance and SBOM are the gap in criterion 12 |
+| E8 supply chain | CI `govulncheck`, `npm audit`, licence check, Dependabot, `scripts/check-pins.sh` (actions by SHA, images by digest), SBOM and signed provenance in the release workflow | verified except the first real release (criterion 12) |
 | **New:** no switch turns security off | `TestThereIsNoSwitchToDisableAuthentication` (no environment variable, in code or in the README, named like a security switch) | verified, test added |
 
 ## Documentation checks (done in this PR)
@@ -132,8 +132,9 @@ switches were checked and needed no change.
 - Anything on arm64 (no arm64 host; the image is built for it by the release workflow only).
 - Podman: the unit file and `podman run` instructions were read and compared with the Docker
   behaviour, not run (Podman is not installed on the audit machine).
-- Signed images, provenance and SBOM (not implemented yet, criterion 12), and the Docker Hub
-  `latest` tag rule (starts at 1.0.0; the release workflow has no `latest` until then).
+- Signed images, provenance and SBOM on a real published image (criterion 12: the workflow is
+  merged and its dry run checks the attestations, but only a tagged release produces them), and the
+  Docker Hub `latest` tag rule (starts at 1.0.0; the release workflow has no `latest` until then).
 - Behaviour behind a real reverse proxy and over HTTPS (acceptance tests simulate it with
   headers from a trusted peer).
 - Browsers other than headless Chromium, and screen readers.
@@ -204,7 +205,8 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
 
 **Releases and operation**
 
-- **Signed images, provenance and an SBOM are not published yet** (criterion 12 above).
+- **Releases before the first one built by the current workflow have no signed provenance or
+  SBOM** ([verifying-releases.md](verifying-releases.md)); the 0.x images cannot be verified.
 - **One process, one node.** No rate limiting beyond login throttling and a cap of 512 open
   connections; a reverse proxy is the place for broader limits.
 - **The image's `HEALTHCHECK`, memory limit and read-only root** are only as good as the options

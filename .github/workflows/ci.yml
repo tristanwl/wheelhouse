@@ -29,7 +29,11 @@ jobs:
       - run: npm run format:check
       - run: npm audit
       - name: shellcheck
-        run: shellcheck acceptance/*.sh
+        run: shellcheck acceptance/*.sh scripts/*.sh
+      # Every action pinned by commit SHA, every image by digest (allowlist:
+      # scripts/check-pins.allow).
+      - name: pins
+        run: scripts/check-pins.sh
       - name: documentation links, file references and the environment variable table
         run: python3 scripts/check-docs.py
 
