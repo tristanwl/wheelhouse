@@ -1,0 +1,2 @@
+go test fuzz v1
+string("$argon2id$v=19$m=-8,t=1,p=1$SFX8SULHOxGq1JXWkyr+SA$27U4GOikhRJQ9dLvWcx6Kwaw+gq2/TpiGRAde9JtjGQ")
