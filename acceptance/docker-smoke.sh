@@ -19,6 +19,8 @@
 #     the requested owner (the first two mode 0600), the setup token file is gone,
 #   - `wheelhouse reset-password` works inside the container,
 #   - SIGTERM stops it cleanly (exit code 0).
+# SMOKE_HEALTH_ATTEMPTS (default 40, half a second each) is how long to wait for
+# the container to become healthy; CI raises it for the emulated arm64 image.
 # The full black-box suite is run against the image separately, see
 # acceptance/README.md ("Against a container image").
 set -eu
@@ -55,14 +57,14 @@ docker run -d --name "$name" \
 	--read-only --cap-drop ALL --security-opt no-new-privileges \
 	--tmpfs /tmp \
 	--tmpfs "/config:rw,uid=$uid,gid=$gid,mode=0700" \
-	--health-interval 1s --health-start-period 0s --health-retries 30 \
+	--health-interval 1s --health-start-period 0s --health-retries 240 \
 	-p 127.0.0.1::3050 \
 	"$image" >/dev/null
 
 i=0
 until [ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" = healthy ]; do
 	i=$((i + 1))
-	[ "$i" -le 40 ] || fail "container did not become healthy"
+	[ "$i" -le "${SMOKE_HEALTH_ATTEMPTS:-40}" ] || fail "container did not become healthy"
 	[ "$(docker inspect -f '{{.State.Running}}' "$name")" = true ] || fail "container exited"
 	sleep 0.5
 done

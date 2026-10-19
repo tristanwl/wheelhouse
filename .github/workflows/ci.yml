@@ -145,7 +145,10 @@ jobs:
 
   # The image, built as the release builds it (but not pushed), then run the way
   # it is deployed: read-only, no capabilities, arbitrary user, and driven by the
-  # acceptance suite.
+  # acceptance suite. The release publishes linux/amd64 and linux/arm64, so both
+  # are built here; the amd64 image gets the full treatment and the arm64 image
+  # (run under QEMU, so slower) must start, report its version, have ffmpeg and
+  # pass the container smoke test.
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -156,15 +159,33 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Emulation only for running the arm64 image (the Dockerfile's builder
+      # stages run natively and cross-compile); the binfmt image is pinned by
+      # tag and digest, bump it by hand (Dependabot cannot see it here).
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+          cache-image: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
+          platforms: linux/amd64
           load: true
           push: false
           tags: wheelhouse:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          push: false
+          tags: wheelhouse:ci-arm64
+          cache-from: type=gha,scope=arm64
+          cache-to: type=gha,mode=max,scope=arm64
       - name: the image carries the version from package.json
         run: |
           want="wheelhouse $(node -p "require('./package.json').version")"
@@ -177,6 +198,19 @@ jobs:
         run: npm run test:acceptance
         env:
           WHEELHOUSE_CMD: acceptance/docker-server.sh wheelhouse:ci
+      - name: the arm64 image runs (under QEMU)
+        run: |
+          arch="$(docker image inspect --format '{{.Architecture}}' wheelhouse:ci-arm64)"
+          [ "$arch" = arm64 ] || { echo "::error::wheelhouse:ci-arm64 is $arch"; exit 1; }
+          want="wheelhouse $(node -p "require('./package.json').version")"
+          got="$(docker run --rm --platform linux/arm64 wheelhouse:ci-arm64 version)"
+          [ "$got" = "$want" ] || { echo "::error::arm64 image says '$got', package.json says '$want'"; exit 1; }
+          docker run --rm --platform linux/arm64 --entrypoint ffmpeg wheelhouse:ci-arm64 -hide_banner -version | head -n 1
+          docker run --rm --platform linux/arm64 --entrypoint ffprobe wheelhouse:ci-arm64 -hide_banner -version | head -n 1
+      - name: container smoke test (arm64)
+        run: acceptance/docker-smoke.sh wheelhouse:ci-arm64
+        env:
+          SMOKE_HEALTH_ATTEMPTS: "240" # QEMU is slow to start
       - name: remove leftover containers
         if: always()
         run: docker ps -aq --filter name=wheelhouse-acceptance | xargs -r docker rm -f
