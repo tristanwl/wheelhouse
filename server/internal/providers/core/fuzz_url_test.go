@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -28,8 +29,8 @@ func FuzzInstanceURL(f *testing.F) {
 	f.Fuzz(func(t *testing.T, raw, path string) {
 		out, derr := spec.decode(map[string]any{"url": raw})
 		if derr != nil {
-			ve, ok := derr.(*ValidationError)
-			if !ok {
+			var ve *ValidationError
+			if !errors.As(derr, &ve) {
 				t.Fatalf("error is %T, want *ValidationError", derr)
 			}
 			if len(raw) >= 8 && strings.Contains(ve.Error(), raw) {
@@ -147,7 +148,7 @@ func FuzzAddressDenied(f *testing.F) {
 				t.Fatalf("default list allowed %s inside the NAT64 prefix", nat64)
 			}
 			for _, p := range list {
-				if p.Addr().Is4() && p.Contains(v4) && !(plain && n) {
+				if p.Addr().Is4() && p.Contains(v4) && (!plain || !n) {
 					t.Fatalf("%s is inside denied %s but plain=%v nat64=%v", v4, p, plain, n)
 				}
 			}

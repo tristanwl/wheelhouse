@@ -101,13 +101,13 @@ func ProxyTo(tb testing.TB, up *Upstream, t *Tamper) string {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		out, err := http.NewRequestWithContext(r.Context(), r.Method, up.get()+r.URL.RequestURI(), r.Body)
+		out, err := http.NewRequestWithContext(r.Context(), r.Method, up.get()+r.URL.RequestURI(), r.Body) //nolint:gosec // a test proxy: it forwards to the fake service it was given
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
 		out.Header = r.Header.Clone()
-		res, err := client.Do(out)
+		res, err := client.Do(out) //nolint:gosec // see above
 		if err != nil {
 			http.Error(w, "upstream unavailable", http.StatusBadGateway)
 			return

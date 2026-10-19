@@ -1,6 +1,7 @@
 package instances
 
 import (
+	"errors"
 	"net/url"
 	"path"
 	"strings"
@@ -59,10 +60,10 @@ func FuzzStoredSecretDestination(f *testing.F) {
 			if strings.Contains(err.Error(), storedSecret) || strings.Contains(err.Error(), newSecret) || (len(provided) >= 12 && strings.Contains(err.Error(), provided)) {
 				t.Fatalf("the error shows a value: %v", err)
 			}
-			if _, isVE := err.(*core.ValidationError); !isVE {
-				if _, isInv := err.(*InvalidError); !isInv {
-					t.Fatalf("error is %T", err)
-				}
+			var ve *core.ValidationError
+			var inv *InvalidError
+			if !errors.As(err, &ve) && !errors.As(err, &inv) {
+				t.Fatalf("error is %T", err)
 			}
 			return
 		}

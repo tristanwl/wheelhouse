@@ -2,6 +2,7 @@ package netaccess
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -61,7 +62,8 @@ func FuzzUpdateLists(f *testing.F) {
 		in := Input{Enabled: enabled, CIDRs: []string{a, b}, TrustedProxies: []string{c, d}}
 		st, warnings, err := s.Update(context.Background(), in)
 		if err != nil {
-			if _, ok := err.(*ValidationError); !ok {
+			var ve *ValidationError
+			if !errors.As(err, &ve) {
 				t.Fatalf("error is %T, want *ValidationError", err)
 			}
 			if got := s.Settings(); got.Enabled || len(got.Bypass) != 0 {

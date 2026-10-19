@@ -2,6 +2,7 @@ package netaccess
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"strings"
 	"testing"
@@ -104,7 +105,8 @@ func FuzzParseHostEntry(f *testing.F) {
 	f.Fuzz(func(t *testing.T, text string) {
 		e, err := ParseHostEntry(text)
 		if err != nil {
-			if _, ok := err.(*ValidationError); !ok {
+			var ve *ValidationError
+			if !errors.As(err, &ve) {
 				t.Fatalf("error is %T", err)
 			}
 			if len(err.Error()) > 4*(64+3)+160 {

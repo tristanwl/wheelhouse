@@ -25,7 +25,7 @@ func FuzzClassifyDynamicRange(f *testing.F) {
 		ty := strings.ToLower(strings.TrimSpace(dynamicRangeType))
 		both := r + " " + ty
 		explicitSDR := r == "sdr" && (ty == "" || ty == "sdr")
-		if got == HDRNone && !(r == "" && ty == "") && !explicitSDR {
+		if got == HDRNone && (r != "" || ty != "") && !explicitSDR {
 			t.Fatalf("(%q, %q) is %q: neither empty nor SDR", dynamicRange, dynamicRangeType, got)
 		}
 		if (r == "" && ty == "") || explicitSDR {

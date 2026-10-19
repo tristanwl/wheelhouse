@@ -17,7 +17,7 @@ func TestWriteFuzzSeeds(t *testing.T) {
 
 	for _, name := range []string{
 		"admin-user", "Alice", "a.b_c@d-e", "abc", "ab", "", strings.Repeat("a", 64), strings.Repeat("a", 65),
-		"-abc", ".abc", "_abc", "a bc", "abc ", "abc\n", "abc\x00", "ab​c", "ａｄｍｉｎ", "admın", "ADMIN", "Kelvin",
+		"-abc", ".abc", "_abc", "a bc", "abc ", "abc\n", "abc\x00", "ab\u200bc", "ａｄｍｉｎ", "admın", "ADMIN", "Kelvin",
 		"local-network", "LOCAL-NETWORK", "Cli", "SYSTEM", "anonymous", "anonymous\n", "système", "a@b", "../etc",
 	} {
 		w.Add("FuzzValidateUsername", "name", name)
@@ -79,7 +79,7 @@ func TestWriteFuzzSeeds(t *testing.T) {
 		n uint8
 	}{
 		{"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36", 200}, {"line\r\nbreak\tand\x00nul\x7f", 64}, {"ünïcödé-ünïcödé-ünïcödé", 7},
-		{"😀😀😀😀", 5}, {"\xff\xfe\xfdinvalid", 8}, {"", 0}, {strings.Repeat("a", 300), 200}, {"‮RTL override", 64}, {"a b", 64},
+		{"😀😀😀😀", 5}, {"\xff\xfe\xfdinvalid", 8}, {"", 0}, {strings.Repeat("a", 300), 200}, {"\u202eRTL override", 64}, {"a b", 64},
 	} {
 		w.Add("FuzzCleanClip", "text", c.v, c.n)
 	}
