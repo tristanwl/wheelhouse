@@ -34,7 +34,12 @@ func registerCore(r *Router, d deps) {
 // features, status and downloads.
 func registerStack(r *Router, d deps) {
 	r.HandleFunc("GET /api/features", Authenticated, func(w http.ResponseWriter, req *http.Request) {
-		resp, err := features.Of(req.Context(), d.rt, features.Environment{Ffmpeg: d.ffmpeg()})
+		disabled, err := d.disabledFeatures(req.Context())
+		if err != nil {
+			internalError(w)
+			return
+		}
+		resp, err := features.Of(req.Context(), d.rt, features.Environment{Ffmpeg: d.ffmpeg(), Disabled: disabled})
 		if err != nil {
 			internalError(w)
 			return

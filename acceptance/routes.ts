@@ -244,6 +244,15 @@ export const ROUTE_LEVELS: { route: string; level: Level }[] = [
   { route: "GET /api/users/{id}/sessions", level: "admin" },
   { route: "DELETE /api/users/{id}/sessions", level: "admin" },
   { route: "GET /api/audit", level: "admin" },
+  { route: "GET /api/admin/providers", level: "admin" },
+  { route: "GET /api/admin/instances", level: "admin" },
+  { route: "POST /api/admin/instances", level: "admin" },
+  { route: "POST /api/admin/instances/test", level: "admin" },
+  { route: "PUT /api/admin/instances/{id}", level: "admin" },
+  { route: "DELETE /api/admin/instances/{id}", level: "admin" },
+  { route: "POST /api/admin/instances/{id}/import", level: "admin" },
+  { route: "GET /api/admin/features", level: "admin" },
+  { route: "PUT /api/admin/features", level: "admin" },
 ];
 
 /** A concrete request for a route pattern; the values only need to be well formed. */

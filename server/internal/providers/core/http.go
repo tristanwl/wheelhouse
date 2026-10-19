@@ -138,6 +138,9 @@ func transport() *http.Transport {
 	transportOnce.Do(func() {
 		t := http.DefaultTransport.(*http.Transport).Clone()
 		t.Proxy = nil
+		// Refuse denied networks (link-local, cloud metadata) at connect time,
+		// after name resolution (see netpolicy.go).
+		t.DialContext = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second, Control: controlDial}).DialContext
 		t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 		sharedTransport = t
 	})
@@ -409,6 +412,8 @@ func describeNetworkError(err error) string {
 	switch {
 	case errors.Is(err, errRedirectHost):
 		return "redirected to another host (not followed)"
+	case errors.Is(err, ErrAddressDenied):
+		return "address not allowed"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timed out"
 	case errors.Is(err, context.Canceled):

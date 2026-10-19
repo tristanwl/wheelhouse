@@ -99,7 +99,14 @@ type Instance struct {
 // Environment is what the host offers.
 type Environment struct {
 	Ffmpeg bool
+	// Disabled lists the features an administrator switched off. The Dashboard
+	// cannot be switched off: it is ignored there.
+	Disabled map[string]bool
 }
+
+// DisabledReason is what a feature switched off by an administrator reports in
+// Missing.
+const DisabledReason = "disabled by admin"
 
 // Feature is one entry of the GET /api/features response.
 type Feature struct {
@@ -108,7 +115,14 @@ type Feature struct {
 	Route     string   `json:"route"`
 	Available bool     `json:"available"`
 	Missing   []string `json:"missing"`
+	// Disabled is set when an administrator switched the feature off (Missing
+	// then says so, and no other requirement is reported).
+	Disabled bool `json:"disabled,omitempty"`
 }
+
+// CanDisable reports whether an administrator may switch a feature off: all but
+// the Dashboard, which is what is left when everything else is unavailable.
+func CanDisable(id string) bool { return id != "dashboard" }
 
 // Response is the body of GET /api/features: nothing about hosts, keys or
 // instance names.
@@ -130,6 +144,12 @@ func Compute(instances []Instance, env Environment) Response {
 	out := Response{Features: make([]Feature, 0, len(Definitions))}
 	for _, d := range Definitions {
 		f := Feature{ID: d.ID, Label: d.Label, Route: d.Route, Missing: []string{}}
+		if env.Disabled[d.ID] && CanDisable(d.ID) {
+			f.Disabled = true
+			f.Missing = append(f.Missing, DisabledReason)
+			out.Features = append(out.Features, f)
+			continue
+		}
 		for _, r := range d.Requires {
 			if !met(r, instances, env) {
 				f.Missing = append(f.Missing, r.Describe())
