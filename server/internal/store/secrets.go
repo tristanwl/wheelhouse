@@ -21,10 +21,13 @@ type SecretColumn struct {
 	Column   string
 }
 
-// secretColumns lists every column that stores a secret. It is empty because no
-// table holds one yet; the migration that adds such a column adds it here too,
-// and TestSecretColumnsExist fails if the two disagree.
-var secretColumns = []SecretColumn{}
+// secretColumns lists every column that stores a secret. The migration that
+// adds such a column adds it here too, and TestSecretColumnsExist fails if the
+// two disagree.
+var secretColumns = []SecretColumn{
+	// The sealed JSON object of an instance's secret settings (0003_instances.sql).
+	{Table: "instances", IDColumn: "id", Column: "secrets"},
+}
 
 // SecretColumns returns the registered secret columns.
 func SecretColumns() []SecretColumn { return append([]SecretColumn(nil), secretColumns...) }
