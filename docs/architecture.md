@@ -26,7 +26,7 @@ one container image together with ffmpeg and the VA-API drivers. The server is a
 thin read/aggregate/proxy layer over the services' own APIs. Its state is a
 SQLite database in `/config` (accounts, sessions and the audit log; stored
 configuration follows), `settings.json` in `/config`, the master key
-(`/config/secret.key`), and, while a conversion runs, the queue in memory. The
+(`/config/secret.key`); the conversion queue and converter settings are in the database. The
 server opens the database and the key at start and refuses to run without them;
 see "Accounts and sessions" and "Storage and secrets" below. What is protected
 and from whom is in the [threat model](threat-model.md).
@@ -48,7 +48,7 @@ internal/downloads    GET /api/downloads
 internal/library      library, storage, search, add, details, seasons, deletes
 internal/explore      GET /api/explore and /api/explore/{id}
 internal/codecs       codec analysis and the preferences in settings.json
-internal/converter    ffmpeg queue, encoder detection, path containment, hard-link check
+internal/converter    ffmpeg queue (SQLite-backed), settings, encoder detection, path containment, HDR probe, hard-link check
 internal/middleware   request ID, security headers, access log, panic recovery
 internal/providers    core (config, runtime, HTTP client) and one package per provider
 internal/ui           the embedded UI (the Vite build, or a placeholder page)
@@ -305,8 +305,10 @@ against the file and polls for progress.
 (`/movies` and `/tv` in the example [compose file](../docker-compose.example.yml)
 and [systemd unit](../deploy/wheelhouse.service.example)). Only Convert needs
 this; everything else talks to Sonarr/Radarr through their APIs. A file path in
-a request must resolve inside a media root (`/movies` and `/tv` by default,
-`WHEELHOUSE_MEDIA_ROOTS` to change it, issue #31). The file path from
+a request must resolve inside a media root. The roots come from the database
+(an administrator's `PUT /api/admin/converter`, validated on save), else
+`WHEELHOUSE_MEDIA_ROOTS` (a read-only seed), else `/movies` and `/tv`; a change
+applies at once, without a restart. The file path from
 `movieFile.path` / `episodeFile.path` is then used as is, with no translation.
 
 **Why ffmpeg and not HandBrakeCLI:** HandBrakeCLI does not install cleanly on
@@ -325,9 +327,11 @@ container (the temp file reuses the original's extension) to avoid
 subtitle/audio-vs-container mismatches. ffmpeg and ffprobe are run directly
 (never through a shell) with arguments built from validated values.
 
-**Job model.** The queue is in memory (`converter.MemoryQueue` behind the
-`converter.Queue` interface; persistence is issue #33), so **job history is lost
-when the container restarts**. Only one job runs at a time: transcoding is
+**Job model.** The queue (`converter.JobQueue` behind the `converter.Queue`
+interface) is kept in memory and written through to the `conversion_jobs` table,
+so the job list survives a restart (recovery policy below). Each job records its
+owner (the user id, `bypass` for the local-network bypass, or `cli`), the
+acknowledgements the request carried, and its HDR class. Only one job runs at a time: transcoding is
 CPU-heavy and the host usually runs Sonarr/Radarr/a media server live, so
 further conversions queue. A file that already has an active job returns that
 job instead of starting a duplicate (a second job would rename whatever is
@@ -395,8 +399,25 @@ before the swap. After a successful swap the manager is asked to rescan the
 movie or series, so its own database (size, mediaInfo, codec) picks up the new
 file.
 
-**Restart recovery.** Interrupted encodes are not resumed. Once per process,
-on first use of the convert routes, the media roots are walked: any
+**HDR and Dolby Vision.** Conversion writes SDR 8-bit (`-pix_fmt yuv420p`) and
+does not tone map, so an HDR source would come out flattened and lose its HDR10,
+HLG or Dolby Vision metadata. Therefore such files are not conversion
+candidates by default (`hdrExcluded` counts them). An administrator can set
+`includeHdr`; the candidates then carry `hdr` (`hdr10`, `hlg`, `dolby-vision`,
+`unknown`) and the UI badges them. A conversion request for an HDR file is a
+409 `hdr` until it has `acknowledgeHdr: true`, and the server decides from the
+file itself (ffprobe: PQ or HLG transfer, Dolby Vision side data; a probe it
+cannot read is `unknown`), not from the request. The runner probes again before
+ffmpeg. Tone mapping is out of scope.
+
+**Restart recovery.** Interrupted encodes are not resumed. At start the saved
+jobs are loaded: a job that was probing or running is marked `failed` with
+`interrupted: the server stopped while this conversion was running` (a graceful
+shutdown does the same), queued jobs stay queued and run in the order they were
+added once the clean-up is done, and finished jobs are pruned (older than 30 days,
+or beyond the newest 200). Jobs read from the database are never trusted: the
+backend and codec are validated again and the path is resolved against the
+current media roots before a job runs. Once per process, at start, the media roots are walked: any
 `.wheelhouse-convert-*` temp file is deleted; a `<file>.bak` whose `<file>` is
 missing (the process died between the two renames of the swap) is renamed back
 to `<file>`. A `.bak` next to a live file is a normal post-success backup and is
@@ -514,8 +535,8 @@ left alone.
 - `GET /api/codec-analysis?kind=movies|series` — across every instance of that
   kind: `{ totalCount, totalSize, preferences: { hd, uhd }, buckets: { h264,
   hevc, legacy }, candidates: [{ title, codec, resolution, bitDepth, size,
-  instanceId, itemId, filePath, tier, targetFamily, reason }], matching: [...],
-  skippedCount, problems? }`. Read-only.
+  instanceId, itemId, filePath, hdr, tier, targetFamily, reason }], matching: [...],
+  skippedCount, hdrExcluded, problems? }`. Read-only.
 - `GET`/`PUT /api/codec-analysis/settings` — `{ hd: "h264"|"hevc", uhd:
   "h264"|"hevc" }`. `PUT` validates both fields and writes
   `/config/settings.json` (defaults `h264`/`hevc` when the file is absent). The
@@ -529,11 +550,19 @@ left alone.
   originalSize, backend, targetFamily }` (a candidate's fields plus the modal's
   backend choice). Enqueues a job and returns it at once (`status: "queued"`);
   a path outside the media roots or not an existing regular file is a 400, a
-  hard-linked file a 409 (see above). `GET` on the same path lists all jobs.
+  hard-linked file a 409 (see above), an HDR or Dolby Vision file a 409 with
+  `code: "hdr-excluded"` (not allowed) or `"hdr"` (send `acknowledgeHdr: true`).
+  `GET` on the same path lists all jobs.
 - `GET /api/codec-analysis/convert/{jobId}` — one job: `{ id, instanceId,
   itemId, filePath, title, originalSize, backend, targetFamily, status,
   progressPercent, error?, newSize?, backupPath?, log, createdAt, startedAt?,
-  finishedAt? }`, polled every 2 s until `success`/`failed`/`canceled`.
+  finishedAt?, hdr, owner, ownerName, acknowledgedHardlink, acknowledgedHdr }`,
+  polled every 2 s until `success`/`failed`/`canceled`.
+- `GET`/`PUT /api/admin/converter` (admin) — `{ mediaRoots, includeHdr,
+  effectiveRoots, source }`, `source` being `database`, `environment` or
+  `default`. `PUT` takes `mediaRoots` and/or `includeHdr`; roots are validated
+  (absolute, no `..`, no system folder, must exist as directories, no
+  duplicates or nesting) and an empty list removes the saved roots.
 - `POST /api/codec-analysis/convert/{jobId}/cancel` — cancels a queued job, or
   kills the running ffmpeg. A job that does not exist is a 404; one that has
   already finished is a 400.

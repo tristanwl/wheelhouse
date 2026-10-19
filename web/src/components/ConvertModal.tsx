@@ -4,7 +4,8 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { formatBytes } from "@/lib/format";
 import { ModalCloseButton } from "./ModalCloseButton";
-import type { ConversionJob } from "@/lib/types";
+import { hdrLabel } from "@/lib/hdr";
+import type { ConversionJob, HdrClass } from "@/lib/types";
 import type { Backend, EncoderOption } from "@/lib/types";
 import type { PreferableFamily } from "@/lib/types";
 
@@ -19,6 +20,9 @@ interface ConvertModalProps {
   // preferences), not freely chosen here — this modal only lets you pick
   // *how* to encode to it (software vs. whatever hardware is available).
   targetFamily: PreferableFamily;
+  // The file's HDR class from the analysis. Anything but "none" makes the dialog
+  // ask for an explicit acknowledgement: the result is SDR 8-bit.
+  hdr?: HdrClass;
   // If set, the modal reattaches to an already-running/queued job instead
   // of showing the confirm screen — used when reopening via the row's
   // progress indicator rather than a fresh "Convert" click.
@@ -61,6 +65,7 @@ export function ConvertModal({
   codec,
   originalSize,
   targetFamily,
+  hdr: hdrFromAnalysis = "none",
   existingJobId,
   onClose,
   onConverted,
@@ -70,6 +75,10 @@ export function ConvertModal({
   const [startError, setStartError] = useState<string | null>(null);
   // The server found other hard links to this file; waiting for the user to confirm.
   const [hardlinked, setHardlinked] = useState(false);
+  // HDR or Dolby Vision: the result is SDR 8-bit. Known from the analysis, or
+  // learned from the server's answer (it looks at the file itself).
+  const [hdr, setHdr] = useState<HdrClass>(hdrFromAnalysis);
+  const [hdrAck, setHdrAck] = useState(false);
   const [backend, setBackend] = useState<Backend>("software");
   const [backendTouched, setBackendTouched] = useState(false);
 
@@ -131,11 +140,17 @@ export function ConvertModal({
           backend,
           targetFamily,
           ...(acknowledgeHardlink ? { acknowledgeHardlink: true } : {}),
+          ...(hdr !== "none" && hdrAck ? { acknowledgeHdr: true } : {}),
         }),
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 409 && body.code === "hardlinked") {
         setHardlinked(true);
+        return;
+      }
+      if (res.status === 409 && body.code === "hdr") {
+        setHdr(body.hdr ?? "unknown");
+        setHdrAck(false);
         return;
       }
       if (!res.ok) throw new Error(body.error ?? `start failed: ${res.status}`);
@@ -247,6 +262,30 @@ export function ConvertModal({
                 </p>
               </div>
             )}
+            {hdr !== "none" && (
+              <div
+                role="alert"
+                className="mb-4 rounded-md border border-fuchsia-700 bg-fuchsia-950/40 p-3 text-xs text-fuchsia-200"
+              >
+                <p className="mb-1 font-medium">
+                  {hdr === "unknown" ? "This file may be HDR" : `This file is ${hdrLabel(hdr)}`}
+                </p>
+                <p className="mb-2">
+                  Conversion writes SDR 8-bit video. The HDR and Dolby Vision metadata is lost and
+                  the picture may look grey and washed out. The original is kept as a{" "}
+                  <code>.bak</code> file.
+                </p>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={hdrAck}
+                    onChange={(e) => setHdrAck(e.target.checked)}
+                  />
+                  <span>I understand the result will be SDR 8-bit without HDR or Dolby Vision</span>
+                </label>
+              </div>
+            )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={onClose}
@@ -257,10 +296,14 @@ export function ConvertModal({
               </button>
               <button
                 onClick={() => start(hardlinked)}
-                disabled={starting}
+                disabled={starting || (hdr !== "none" && !hdrAck)}
                 className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-600 disabled:opacity-60"
               >
-                {starting ? "Starting…" : hardlinked ? "Convert anyway" : "Convert"}
+                {starting
+                  ? "Starting…"
+                  : hardlinked || hdr !== "none"
+                    ? "Convert anyway"
+                    : "Convert"}
               </button>
             </div>
           </>
@@ -281,6 +324,8 @@ export function ConvertModal({
             </p>
             <p className="text-xs text-slate-500">
               {FAMILY_LABEL[job.targetFamily]} via {backendLabel(job.backend)}
+              {job.ownerName && <> · started by {job.ownerName}</>}
+              {job.hdr && job.hdr !== "none" && <> · {hdrLabel(job.hdr)} source, result is SDR</>}
             </p>
 
             {isActive && (

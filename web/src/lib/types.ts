@@ -309,6 +309,8 @@ export interface ExploreDetail {
 export type CodecFamily = "h264" | "hevc" | "legacy";
 export type Tier = "hd" | "uhd";
 export type ConversionReason = "legacy-codec" | "codec-mismatch";
+/** High dynamic range class of a file. Conversion writes SDR 8-bit, so anything but "none" loses its HDR. */
+export type HdrClass = "none" | "hdr10" | "hlg" | "dolby-vision" | "unknown";
 
 export interface CodecPreferences {
   hd: PreferableFamily;
@@ -324,6 +326,7 @@ export interface CodecFileInfo {
   instanceId: string;
   itemId: number;
   filePath: string;
+  hdr: HdrClass;
 }
 
 export interface CodecBucketSummary {
@@ -352,6 +355,8 @@ export interface CodecAnalysisResponse {
   matching: MatchingItem[];
   /** Library items with no scanned file yet, left out of the analysis. */
   skippedCount: number;
+  /** Candidates left out because they are HDR or Dolby Vision (the administrator can allow them). */
+  hdrExcluded: number;
   /** Instances that couldn't be read; the others are still analyzed. */
   problems?: ManagerProblem[];
 }
@@ -386,4 +391,10 @@ export interface ConversionJob {
   createdAt: number;
   startedAt?: number;
   finishedAt?: number;
+  hdr: HdrClass;
+  /** A user id, "bypass" (local network) or "cli". */
+  owner: string;
+  ownerName: string;
+  acknowledgedHardlink: boolean;
+  acknowledgedHdr: boolean;
 }

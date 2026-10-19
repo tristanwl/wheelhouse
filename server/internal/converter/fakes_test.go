@@ -15,6 +15,9 @@ import (
 // queue is tested against the same process boundary as the real tools.
 type fakeTools struct {
 	ffmpeg, ffprobe, argsFile string
+	// streamFile holds the JSON the fake ffprobe prints for the stream query
+	// (-show_entries stream=...) that classifies HDR; see setStream.
+	streamFile string
 }
 
 // ffmpegModes are the behaviours of the fake ffmpeg. The last argument is the
@@ -56,9 +59,13 @@ func newFakeTools(t *testing.T, mode, probe string) fakeTools {
 	t.Helper()
 	dir := t.TempDir()
 	ft := fakeTools{
-		ffmpeg:   filepath.Join(dir, "ffmpeg"),
-		ffprobe:  filepath.Join(dir, "ffprobe"),
-		argsFile: filepath.Join(dir, "args.txt"),
+		ffmpeg:     filepath.Join(dir, "ffmpeg"),
+		ffprobe:    filepath.Join(dir, "ffprobe"),
+		argsFile:   filepath.Join(dir, "args.txt"),
+		streamFile: filepath.Join(dir, "stream.json"),
+	}
+	if err := os.WriteFile(ft.streamFile, []byte(streamSDR), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	body, ok := ffmpegModes[mode]
 	if raw, isRaw := strings.CutPrefix(mode, "raw:"); isRaw {
@@ -71,7 +78,9 @@ func newFakeTools(t *testing.T, mode, probe string) fakeTools {
 	if err := os.WriteFile(ft.ffmpeg, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	probeScript := "#!/bin/sh\n" + probe + "\n"
+	// The stream query (HDR classification) answers from stream.json; every
+	// other call is the duration probe the test scripted.
+	probeScript := "#!/bin/sh\ncase \"$*\" in *stream=*) cat '" + ft.streamFile + "'; exit 0;; esac\n" + probe + "\n"
 	if err := os.WriteFile(ft.ffprobe, []byte(probeScript), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -79,9 +88,20 @@ func newFakeTools(t *testing.T, mode, probe string) fakeTools {
 }
 
 const (
+	streamSDR       = `{"streams":[{"codec_type":"video","color_transfer":"bt709","color_primaries":"bt709"}]}`
+	streamHDR10     = `{"streams":[{"color_transfer":"smpte2084","color_primaries":"bt2020"}]}`
+	streamDV        = `{"streams":[{"color_transfer":"smpte2084","side_data_list":[{"side_data_type":"DOVI configuration record"}]}]}`
 	probeTwoSeconds = "echo 2.000000"
 	probeBroken     = "echo 'moov atom not found' >&2; exit 1"
 )
+
+// setStream changes what the fake ffprobe says about the video stream.
+func (f fakeTools) setStream(t *testing.T, doc string) {
+	t.Helper()
+	if err := os.WriteFile(f.streamFile, []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
 
 // recordedArgs returns the arguments the fake ffmpeg was last called with.
 func (f fakeTools) recordedArgs(t *testing.T) []string {

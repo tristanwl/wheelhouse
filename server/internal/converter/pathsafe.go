@@ -21,34 +21,17 @@ import (
 	"strings"
 )
 
-// DefaultMediaRoots are the folders conversion may touch. They are the paths
-// Radarr and Sonarr use in the reference container layout; making them
-// configurable per install is a later item (issue #31), so this is the one
-// place to change.
+// DefaultMediaRoots are the folders conversion may touch when neither an
+// administrator (database) nor WHEELHOUSE_MEDIA_ROOTS has set any. They are the
+// paths Radarr and Sonarr use in the reference container layout. The roots in
+// force come from Settings.
 var DefaultMediaRoots = []string{"/movies", "/tv"}
 
-// RootsEnv overrides the media roots with a list of absolute paths separated
-// like PATH (":" on Linux). It exists so tests and the acceptance suite can
-// point the converter at scratch folders; the default is DefaultMediaRoots.
+// RootsEnv seeds the media roots with a list of absolute paths separated like
+// PATH (":" on Linux). It is a read-only source: roots an administrator saves
+// in the database win over it (see Settings). The acceptance suite uses it to
+// point the converter at scratch folders.
 const RootsEnv = "WHEELHOUSE_MEDIA_ROOTS"
-
-// RootsFromEnv returns the media roots for getenv (os.Getenv in production).
-func RootsFromEnv(getenv func(string) string) []string {
-	v := getenv(RootsEnv)
-	if v == "" {
-		return DefaultMediaRoots
-	}
-	var roots []string
-	for _, r := range filepath.SplitList(v) {
-		if filepath.IsAbs(r) {
-			roots = append(roots, filepath.Clean(r))
-		}
-	}
-	if len(roots) == 0 {
-		return DefaultMediaRoots
-	}
-	return roots
-}
 
 // ErrOutsideRoots is returned for a path that is not a regular file inside a
 // media root. It does not say which of those it was, so it cannot be used to

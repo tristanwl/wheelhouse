@@ -86,10 +86,9 @@ func TierOf(resolution *string) Tier {
 // absolute path as Radarr and Sonarr see it, which only works if Wheelhouse
 // mounts the media at the same paths.
 //
-// HDR note (issue #32): Radarr and Sonarr also report VideoDynamicRange and
-// VideoDynamicRangeType in mediaInfo (mediamanager.MediaInfo has them). They are
-// deliberately not used here yet, so an HDR file is a candidate like any other;
-// the HDR-aware candidate filter and the tone-mapping decision come with #32.
+// HDR is classified from the videoDynamicRange and videoDynamicRangeType that
+// Radarr and Sonarr report (ClassifyDynamicRange); the file itself is probed
+// again with ffprobe when a conversion is requested (issue #32).
 type FileInfo struct {
 	Title      string  `json:"title"`
 	Codec      string  `json:"codec"`
@@ -99,6 +98,7 @@ type FileInfo struct {
 	InstanceID string  `json:"instanceId"`
 	ItemID     int     `json:"itemId"`
 	FilePath   string  `json:"filePath"`
+	HDR        HDR     `json:"hdr"`
 }
 
 // BucketSummary is the share of the library in one family.
@@ -140,6 +140,10 @@ type Analysis struct {
 	Buckets     map[Family]BucketSummary `json:"buckets"`
 	Candidates  []Candidate              `json:"candidates"`
 	Matching    []Matching               `json:"matching"`
+	// HDRExcluded counts the files that would be candidates but are left out
+	// because they are HDR or Dolby Vision and the administrator has not allowed
+	// converting them (always 0 when IncludeHDR was set).
+	HDRExcluded int `json:"hdrExcluded"`
 }
 
 // Analyze sorts files into buckets and splits them into conversion candidates
@@ -149,8 +153,21 @@ type Analysis struct {
 // default preferences a 4K HEVC file is left alone and HEVC below 4K is
 // flagged. Both lists are sorted by size, biggest first.
 //
-// HDR is not considered (issue #32, see FileInfo).
+// HDR and Dolby Vision files that would be candidates are left out (counted in
+// HDRExcluded) unless IncludeHDR is set; see AnalyzeWith.
 func Analyze(files []FileInfo, prefs Preferences) Analysis {
+	return AnalyzeWith(files, prefs, AnalyzeOptions{})
+}
+
+// AnalyzeOptions are the policy switches of the analysis.
+type AnalyzeOptions struct {
+	// IncludeHDR lets HDR and Dolby Vision files be candidates (the converter
+	// then writes SDR 8-bit and says so; see HDR).
+	IncludeHDR bool
+}
+
+// AnalyzeWith is Analyze with options.
+func AnalyzeWith(files []FileInfo, prefs Preferences, opts AnalyzeOptions) Analysis {
 	var totalSize int64
 	for _, f := range files {
 		totalSize += f.Size
@@ -173,6 +190,11 @@ func Analyze(files []FileInfo, prefs Preferences) Analysis {
 		target := prefs.HD
 		if tier == UHD {
 			target = prefs.UHD
+		}
+		wouldConvert := family == Legacy || string(family) != string(target)
+		if wouldConvert && f.HDR.IsHDR() && !opts.IncludeHDR {
+			out.HDRExcluded++
+			continue
 		}
 		switch {
 		case family == Legacy:

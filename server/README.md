@@ -45,7 +45,7 @@ answers a generic 500 and never logs the panic value.
 | ---------- | --------- | ------------------------ |
 | `PORT`     | `3000`    | TCP port (the image sets `3050`) |
 | `WHEELHOUSE_LISTEN` | `0.0.0.0:$PORT` | Address to listen on, `host:port` (`:3050`, `127.0.0.1:3050`, `[::]:3050`); overrides `PORT` |
-| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH` (issue #31) |
+| `WHEELHOUSE_MEDIA_ROOTS` | `/movies:/tv` | Folders conversion may touch, separated like `PATH`. Read-only seed: roots saved in the database (`PUT /api/admin/converter`) win; the response says which `source` is in force |
 | `WHEELHOUSE_CONFIG_DIR` | `/config` | Directory for the database, the master key, the setup token and `settings.json`; it must exist, and not be writable by others |
 | `WHEELHOUSE_DB` | `<config dir>/wheelhouse.db` | SQLite file (accounts, sessions, audit log); opened at start, fatal if it cannot be |
 | `WHEELHOUSE_DENIED_NETWORKS` | link-local, cloud metadata | Comma-separated CIDRs or addresses provider clients refuse to connect to (default `169.254.0.0/16,fe80::/10,fd00:ec2::254`; `none` allows all; an unparsable entry is fatal). Private ranges and loopback are allowed unless listed |
@@ -98,9 +98,15 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
 - ffmpeg and ffprobe run through `os/exec` with a context, never a shell; the
   arguments come from validated enums and an absolute, resolved path.
 - A file path in a request is resolved (`..` refused, `EvalSymlinks`, regular
-  file) and must be inside a media root (`converter.DefaultMediaRoots`,
-  `WHEELHOUSE_MEDIA_ROOTS`), or the request is a 400. The check repeats when the
-  job starts and just before the swap.
+  file) and must be inside a media root (`converter.Settings`: the database,
+  else `WHEELHOUSE_MEDIA_ROOTS`, else `/movies` and `/tv`), or the request is a
+  400. The roots are read at every check, so a change applies without a restart.
+  The check repeats when the job starts and just before the swap. Roots saved
+  through `PUT /api/admin/converter` are validated (`converter.ValidateRoots`):
+  absolute, no `..`, not `/` or a system folder (`/etc`, `/proc`, `/sys`, `/dev`,
+  `/root`, `/boot`, `/bin`, `/sbin`, `/usr`, `/lib*`, `/run`, `/var/lib`) or the
+  config directory, must exist and be a directory (symlinks followed), at most 32,
+  duplicates merged, nested or overlapping roots refused.
 - A file with more than one hard link answers 409 `{code: "hardlinked",
   linkCount}` until the body has `acknowledgeHardlink: true`.
 - The output is written to `.wheelhouse-convert-<id><ext>` next to the original,
@@ -110,8 +116,30 @@ and `POST /api/codec-analysis/convert/{jobId}/cancel` are in
 - Tests use fake `ffmpeg`/`ffprobe` shell scripts that print `-progress` output
   and exit with real codes (success, failure, cancel, empty output); a test runs
   the real ffmpeg when the machine has one (with `libx264`) and skips otherwise.
-- HDR (`VideoDynamicRange` in `mediamanager.MediaInfo`) is deliberately not used
-  yet (issue #32); the queue is in memory behind `converter.Queue` (issue #33).
+- HDR and Dolby Vision (issue #32): conversion writes SDR 8-bit and does not tone
+  map, so such files are not candidates (`codecs.AnalyzeWith`; classified from
+  Radarr/Sonarr `videoDynamicRange`/`videoDynamicRangeType` and, at request time,
+  from the file with `converter.ProbeHDR`: PQ or HLG transfer, Dolby Vision side
+  data; a probe that fails or is not understood is `unknown`, never SDR) unless
+  `includeHdr` is set. Then `POST .../convert` answers 409 `{code: "hdr"}` until
+  the body has `acknowledgeHdr: true` (409 `{code: "hdr-excluded"}` when the
+  switch is off). The runner probes again before ffmpeg and refuses an
+  unacknowledged or no-longer-allowed HDR job. Candidates and jobs carry `hdr`:
+  `none`, `hdr10`, `hlg`, `dolby-vision` or `unknown`.
+- The queue (`converter.JobQueue`) is written through to the `conversion_jobs`
+  table (`converter.SQLStore`, migration 0005) and recovered at start: jobs that
+  were probing or running become `failed` with `interrupted: ...` and their temp
+  files are cleaned, queued jobs resume in order, finished jobs are pruned
+  (`RetainFinishedFor` 30 days, `RetainFinishedMax` 200). Every job records its
+  owner (user id, `bypass` or `cli`), the hard-link and HDR acknowledgements and
+  its HDR class; start, cancel and finish are audited (`conversion.start`,
+  `conversion.cancel`, `conversion.finish`). Nothing read back from the database
+  is trusted: enums are validated and the path is resolved against the current
+  roots again before a job runs.
+- `GET`/`PUT /api/admin/converter` (admin): `{mediaRoots, includeHdr,
+  effectiveRoots, source}` with `source` one of `database`, `environment`,
+  `default`. `PUT` takes `mediaRoots` (an empty list removes the saved roots) and
+  `includeHdr`, either or both; audited as `converter.update`.
 
 ## Commands
 
@@ -417,7 +445,7 @@ internal/features     feature gating
 internal/status       GET /api/status logic
 internal/downloads    GET /api/downloads logic
 internal/codecs       codec analysis and preferences (/config/settings.json)
-internal/converter    ffmpeg queue, encoder detection, path containment, hardlink check
+internal/converter    ffmpeg queue (SQLite-backed), settings, encoder detection, path containment, HDR probe, hardlink check
 internal/library      library, storage, search, add-meta, details, seasons bodies
 internal/explore      GET /api/explore and /api/explore/{id} logic
 internal/providers/all  the registry of every provider

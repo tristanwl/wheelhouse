@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tristanwl/wheelhouse/server/internal/converter"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/core"
 	"github.com/tristanwl/wheelhouse/server/internal/providers/mediamanager/mmtest"
 )
@@ -22,6 +23,8 @@ type codecEnv struct {
 	root, file string
 	configDir  string
 	ffmpegArgs string
+	acc        *accounts
+	tools      string // holds the fake ffmpeg and ffprobe, and stream.json for the HDR class
 }
 
 // fakeFfmpeg writes a POSIX sh stand-in for ffmpeg: it records its arguments,
@@ -35,7 +38,10 @@ func fakeFfmpeg(t *testing.T, dir, body string) (ffmpeg, ffprobe, argsFile strin
 		t.Fatal(err)
 	}
 	ffprobe = filepath.Join(dir, "ffprobe")
-	if err := os.WriteFile(ffprobe, []byte("#!/bin/sh\necho 2.0\n"), 0o755); err != nil {
+	// The stream query (HDR classification) answers from stream.json when the
+	// test wrote one, an SDR stream otherwise; any other call is the duration probe.
+	probe := fmt.Sprintf("#!/bin/sh\ncase \"$*\" in *stream=*) if [ -f '%s/stream.json' ]; then cat '%s/stream.json'; else echo '{\"streams\":[{\"color_transfer\":\"bt709\"}]}'; fi; exit 0;; esac\necho 2.0\n", dir, dir)
+	if err := os.WriteFile(ffprobe, []byte(probe), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return ffmpeg, ffprobe, argsFile
@@ -60,6 +66,10 @@ func newCodecEnv(t *testing.T, vars env, ffmpegBody string) codecEnv {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	acc := newAccounts(t)
+	settings, err := converter.NewSettings(ctx, acc.DB, []string{root}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := Handler(Options{
 		Logger:  slog.New(slog.DiscardHandler),
 		Auth:    acc.Svc,
@@ -67,10 +77,10 @@ func newCodecEnv(t *testing.T, vars env, ffmpegBody string) codecEnv {
 		Ffmpeg:  func() bool { return true },
 		Context: ctx,
 		Converter: ConverterOptions{
-			MediaRoots: []string{root}, ConfigDir: configDir, Ffmpeg: ffmpeg, Ffprobe: ffprobe,
+			Settings: settings, Store: acc.DB, ConfigDir: configDir, Ffmpeg: ffmpeg, Ffprobe: ffprobe,
 		},
 	})
-	return codecEnv{h: acc.As(h), root: root, file: file, configDir: configDir, ffmpegArgs: args}
+	return codecEnv{h: acc.As(h), root: root, file: file, configDir: configDir, ffmpegArgs: args, tools: tools, acc: acc}
 }
 
 func (c codecEnv) do(method, path, body string) (int, map[string]any, string) {

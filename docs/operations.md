@@ -37,6 +37,7 @@ or `podman exec`); being able to do that is the proof that you own the server.
 | Service credentials (encrypted) | inside the database | yes, encrypted |
 | **Master key** | `/config/secret.key`, or your key file or secret | **no** |
 | Codec preferences | `/config/settings.json` | no (copy the file) |
+| Media roots, HDR switch, conversion job history | inside the database | yes |
 | Your `.env` / compose file (service URLs and keys) | wherever you keep it | no |
 
 Checklist:
@@ -170,6 +171,44 @@ every request will look like it comes from the proxy. Scripts that used the 0.2.
 API with no credentials must call `GET /api/auth/session` first and send the
 returned `csrfToken` as `X-CSRF-Token` on POST, PUT, PATCH and DELETE. See the
 threat model for what this trades away.
+
+## Media roots, HDR and the conversion queue
+
+**Media roots.** Convert only touches files inside the media roots. An
+administrator sets them with `PUT /api/admin/converter` (`{"mediaRoots":
+["/movies", "/tv"], "includeHdr": false}`; the admin page arrives with item 7);
+`GET` shows `effectiveRoots` and the `source`: `database` (saved by an
+administrator), `environment` (`WHEELHOUSE_MEDIA_ROOTS`, read-only) or `default`
+(`/movies` and `/tv`). The database wins; an empty `mediaRoots` removes the saved
+roots and the environment or default applies again. A change applies at once. On
+save each root must be an absolute path without `..`, must exist and be a
+directory inside the container (mount it first), must not be `/`, a system folder
+(`/etc`, `/proc`, `/sys`, `/dev`, `/root`, `/boot`, `/bin`, `/sbin`, `/usr`,
+`/lib*`, `/run`, `/var/lib`) or the config directory, and must not be the same
+folder as, or inside or around, another root (at most 32). A job already running
+keeps going, but its file is checked against the current roots again before the
+swap: take its folder out of the roots and it fails without touching the file.
+The paths Radarr and Sonarr report must still resolve inside a root.
+
+**HDR and Dolby Vision.** Conversion writes SDR 8-bit video and does not tone map,
+so converting an HDR10, HLG or Dolby Vision file would lose its HDR and look grey
+on an HDR display. Such files are therefore left out of the candidates (the page
+says how many). With `includeHdr` on, they appear marked as HDR and converting
+one needs an explicit acknowledgement; the server decides from the file itself, so
+a file Radarr reports as SDR that is not, or one whose HDR cannot be determined
+(`unknown`, for example ffprobe fails), is treated the same way. The original is
+kept as `.bak` as for every conversion.
+
+**The queue after a restart.** Jobs are saved in the database. When the server
+starts (also after a graceful stop): a job that was running becomes `failed` with
+`interrupted: the server stopped while this conversion was running` (it is not
+resumed; start it again from the page) and its partial file is removed, a swap
+that died between its two renames is repaired, jobs still `queued` stay queued and
+run in order, and finished jobs are listed for 30 days, at most the newest 200
+(`converter.RetainFinishedFor` and `RetainFinishedMax`). The job list shows who
+started each job (a user, `local-network` for the bypass, or `cli`). Starting,
+cancelling and finishing (including an interruption found at start) are in the
+audit log as `conversion.start`, `conversion.cancel` and `conversion.finish`.
 
 ## Where things are logged
 
