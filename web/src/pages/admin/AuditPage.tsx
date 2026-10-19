@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from "react";
 import useSWR from "swr";
 import { BTN, CARD, INPUT, errorText } from "@/components/admin/styles";
 import { ErrorNote, LiveResult, PageTitle } from "@/components/admin/ui";
-import { when, type AuditEntry, type AuditResponse } from "@/lib/admin";
+import { retentionSentence, when, type AuditEntry, type AuditResponse } from "@/lib/admin";
 import { actionLabel, describeDetail } from "@/lib/audit";
 import { fetcher } from "@/lib/fetcher";
 import { apiJson } from "@/lib/http";
@@ -54,6 +54,7 @@ export default function AuditPage() {
           A record of who did what and when: sign-ins, changes to accounts, services and settings.
           Passwords, keys and tokens are never recorded. Newest first.
         </p>
+        {data?.retention && <p>{retentionSentence(data.retention)}</p>}
       </PageTitle>
 
       <div className="flex flex-wrap items-end gap-4">

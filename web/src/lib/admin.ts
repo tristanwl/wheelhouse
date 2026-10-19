@@ -306,9 +306,27 @@ export interface AuditEntry {
   detail?: unknown;
 }
 
+export interface AuditRetention {
+  days: number;
+  floorDays: number;
+  lastPrune?: { at: string; deleted: number; cutoff: string; failed: boolean };
+}
+
 export interface AuditResponse {
   entries: AuditEntry[];
   nextBefore: number | null;
+  /** How long entries are kept; set by the server's configuration, read-only. */
+  retention?: AuditRetention;
+}
+
+/** "Entries are kept for 180 days, then removed." for the Audit log page. */
+export function retentionSentence(r: AuditRetention | undefined): string {
+  if (!r) return "";
+  const days = r.days === 1 ? "1 day" : `${r.days} days`;
+  const base = `Entries are kept for ${days}, then removed.`;
+  if (r.lastPrune?.failed)
+    return `${base} The last clean-up did not finish; the server log says why.`;
+  return base;
 }
 
 export function when(iso: string): string {

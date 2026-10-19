@@ -255,7 +255,7 @@ Migration `0001_meta` creates the `meta` key/value table; `0002_auth` creates
 `users` (case-insensitive unique names, Argon2id hash, role, disabled and
 must-change flags, with triggers that keep the last enabled administrator),
 `sessions` (SHA-256 of the token, cascade on user delete) and the append-only
-`audit_log`; `0003_instances` creates `instances` (non-secret JSON `config` plus
+`audit_log`; `0008_audit_retention` replaces the delete trigger by one that only permits rows older than 30 days (the retention pruning); `0003_instances` creates `instances` (non-secret JSON `config` plus
 the sealed `secrets` BLOB, a registered secret column) and `feature_settings`. Never edit an applied
 migration: add a new one.
 

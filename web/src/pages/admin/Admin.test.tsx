@@ -798,6 +798,35 @@ describe("audit log", () => {
     detail,
   });
 
+  it("says how long entries are kept, and shows pruning as a plain entry", async () => {
+    mockApi({
+      ...base,
+      "GET /api/audit?limit=50": {
+        entries: [
+          entry(7, "audit.prune", "system", {
+            deleted: 12,
+            cutoff: "2026-04-01T00:00:00Z",
+            retentionDays: 180,
+          }),
+        ],
+        nextBefore: null,
+        retention: { days: 180, floorDays: 30 },
+      },
+    });
+    renderApp("/admin/audit");
+    expect(await screen.findByText("Entries are kept for 180 days, then removed.")).toBeVisible();
+    const row = await screen.findByRole("row", { name: /Old entries removed/ });
+    expect(row).toHaveTextContent("entries removed: 12; older than: 2026-04-01T00:00:00Z");
+    expect(screen.queryByText(/WHEELHOUSE/)).not.toBeInTheDocument();
+  });
+
+  it("shows nothing about retention when the server does not say", async () => {
+    mockApi({ ...base, "GET /api/audit?limit=50": { entries: [], nextBefore: null } });
+    renderApp("/admin/audit");
+    await screen.findByText("Nothing recorded yet.");
+    expect(screen.queryByText(/Entries are kept/)).not.toBeInTheDocument();
+  });
+
   it("shows readable rows, filters by action and who, and pages back", async () => {
     const user = userEvent.setup();
     const first = Array.from({ length: 50 }, (_, i) =>

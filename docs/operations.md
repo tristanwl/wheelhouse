@@ -48,6 +48,26 @@ the lock and keep working while the server runs (`backup` uses SQLite's online b
   changed while it was running, and shows the affected services as needing a restart instead
   of "required". Restarting loads the new key.
 
+## Audit log retention
+
+The audit log (Admin, Audit log) keeps entries for **180 days** by default. Set
+`WHEELHOUSE_AUDIT_RETENTION_DAYS` (30 to 3650; anything else stops the server at start with a
+message naming the variable) to change it. It is an environment setting on purpose: nothing in
+the web interface or the API can shorten it.
+
+- At start, and then every 24 hours, the server deletes entries older than the retention, a
+  thousand at a time, and records one `audit.prune` entry (how many, and the cutoff) when it
+  removed any. A run that removes nothing writes nothing. The last run, and the retention, are
+  shown on the Audit log page (`GET /api/audit` has them under `retention`).
+- The database itself refuses to delete any entry younger than **30 days**, whatever any code
+  asks for (a trigger from migration 0008 judges the age with SQLite's own clock), and refuses
+  every edit. So the minimum retention is 30 days, and recent history cannot be erased even by a
+  compromised administrator session. Someone with the database file can still do anything
+  ([threat model](threat-model.md), T-3).
+- The retention counts from the time of each entry. Lowering it removes the older entries at
+  the next start or within a day; raising it cannot bring back entries already removed. Take a
+  `wheelhouse backup` first if you need a longer record than you have configured.
+
 ## Key loss
 
 > **KEY LOSS: read this before you rely on backups.**

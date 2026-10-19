@@ -134,6 +134,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	retention, err := config.AuditRetentionDays(os.Getenv)
+	if err != nil {
+		return err
+	}
 	configDir := config.ConfigDir(os.Getenv)
 
 	// The lock first: while this process lives, `rekey` and `forget-secrets`
@@ -176,7 +180,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		}
 		return fmt.Errorf("secret key: %w", err)
 	}
-	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log})
+	accounts := auth.New(db, auth.Options{ConfigDir: configDir, Logger: log, AuditRetentionDays: retention})
 	if err := accounts.PrepareSetup(ctx); err != nil {
 		return fmt.Errorf("accounts: %w", err)
 	}
@@ -220,5 +224,17 @@ func run(ctx context.Context, log *slog.Logger) error {
 		Auth:      accounts,
 		Network:   network,
 	})
-	return app.Serve(ctx, ln, handler, log)
+	// Old audit rows are pruned once at start and then daily, off the request
+	// path and after the listener is up. It is stopped (and waited for) before
+	// the database closes.
+	pruneCtx, stopPruning := context.WithCancel(ctx)
+	pruned := make(chan struct{})
+	go func() {
+		defer close(pruned)
+		accounts.RunAuditPruning(pruneCtx)
+	}()
+	err = app.Serve(ctx, ln, handler, log)
+	stopPruning()
+	<-pruned
+	return err
 }

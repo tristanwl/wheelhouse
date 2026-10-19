@@ -725,7 +725,11 @@ and enforces the route levels. Phase 2 item 2 ([plan](wheelhouse-phase2-plan.md)
   failure or release it afterwards, re-check the lock once the hash semaphore is
   held, skip Argon2 for locked keys, and shed load when more than 32 verifications
   are queued, so a parallel burst cannot exceed the allowance.
-- **Audit log.** `audit_log` is append-only (triggers refuse update and delete).
+- **Audit log.** `audit_log` is append-only: triggers refuse every update, and every
+  delete of a row younger than 30 days (migration 0008; the age is judged by SQLite's
+  clock). The only thing that deletes is `auth.Service.PruneAudit`, run at start and every
+  24 hours for rows older than `WHEELHOUSE_AUDIT_RETENTION_DAYS` (default 180, minimum 30,
+  the floor), in batches of 1000, followed by one `audit.prune` entry.
   Setup, login ok / failure / lockout, logout, password change and reset, user
   create / update / role change / delete, session revocation, library add and
   delete, and conversion start and cancel are recorded with the acting account,

@@ -85,7 +85,7 @@ func TestSessionsFollowTheirUserAndStoreOnlyAHash(t *testing.T) {
 
 func TestAuditLogIsAppendOnly(t *testing.T) {
 	db := openTemp(t)
-	mustExec(t, db, "INSERT INTO audit_log (at, actor_name, action) VALUES (1, 'cli', 'x')")
+	mustExec(t, db, "INSERT INTO audit_log (at, actor_name, action) VALUES (strftime('%s','now'), 'cli', 'x')")
 	expectFail(t, db, "append-only", "UPDATE audit_log SET action = 'y'")
 	expectFail(t, db, "append-only", "DELETE FROM audit_log")
 	expectFail(t, db, "", "INSERT INTO audit_log (at, actor_name, action, detail) VALUES (1, 'cli', 'x', 'not json')")
@@ -93,7 +93,7 @@ func TestAuditLogIsAppendOnly(t *testing.T) {
 	// A deleted user does not take their history with them.
 	addUser(t, db, idA, "alice", "admin", 0)
 	addUser(t, db, idB, "bob", "admin", 0)
-	mustExec(t, db, "INSERT INTO audit_log (at, actor_id, actor_name, action) VALUES (2, ?, 'alice', 'x')", idA)
+	mustExec(t, db, "INSERT INTO audit_log (at, actor_id, actor_name, action) VALUES (strftime('%s','now'), ?, 'alice', 'x')", idA)
 	mustExec(t, db, "DELETE FROM users WHERE id = ?", idA)
 	if n := count(t, db, "audit_log"); n != 2 {
 		t.Fatalf("%d audit rows", n)

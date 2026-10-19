@@ -27,6 +27,7 @@ const LABELS: Record<string, string> = {
   "library.delete": "Removed from the library",
   "conversion.start": "Conversion started",
   "conversion.cancel": "Conversion cancelled",
+  "audit.prune": "Old entries removed",
 };
 
 /** A readable name for an action; an unknown action is shown as it is. */
@@ -49,6 +50,9 @@ const KEY_LABELS: Record<string, string> = {
   ok: "worked",
   saved: "saved service",
   count: "count",
+  deleted: "entries removed",
+  cutoff: "older than",
+  retentionDays: "kept for (days)",
 };
 
 function show(v: unknown): string {

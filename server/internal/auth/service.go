@@ -146,6 +146,10 @@ type Options struct {
 	ConfigDir string
 	// Logger receives the setup token notice and storage errors (default: discard).
 	Logger *slog.Logger
+	// AuditRetentionDays is how long audit rows are kept (default 180). A value
+	// below the database's hard floor is raised to it (the server refuses such a
+	// setting at start, before it gets here).
+	AuditRetentionDays int
 }
 
 // Service is the account system over one database. It is safe for concurrent use.
@@ -156,6 +160,13 @@ type Service struct {
 	th  *throttle
 	log *slog.Logger
 	dir string
+
+	retentionDays int
+	pruneBatch    int
+	pruneEvery    time.Duration
+	prune         pruneState
+	// afterPruneBatch is nil outside tests, which use it to watch the batches and to stop between them.
+	afterPruneBatch func(deleted int)
 	// dummy is a valid hash of a throwaway password, verified against when a
 	// username does not exist, so a login for an unknown name costs the same as
 	// one for a real name. It is made at construction, so not even the first
@@ -179,7 +190,12 @@ func New(db *store.DB, o Options) *Service {
 	if o.Logger == nil {
 		o.Logger = slog.New(slog.DiscardHandler)
 	}
-	s := &Service{db: db, now: o.Clock, h: newHasher(o.Params), th: newThrottle(o.Clock), log: o.Logger, dir: o.ConfigDir}
+	s := &Service{db: db, now: o.Clock, h: newHasher(o.Params), th: newThrottle(o.Clock), log: o.Logger, dir: o.ConfigDir,
+		retentionDays: o.AuditRetentionDays, pruneBatch: pruneBatch, pruneEvery: pruneInterval}
+	if s.retentionDays == 0 {
+		s.retentionDays = DefaultAuditRetentionDays
+	}
+	s.retentionDays = max(s.retentionDays, AuditFloorDays)
 	s.dummy, _ = s.h.Hash(context.Background(), newToken())
 	s.h.computed.Store(0)
 	return s
