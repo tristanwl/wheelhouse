@@ -191,4 +191,6 @@ after item 10, **1.0.0** after a soak period with no open security findings. The
   tokens can be added without migrating existing accounts.
 - **Single sign-on (OIDC)** is left for after 1.0; the user table keeps room for
   an external identity.
-- **Audit retention** default of 180 days.
+- **Audit retention** default of 180 days. Enforced since the pre-1.0 fixes
+  (issue #84): `WHEELHOUSE_AUDIT_RETENTION_DAYS` (30 to 3650), pruned at start and
+  daily; the database refuses to delete anything younger than 30 days.

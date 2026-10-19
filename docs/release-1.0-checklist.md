@@ -43,10 +43,10 @@ How the evidence was produced, all on 2026-10-19:
 | 11 | The acceptance suite passes in authenticated mode against the binary and the image; the Phase 1 and migration criteria still pass | verified | Binary: 175 of 175. Image: 173 passed, 2 skipped (fake ffmpeg scenarios), plus `acceptance/docker-smoke.sh`. Phase 1 criteria: see the next table | | 2026-10-19 |
 | 12 | No known vulnerabilities; signed images with provenance and an SBOM; `SECURITY.md` current; threat model published | **verified in the workflow, open until the first release** | `govulncheck`: code affected by 0 vulnerabilities (`GO-2026-5932`, the unmaintained `golang.org/x/crypto/openpgp` package, is in a module Wheelhouse requires but is not imported or called; only `argon2` and `blake2b` are used). `npm audit`: 0 in the root package and `web/`. `SECURITY.md` and `docs/threat-model.md` brought up to date in this PR. The release workflow (merged in #82) attaches an SPDX SBOM and BuildKit SLSA provenance and signs the provenance of the image digest with a GitHub artifact attestation (Sigstore keyless, not a cosign key pair; how to check it is in [verifying-releases.md](verifying-releases.md)), and its dry run checks that both attestations exist for each platform. **Not verifiable until a real release exists:** the first tagged release must be checked with those commands (`gh attestation verify`), and no release before it has attestations | | 2026-10-19 |
 
-Beyond the 12: a **gap** that does not block the criteria above but should be known before
-tagging: the audit-log retention (180 days, decided in the plan) is not enforced and rows are
-kept (issue #84); `rekey` and `forget-secrets` do not refuse to run against a live server (issue #83: the
-documentation now says to run them with the server stopped, in a throwaway container).
+Beyond the 12, the audit found two gaps that did not block the criteria but had to be closed
+before tagging: the audit-log retention (180 days, decided in the plan) was not enforced (issue #84),
+and `rekey` and `forget-secrets` did not refuse to run against a live server (issue #83). Both are
+fixed, with the other open issues, see "Fixes after the audit" below.
 
 ## Phase 1 acceptance criteria (docs/wheelhouse-spec.md)
 
@@ -85,13 +85,28 @@ named no test, the table says which test now enforces it.
 | I13 stored secret not sent to a changed destination | `TestStoredSecretIsNotSentToAChangedDestination`, `acceptance/config.test.ts` | verified |
 | D1 to D5, D8 to D10 | `TestHTTPClientRejectsOversizedResponses`, `TestHTTPClientStopsReadingAnEndlessStream`, `TestCheckRedirectRefusesHTTPSDowngrade`, `TestLimitListenerHoldsBackConnectionsPastTheLimitUntilOneCloses`, `TestPasswordResetLiftsTheLockout`, `TestOneInstanceFailingNeverAffectsTheOthers`, `TestConcurrentReadersAndWriters`, `TestEmptyObjectFloodIsRefusedBeforeItIsDecoded`, `TestCheckJSONLimits`, `TestHungDurationProbeTimesOut` | verified |
 | D6 queue survives a restart | `TestRestartMarksInterruptedCleansUpAndResumesQueuedJobsInOrder`, `acceptance/converter.test.ts` | verified (partly in place, as the row says) |
-| D7 the audit table grows | no enforcing code or test | **gap**, issue #84 (Known limitations) |
+| D7 the audit table grows | `TestPruneDeletesOnlyRowsOlderThanTheRetentionAndRecordsIt`, `TestAuditLogRowsYoungerThanTheFloorCannotBeDeleted` | fixed (issue #84) |
 | E1, E2, E3 | `acceptance/auth-levels.test.ts`, `TestUserManagementAPI`, `TestBypassGrantsUserNeverAdmin` | verified |
 | E4 SQL injection | bound parameters everywhere; **new** `TestSQLIsNeverBuiltFromStringsOutsideTheSecretColumnCode` (only `store/secrets.go` may format SQL, from the fixed `SecretColumns` list; no concatenated statements) | verified, test added |
 | E5 SSRF | `TestHTTPClientRefusesMetadataAddresses`, `TestMoreMetadataAddressesAreDeniedByDefault`, `TestNAT64IsJudgedByTheEmbeddedAddressUnderACustomList`, `acceptance/config.test.ts`; by hand: an instance at `169.254.169.254` can be saved but every request is refused with `address not allowed (link-local and cloud-metadata addresses are refused)` | verified |
 | E6, E7 | `TestFfmpegAndFfprobeOnlyReadLocalFilesAndNeverStdin`, `TestAccessLogQuotesControlCharactersInPath` | verified (E6 accepted risk) |
 | E8 supply chain | CI `govulncheck`, `npm audit`, licence check, Dependabot, `scripts/check-pins.sh` (actions by SHA, images by digest), SBOM and signed provenance in the release workflow | verified except the first real release (criterion 12) |
 | **New:** no switch turns security off | `TestThereIsNoSwitchToDisableAuthentication` (no environment variable, in code or in the README, named like a security switch) | verified, test added |
+
+## Fixes after the audit (branch `fix/pre-1.0-issues`)
+
+The audit left five open issues; each is fixed at its root, with a test shown to fail on the old
+code (mutations are listed in the PR).
+
+| Issue | Fix | Evidence |
+|---|---|---|
+| #83 `rekey` and `forget-secrets` against a live server lost secrets saved afterwards | The server holds an exclusive `flock` on `/config/wheelhouse.lock` for its whole life; both commands take it and refuse with what to do. A second server on the same directory is refused too. `backup` and `reset-password` stay online. A server that finds the database's key record changed refuses to seal, answers 503 and says so in the log and the service status | `TestKeyCommandsRefuseWhileAServerRuns`, `TestSecondServerOnTheSameDirectoryIsRefused`, `TestStaleLockFileAfterACrashBlocksNothing`, `TestKilledHolderFreesTheLock`, `TestAKeyChangedByAnotherProcessIsNoticedAndNothingIsSealedUnderTheOldKey`, `acceptance/config-lock.test.ts` (real server, real `rekey` refused, `backup` allowed) |
+| #84 audit retention not enforced | Migration 0008: the delete trigger refuses rows younger than 30 days (SQLite's clock); the server prunes rows older than `WHEELHOUSE_AUDIT_RETENTION_DAYS` (default 180, 30 to 3650) at start and daily in batches, recording `audit.prune`; `GET /api/audit` and the Audit log page show the retention | `TestAuditLogRowsYoungerThanTheFloorCannotBeDeleted`, `TestPruneDeletesOnlyRowsOlderThanTheRetentionAndRecordsIt`, `TestPruneWorksInBoundedBatches`, `TestRetentionBelowTheFloorIsRaisedAndTheDatabaseHasTheLastWord`, `TestInvalidAuditRetentionRefusesToStart`, `acceptance/audit-retention.test.ts` |
+| #85 "apiKey: is required" | Validation errors carry the field's label ("API key is required"); the key stays only in the form's `fields` map; audit entries record labels; a label is mandatory | `TestEveryConfigurationProblemIsWrittenWithLabels`, `TestNoUserFacingStringNamesACamelCaseSettingKey` (`internal/guards`), `TestFormErrorsMapToTheFieldKeyButReadAsHumanText`, `acceptance/notices.test.ts` |
+| #86 admin tabs scroll sideways at 400 px | The tabs wrap onto rows; order and semantics unchanged | web `sub-navigation wraps instead of scrolling` (Vitest); the 400 px browser check also fails on tabs that scroll, are cut off or do not wrap, besides page-level overflow |
+| #88 96 MiB library cap | `WHEELHOUSE_MAX_LIBRARY_RESPONSE_MIB` (default 96, 16 to 512); every other limit unchanged; the notice says "the library is larger than Wheelhouse is set up to read" and the log line has the sizes and the setting | `TestAnOversizedLibraryIsRefusedWithAnActionableNoticeAndALogLine`, `TestARaisedCapKeepsEveryShapeLimit`, `TestInvalidLibraryResponseCapRefusesToStart`, `acceptance/library-limit.test.ts` |
+
+Still open, deliberately: #87 (arm64 hardware encoding).
 
 ## Documentation checks (done in this PR)
 
@@ -186,8 +201,10 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
   `/config/wheelhouse.lock`, [operations.md](operations.md#locking)). On a network share or
   mount that cannot lock, the server and the commands only warn and stopping the server first
   is up to you.
-- **The audit log is not pruned** (rows are kept; issue #84), and it is only as trustworthy as the
-  database file.
+- **The audit log is pruned, not kept forever:** entries older than 180 days (configurable, 30 to
+  3650, `WHEELHOUSE_AUDIT_RETENTION_DAYS`) are deleted at start and daily, and none younger than 30
+  days can ever be deleted ([operations.md](operations.md#audit-log-retention)). It is only as
+  trustworthy as the database file; keep a `wheelhouse backup` if you need a longer record.
 - **There is no downgrade** after a schema migration, and no built-in backup schedule: take
   backups yourself, and keep a copy of the key and of `settings.json` (not in the backup).
 
@@ -218,5 +235,5 @@ promise not made, so please read it before exposing Wheelhouse beyond your home 
   connections; a reverse proxy is the place for broader limits.
 - **The image's `HEALTHCHECK`, memory limit and read-only root** are only as good as the options
   you pass; the example Compose file and unit file set them.
-- **Interface:** English only; on a phone the Administration tabs scroll sideways without a
-  visible hint (issue #86).
+- **Interface:** English only; on a phone the Administration tabs wrap onto several rows (issue
+  #86, fixed).
