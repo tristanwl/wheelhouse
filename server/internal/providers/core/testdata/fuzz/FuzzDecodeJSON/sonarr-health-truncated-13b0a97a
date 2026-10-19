@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"source\": \"UpdateCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for UpdateCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/sonarr/system#new-update-is-available\"\n  },\n  {\n    \"source\": \"Inde")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

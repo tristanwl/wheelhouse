@@ -1,0 +1,8 @@
+go test fuzz v1
+string("[fe80::1]:80")
+uint8(169)
+uint8(254)
+uint8(169)
+uint8(254)
+uint16(80)
+bool(false)

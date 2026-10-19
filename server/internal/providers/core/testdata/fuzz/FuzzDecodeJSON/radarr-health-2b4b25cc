@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("[\n  {\n    \"source\": \"IndexerLongTermStatusCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for IndexerLongTermStatusCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/radarr/system#indexers-are-unavailable-due-to-failures\"\n  },\n  {\n    \"source\": \"UpdateCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for UpdateCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/radarr/system#new-update-is-available\"\n  },\n  {\n    \"source\": \"DownloadClientRootFolderCheck\",\n    \"type\": \"warning\",\n    \"message\": \"Example health message for DownloadClientRootFolderCheck\",\n    \"wikiUrl\": \"https://wiki.servarr.com/radarr/system#downloads-in-root-folder\"\n  }\n]\n")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)

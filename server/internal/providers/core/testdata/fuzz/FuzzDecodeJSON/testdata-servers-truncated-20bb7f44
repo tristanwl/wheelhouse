@@ -1,0 +1,6 @@
+go test fuzz v1
+[]byte("{\n  \"config\": {\n    \"servers\": [\n      {\n        \"connections\": 20,\n        \"enable\": 1,\n        \"port\": 563,\n        \"ssl\": 1,\n        \"ssl_verify\": 2,\n        \"priority\": 0,\n        \"retention\": 0,\n        \"timeout\": 60,\n        \"optional\": 0,\n        \"required\": 0,\n        \"name\": \"news.example.com\",\n        \"displayname\": \"news.example.com\",\n        \"host\": \"news.example.com\"\n")
+uint8(255)
+uint8(255)
+uint8(255)
+uint8(255)
