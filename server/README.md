@@ -371,6 +371,67 @@ CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o wheelhouse ./cmd/wheelhouse
 go vet ./... && go test -race ./... && golangci-lint run && govulncheck ./...
 ```
 
+## Fuzz tests
+
+Every parser or validator that handles untrusted input has a native Go fuzz target
+(`func FuzzXxx(f *testing.F)` in a `fuzz*_test.go` next to the code) that asserts
+invariants (what must hold for every input), not just "does not panic". The
+targets and what each one guarantees:
+
+| Where | Targets and invariants |
+|---|---|
+| `internal/providers/core` | `FuzzDecodeJSON` (nothing over a depth, element, string or total limit is accepted, an accepted body decodes as `encoding/json` does, errors never quote the body, memory stays within a factor of the input), `FuzzRedact` and `FuzzRedactArbitrary` (a planted secret in plain, URL, base64, JSON and HTML encodings never survives; idempotent; bounded growth), `FuzzInstanceURL` and `FuzzJoinURL` (no userinfo, query or fragment accepted; a joined path never changes host), `FuzzAddressDenied` (IPv4-mapped and NAT64 forms get the IPv4 verdict, non-IP strings are denied), `FuzzParseDeniedNetworks` |
+| `internal/netaccess`, `internal/config` | `FuzzParseRange`, `FuzzUpdateLists`, `FuzzResolveChain` / `FuzzResolveRaw` / `FuzzNoTrustedProxies` (the right-most-untrusted walk against an oracle; with no trusted proxy the client is always the TCP peer; a client taken from a header appears in a header), `FuzzNormalizeHost` / `FuzzHostAllowed` / `FuzzParseHostEntry` (only IP literals, localhost, valid single labels and valid listed names get the bypass), `FuzzTrustedProxies`, `FuzzLoad` |
+| `internal/auth` | `FuzzValidateUsername`, `FuzzValidatePassword` (exact oracles), `FuzzParseHash` (stored-parameter bounds), `FuzzCleanClip`, `FuzzAuthenticate` (only the real token authenticates), `FuzzLogin` (one generic failure, no throttle dodging by spelling) |
+| `internal/app` | `FuzzHTTPSurface` (the whole router with arbitrary requests as nobody, a user and an administrator: no panic, no 5xx from request shaping, no planted secret in any response, non-public routes refuse the unauthenticated, users never reach admin routes, CSRF and cross-site refusals, all derived from the router table), `FuzzHostileUpstream` (every route against one hostile upstream answer), `FuzzSameOrigin`, `FuzzSessionCookie`, `FuzzCSRFCompare`, `FuzzClientAddress` |
+| `internal/converter` | `FuzzResolveInRoots` (attacks a symlink farm: the result is always a regular file inside a root, or `ErrOutsideRoots`), `FuzzValidateRoots`, `FuzzEnvRoots`, `FuzzArgs` (every ffmpeg argument is from the fixed vocabulary except the two paths, each exactly one element), `FuzzBackupNames`, `FuzzProgressWriter`, `FuzzClassifyProbe` |
+| `internal/providers/all` | `FuzzUpstreamResponses` (every adapter call with one answer of the conversation replaced: `ProviderError`s only, no secrets, normalized values) |
+| `internal/secrets`, `internal/store`, `internal/codecs`, `internal/instances`, `internal/ui`, `internal/providers/downloadclient` | the envelope decoder (`FuzzOpen`, `FuzzSealOpenTamper`, `FuzzAD`, `FuzzKeyFile`), migration names and the SQLite connection string (`FuzzLoadMigrations`, `FuzzDSN`), HDR, tier and codec classification and `settings.json`, the stored-secret destination rule (`FuzzStoredSecretDestination`), the UI file handler (`FuzzStaticHandler`), `FuzzNumber` |
+
+**Seed corpora run as ordinary tests.** Each target has a corpus in
+`testdata/fuzz/<FuzzName>/` made from real inputs (the fixtures of the fake
+services, the hostile cases of the existing tests, a request for every route in
+the router table), so `go test ./...` (and the CI `server` job) replays all of
+them on every push: a regression is caught without any fuzzing time.
+`internal/fuzzseed` writes the files; each package has a `TestWriteFuzzSeeds`
+that regenerates its corpus and is skipped unless asked:
+
+```sh
+WHEELHOUSE_WRITE_FUZZ_SEEDS=1 go test -run TestWriteFuzzSeeds ./internal/netaccess
+```
+
+**Run a target** (any package, any length; it needs no network):
+
+```sh
+go test ./internal/netaccess -run '^$' -fuzz '^FuzzHostAllowed$' -fuzztime 2m
+```
+
+`go test` prints the executions and, on a failure, writes the minimized input to
+`testdata/fuzz/<FuzzName>/<hash>` and the command that replays it. Fix the code,
+keep that file as the regression entry (rename it `bug_<what>` and mention it in
+the "Fuzzing findings" table of [../docs/threat-model.md](../docs/threat-model.md)),
+and commit both. Without `-fuzz`, `go test` runs the corpus only.
+
+**Scheduled runs.** [`.github/workflows/fuzz.yml`](../.github/workflows/fuzz.yml)
+runs every target for about two minutes, weekly and on demand
+(`gh workflow run Fuzz -f fuzztime=10m`), one matrix job per target, with
+`contents: read` only; a failing job uploads the crashing inputs as an artifact
+(`crashers-<target>`). It never runs on pull requests. A Go test
+(`internal/fuzzseed`) fails when a target is missing from the workflow's matrix
+or has no seed corpus.
+
+**Add a target.** Write `FuzzXxx` next to the code, drive the real function with
+the fewest parameters that reach its branches (a byte that picks a limit or a
+variant beats a long string), and state the invariants in the doc comment and
+in the body: compare with an oracle written independently of the code under
+test where you can. Add its seeds to the package's `TestWriteFuzzSeeds` and run
+it; add a line to the matrix in `fuzz.yml`; run the target for a few minutes
+before opening the PR. A target that needs a database, a fake service or a
+temporary tree builds it once outside `f.Fuzz` (`f.TempDir()`, the fakes'
+`Start(f, ...)`), and must give every input a state no earlier input changed
+(`FuzzHTTPSurface` rebuilds its app after any request that changed something;
+the upstream targets start fresh Radarr and Sonarr fakes per input).
+
 ## Acceptance suite
 
 The black-box suite in [../acceptance](../acceptance/README.md) targets the

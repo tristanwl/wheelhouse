@@ -149,7 +149,7 @@ without a release; the release after item 6 is 0.3.0.
 | 7 | Web: admin pages (done) | services (add provider from JSON Schema forms, test, import from environment), users, sessions, features, settings, audit |
 | 8 | Converter settings and fixes | media roots from the database (#31), HDR and Dolby Vision excluded by default with an explicit override (#32), queue persisted in SQLite with a documented recovery policy for interrupted jobs (#33), job owner recorded |
 | 9 | Bugs and polish (done) | Explore instance picker (#30), API inconsistencies (#42), arm64 image (#14: buildx with QEMU in the release workflow, drivers per architecture) |
-| 10 | Security review and release candidate | independent adversarial reviews (auth, injection, path handling, SSRF through provider URLs, header handling), fuzz tests on parsers, dependency audit, full `govulncheck`/`npm audit`, update `SECURITY.md`, final docs |
+| 10 | Security review and release candidate | independent adversarial reviews (auth, injection, path handling, SSRF through provider URLs, header handling), fuzz tests on parsers (done: native fuzz targets with committed seed corpora, a weekly `fuzz.yml`, findings in `docs/threat-model.md`), dependency audit, full `govulncheck`/`npm audit`, update `SECURITY.md`, final docs |
 
 Releases: **0.3.0** after item 8 (feature complete behind auth), **1.0.0-rc.1**
 after item 10, **1.0.0** after a soak period with no open security findings. The

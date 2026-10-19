@@ -50,6 +50,27 @@ next to the code as `*_test.go`, the UI's tests as `*.test.ts(x)` (Vitest), and
 the black-box HTTP suite is in `acceptance/` ([acceptance/README.md](acceptance/README.md)):
 a new API route must be added to `acceptance/routes.ts`.
 
+### Fuzz tests
+
+Parsers and validators that handle untrusted input have Go fuzz targets
+(`func FuzzXxx(f *testing.F)`) with committed seed corpora under
+`testdata/fuzz/`; `go test` replays the seeds, so they cost nothing extra in a
+PR. To explore beyond the seeds, run one target for a while:
+
+```sh
+cd server && go test ./internal/netaccess -run '^$' -fuzz '^FuzzHostAllowed$' -fuzztime 2m
+```
+
+A failure writes the minimized input to `testdata/fuzz/<FuzzName>/`: fix the
+bug, commit that file as its regression test (one commit per bug) and add a row
+to the "Fuzzing findings" table in [docs/threat-model.md](docs/threat-model.md).
+If you add or change a parser, validator or decoder for untrusted input, add a
+target that states what must hold for every input (not just "does not panic"),
+seed it from real inputs, and add it to the matrix of
+[.github/workflows/fuzz.yml](.github/workflows/fuzz.yml) (weekly, two minutes
+per target; a Go test checks the list). The details and the list of targets are in
+[server/README.md](server/README.md#fuzz-tests).
+
 The tools for `make check` are installed separately, see
 [server/README.md](server/README.md). Without Make, the commands are in the
 `server` job of [.github/workflows/ci.yml](.github/workflows/ci.yml).

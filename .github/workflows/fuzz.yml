@@ -1,0 +1,125 @@
+name: Fuzz
+
+# Runs every Go fuzz target for a couple of minutes, weekly and on demand. The
+# seed corpora (server/internal/**/testdata/fuzz) already run as ordinary tests in
+# the CI workflow on every push; this is the part that explores beyond them, and
+# it never blocks a pull request. A crashing input is written by `go test` under
+# testdata/fuzz/<Target>/ and uploaded as an artifact: commit it as the
+# regression entry of the fix (CONTRIBUTING.md, "Fuzz tests").
+#
+# One job per target (the matrix below): add a line when you add a target. A Go
+# test (server/internal/fuzzseed) fails when this list and the code disagree.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Mondays, 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: "How long each target fuzzes (a Go duration such as 30s, 2m or 1h)"
+        required: false
+        default: "2m"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pkg: ./internal/app, target: FuzzCSRFCompare }
+          - { pkg: ./internal/app, target: FuzzClientAddress }
+          - { pkg: ./internal/app, target: FuzzHTTPSurface }
+          - { pkg: ./internal/app, target: FuzzHostileUpstream }
+          - { pkg: ./internal/app, target: FuzzSameOrigin }
+          - { pkg: ./internal/app, target: FuzzSessionCookie }
+          - { pkg: ./internal/auth, target: FuzzAuthenticate }
+          - { pkg: ./internal/auth, target: FuzzCleanClip }
+          - { pkg: ./internal/auth, target: FuzzLogin }
+          - { pkg: ./internal/auth, target: FuzzParseHash }
+          - { pkg: ./internal/auth, target: FuzzValidatePassword }
+          - { pkg: ./internal/auth, target: FuzzValidateUsername }
+          - { pkg: ./internal/codecs, target: FuzzClassifyCodec }
+          - { pkg: ./internal/codecs, target: FuzzClassifyDynamicRange }
+          - { pkg: ./internal/codecs, target: FuzzSettingsFile }
+          - { pkg: ./internal/codecs, target: FuzzTierOf }
+          - { pkg: ./internal/config, target: FuzzLoad }
+          - { pkg: ./internal/config, target: FuzzTrustedProxies }
+          - { pkg: ./internal/converter, target: FuzzArgs }
+          - { pkg: ./internal/converter, target: FuzzBackupNames }
+          - { pkg: ./internal/converter, target: FuzzClassifyProbe }
+          - { pkg: ./internal/converter, target: FuzzEnvRoots }
+          - { pkg: ./internal/converter, target: FuzzProgressWriter }
+          - { pkg: ./internal/converter, target: FuzzResolveInRoots }
+          - { pkg: ./internal/converter, target: FuzzValidateRoots }
+          - { pkg: ./internal/instances, target: FuzzStoredSecretDestination }
+          - { pkg: ./internal/netaccess, target: FuzzHostAllowed }
+          - { pkg: ./internal/netaccess, target: FuzzNoTrustedProxies }
+          - { pkg: ./internal/netaccess, target: FuzzNormalizeHost }
+          - { pkg: ./internal/netaccess, target: FuzzParseHostEntry }
+          - { pkg: ./internal/netaccess, target: FuzzParseRange }
+          - { pkg: ./internal/netaccess, target: FuzzResolveChain }
+          - { pkg: ./internal/netaccess, target: FuzzResolveRaw }
+          - { pkg: ./internal/netaccess, target: FuzzUpdateLists }
+          - { pkg: ./internal/providers/all, target: FuzzUpstreamResponses }
+          - { pkg: ./internal/providers/core, target: FuzzAddressDenied }
+          - { pkg: ./internal/providers/core, target: FuzzDecodeJSON }
+          - { pkg: ./internal/providers/core, target: FuzzInstanceURL }
+          - { pkg: ./internal/providers/core, target: FuzzJoinURL }
+          - { pkg: ./internal/providers/core, target: FuzzParseDeniedNetworks }
+          - { pkg: ./internal/providers/core, target: FuzzRedact }
+          - { pkg: ./internal/providers/core, target: FuzzRedactArbitrary }
+          - { pkg: ./internal/providers/downloadclient, target: FuzzNumber }
+          - { pkg: ./internal/secrets, target: FuzzAD }
+          - { pkg: ./internal/secrets, target: FuzzKeyFile }
+          - { pkg: ./internal/secrets, target: FuzzOpen }
+          - { pkg: ./internal/secrets, target: FuzzSealOpenTamper }
+          - { pkg: ./internal/store, target: FuzzDSN }
+          - { pkg: ./internal/store, target: FuzzLoadMigrations }
+          - { pkg: ./internal/ui, target: FuzzStaticHandler }
+    env:
+      PKG: ${{ matrix.pkg }}
+      TARGET: ${{ matrix.target }}
+      FUZZTIME: ${{ inputs.fuzztime || '2m' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache: true
+          cache-dependency-path: |
+            server/go.sum
+      - name: fuzz
+        working-directory: server
+        run: |
+          if ! [[ "$FUZZTIME" =~ ^[0-9]+(s|m|h)$ ]]; then
+            echo "fuzztime must look like 30s, 2m or 1h" >&2
+            exit 2
+          fi
+          go test "$PKG" -run '^$' -fuzz "^${TARGET}\$" -fuzztime "$FUZZTIME" -fuzzminimizetime 30s
+      - name: collect the crashing inputs
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/crashers"
+          git ls-files --others --exclude-standard -- ':(glob)server/**/testdata/fuzz/**' |
+            while read -r f; do cp --parents "$f" "$RUNNER_TEMP/crashers/"; done
+          find "$RUNNER_TEMP/crashers" -type f
+      - name: upload the crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: crashers-${{ matrix.target }}
+          path: ${{ runner.temp }}/crashers
+          if-no-files-found: warn
+          retention-days: 30

@@ -351,7 +351,7 @@ with the regression entry that fails on the old code:
 | 6 and 7 Web | Route guards and admin pages: the UI half of the above; no new boundary. Done: the admin pages never receive a stored secret, secrets are not kept in browser storage or logged, one-time passwords live only in component state, and every destructive action asks first |
 | 8 Converter settings (merged) | T-7 for configurable roots, HDR handling (no silent loss of HDR: excluded by default, acknowledged when allowed), D6 persisted queue |
 | 9 Bugs and polish | arm64 image: no change to the model |
-| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON), final dependency audit. Set 1 (auth, host allow-list, web): see "Security review findings" above |
+| 10 Security review | E5, D3, fuzzing of parsers (ffprobe output, upstream JSON: done, see "Fuzzing findings"), final dependency audit. Set 1 (auth, host allow-list, web): see "Security review findings" above |
 
 ## Residual risks (what stays true after Phase 2)
 
