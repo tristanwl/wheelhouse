@@ -19,7 +19,7 @@ RUN npx vite build
 # 2. The server: a static, CGO-free, path-independent binary with the UI
 # embedded. The version comes from the root package.json (the single source of
 # the release version) unless --build-arg VERSION=... is given.
-FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS server
+FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS server
 ARG TARGETOS
 ARG TARGETARCH
 ARG VERSION=
